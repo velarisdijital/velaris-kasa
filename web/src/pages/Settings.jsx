@@ -4,7 +4,7 @@ import { useSession } from '../App.jsx';
 import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, ROLE_LABELS } from '../format.js';
 
-const TABS = [['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['sms', 'SMS & WhatsApp'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
+const TABS = [['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['sms', 'SMS & WhatsApp'], ['booking', 'Online randevu'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
 
 export default function Settings() {
   const [tab, setTab] = useState('business');
@@ -21,6 +21,7 @@ export default function Settings() {
         {tab === 'fiscal' && <Fiscal />}
         {tab === 'loyalty' && <Loyalty />}
         {tab === 'sms' && <Sms />}
+        {tab === 'booking' && <BookingSettings />}
         {tab === 'crm' && <Crm />}
         {tab === 'backup' && <Backup />}
       </div>
@@ -227,6 +228,52 @@ function Sms() {
         </div>
       </div>
     </div>
+  );
+}
+
+function BookingSettings() {
+  const toast = useToast();
+  const { f, set, save } = useSettingsForm(['booking_enabled', 'booking_open', 'booking_close', 'booking_closed_days', 'booking_days_ahead',
+    'booking_note', 'booking_template', 'public_base_url', 'modules_appointments']);
+  const closed = String(f.booking_closed_days || '').split(',').filter(Boolean);
+  const toggleDay = (d) => {
+    const next = closed.includes(d) ? closed.filter((x) => x !== d) : [...closed, d];
+    set('booking_closed_days')({ target: { value: next.sort().join(','), type: 'text' } });
+  };
+  const base = (f.public_base_url || `${location.origin}${location.pathname}`).replace(/\/+$/, '').replace(/\/index\.html$/, '');
+  const link = `${base}/#/randevu-al`;
+  return (
+    <form className="card card-pad stack" onSubmit={save}>
+      <h2>Online randevu</h2>
+      <p className="muted">Müşterileriniz bağlantıya tıklayıp hizmet, personel ve boş saati seçerek kendileri randevu alır; randevu takvime düşer, müşteriye onay SMS'i gider. Bağlantıyı Instagram profilinize, Google İşletme sayfanıza ve WhatsApp'a ekleyin.</p>
+      <label className="check"><input type="checkbox" checked={f.booking_enabled === '1'} onChange={set('booking_enabled')} /> <b>Online randevuyu aç</b></label>
+      {f.modules_appointments !== '1' && <div className="warn-text small-text">Randevu modülü kapalı. Ayarlar → İşletme'den açın.</div>}
+      <Field label="Randevu bağlantınız">
+        <div className="row"><input className="input" readOnly value={link} onFocus={(e) => e.target.select()} />
+          <button type="button" className="btn" onClick={() => navigator.clipboard?.writeText(link).then(() => toast.ok('Kopyalandı'), () => {})}>Kopyala</button></div>
+      </Field>
+      {!f.public_base_url && <small className="warn-text">Müşterilerin internetten açabilmesi için programın bulutta çalışması ve aşağıya internet adresinin yazılması gerekir. Yerel ağda bu bağlantı yalnızca dükkândaki cihazlarda açılır.</small>}
+      <Field label="İnternet adresi"><input className="input" value={f.public_base_url} onChange={set('public_base_url')} placeholder="https://kasa.isletmem.com" /></Field>
+      <div className="grid-3">
+        <Field label="Açılış"><input type="time" className="input" value={f.booking_open} onChange={set('booking_open')} /></Field>
+        <Field label="Kapanış"><input type="time" className="input" value={f.booking_close} onChange={set('booking_close')} /></Field>
+        <Field label="Kaç gün sonrasına kadar"><input className="input" inputMode="numeric" value={f.booking_days_ahead} onChange={set('booking_days_ahead')} /></Field>
+      </div>
+      <div className="field">
+        <span>Kapalı günler</span>
+        <div className="tabs">
+          {['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((label, i) => {
+            const d = String((i + 1) % 7);
+            return <button type="button" key={d} className={`tab ${closed.includes(d) ? 'active' : ''}`} onClick={() => toggleDay(d)}>{label}</button>;
+          })}
+        </div>
+      </div>
+      <Field label="Sayfada gösterilecek not"><input className="input" value={f.booking_note} onChange={set('booking_note')} placeholder="Örn. Randevu saatinden 5 dk önce gelmenizi rica ederiz." /></Field>
+      <Field label="Onay mesajı" hint="{ad} {tarih} {saat} {hizmet} {personel} {isletme} {link} — SMS & WhatsApp açıksa gönderilir">
+        <textarea className="input" value={f.booking_template} onChange={set('booking_template')} />
+      </Field>
+      <div className="row wrap"><button className="btn primary">Kaydet</button><a className="btn" href="#/randevu-al" target="_blank" rel="noreferrer">Sayfayı aç</a></div>
+    </form>
   );
 }
 

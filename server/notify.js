@@ -108,7 +108,9 @@ export const notifyEnabled = (db) => {
 /** Şablondaki {alan} yer tutucularını doldurur. */
 export function render(template, vars) {
   return String(template || '').replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : ''))
-    .replace(/\s+([.,])/g, '$1').trim();
+    .replace(/\s+([.,])/g, '$1')
+    .replace(/\s*[^.!?:]*:\s*$/, '') // değeri boş kalan son "Etiket:" kısmını at (ör. bağlantı yoksa)
+    .trim();
 }
 
 /**
@@ -154,9 +156,11 @@ export function appointmentToken(db, apptId) {
   return token;
 }
 
+/** Randevu yönetim bağlantısı; program internete açık değilse işletme telefonu. */
 export function appointmentLink(db, apptId) {
-  const base = (getSettings(db).public_base_url || '').replace(/\/+$/, '');
-  return base ? `${base}/#/r/${appointmentToken(db, apptId)}` : '';
+  const s = getSettings(db);
+  const base = (s.public_base_url || '').replace(/\/+$/, '');
+  return base ? `${base}/#/r/${appointmentToken(db, apptId)}` : s.business_phone || '';
 }
 
 export function appointmentVars(db, a) {

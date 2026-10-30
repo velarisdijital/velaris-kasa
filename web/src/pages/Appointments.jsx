@@ -69,7 +69,7 @@ function Row({ m, cols, appts, onNew, onOpen }) {
             {here.map((a) => (
               <div key={a.id} className={`appt ${a.status}`} onClick={(e) => { e.stopPropagation(); onOpen(a); }}
                 style={{ background: a.staff_color || 'var(--primary)', top: ((toMin(a.start_at.slice(11)) - m) / SLOT) * SLOT_H + 2, height: Math.max(22, (a.duration_min / SLOT) * SLOT_H - 4) }}>
-                <b>{a.start_at.slice(11)}</b> {a.customer_display}
+                <b>{a.start_at.slice(11)}</b> {a.customer_display}{a.source === 'online' && <span className="appt-tag">online</span>}
                 {a.duration_min >= SLOT ? <div style={{ opacity: 0.9 }}>{a.service_name}</div> : a.service_name ? <span style={{ opacity: 0.9 }}> · {a.service_name}</span> : null}
               </div>
             ))}

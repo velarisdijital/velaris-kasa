@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import logo from './assets/logo.svg';
-import { HashRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { flushQueue, get, getToken, offlineQueue, onQueueChange, post, setToken, setUnauthorizedHandler } from './api.js';
 import { ConfirmProvider, Icon, ToastProvider } from './components/ui.jsx';
 import DemoBar from './demo/DemoBar.jsx';
 import Appointments from './pages/Appointments.jsx';
+import { BookingPage, ManageBooking } from './pages/Booking.jsx';
 import Customers from './pages/Customers.jsx';
 import Login from './pages/Login.jsx';
 import Pos from './pages/Pos.jsx';
@@ -25,11 +26,21 @@ export default function App() {
       <ConfirmProvider>
         <HashRouter>
           {import.meta.env.VITE_DEMO && <DemoBar />}
-          <Root />
+          <Gate />
         </HashRouter>
       </ConfirmProvider>
     </ToastProvider>
   );
+}
+
+/** Online randevu sayfaları girişsiz açılır; geri kalan her şey oturum ister. */
+function Gate() {
+  const { pathname } = useLocation();
+  if (pathname.startsWith('/randevu-al')) return <BookingPage />;
+  if (pathname.startsWith('/r/')) {
+    return <Routes><Route path="/r/:token" element={<ManageBooking />} /></Routes>;
+  }
+  return <Root />;
 }
 
 function Root() {

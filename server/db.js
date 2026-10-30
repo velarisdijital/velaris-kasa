@@ -64,6 +64,7 @@ export const DEFAULT_SETTINGS = {
   booking_close: '20:00',
   booking_closed_days: '0',          // 0=Pazar ... 6=Cumartesi, virgülle
   booking_note: '',
+  booking_template: 'Merhaba {ad}, {tarih} {saat} tarihli {isletme} randevunuz alındı. İptal/değişiklik: {link}',
   public_base_url: '',               // ör. https://kasa.isletmem.com (bağlantılarda kullanılır)
 
   // e-Arşiv / e-Fatura

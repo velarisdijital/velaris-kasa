@@ -9,6 +9,7 @@ import { startIntegrationWorker } from './integrations/velaris.js';
 import { startNotifyWorker } from './notify.js';
 import appointmentRoutes from './routes/appointments.js';
 import { publicRoutes, sessionRoutes } from './routes/auth.js';
+import bookingRoutes from './routes/booking.js';
 import customerRoutes from './routes/customers.js';
 import notifyRoutes from './routes/notify.js';
 import productRoutes from './routes/products.js';
@@ -35,6 +36,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
   api.get('/health', (req, res) => res.json({ ok: true, app: 'velaris-kasa', version: process.env.npm_package_version || '1.0.0' }));
   api.use(publicRoutes(db));
   api.use(inboundWebhook(db));
+  api.use(bookingRoutes(db));
   api.use(authenticate(db));
   api.use(sessionRoutes(db));
   api.use(productRoutes(db));

@@ -246,3 +246,59 @@ test('randevu hatırlatma zamanlayıcısı', async () => {
   assert.ok(!log.some((m) => m.appointment_id === later.id));
   db.close();
 });
+
+test('online randevu: kapalıyken erişilmez, boş saat, çakışma, iptal', async () => {
+  const pub = (method, url, body) => fetch(base + url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+    .then(async (r) => ({ status: r.status, body: await r.json() }));
+  let r = await pub('GET', '/api/public/booking');
+  assert.equal(r.status, 403);
+
+  const svc = (await call('POST', '/api/products', { name: 'Saç Kesimi', type: 'service', sell_price: 30000, duration_min: 30 })).body;
+  await call('PUT', '/api/settings', { booking_enabled: '1', booking_open: '09:00', booking_close: '12:00', booking_closed_days: '', notify_provider: 'log' });
+  r = await pub('GET', '/api/public/booking');
+  assert.equal(r.status, 200);
+  assert.ok(r.body.services.some((s) => s.id === svc.id));
+  const staffId = r.body.staff[0].id;
+
+  const d = new Date(); d.setDate(d.getDate() + 2);
+  const date = d.toLocaleDateString('sv-SE');
+  r = await pub('GET', `/api/public/booking/slots?date=${date}&service_id=${svc.id}&staff_id=${staffId}`);
+  assert.equal(r.body[0].time, '09:00');
+  assert.equal(r.body.at(-1).time, '11:30'); // 30 dk hizmet 12:00'de bitmeli
+
+  // Eksik/geçersiz bilgiler
+  r = await pub('POST', '/api/public/booking', { service_id: svc.id, date, time: '09:00', name: 'A', phone: '123' });
+  assert.equal(r.status, 400);
+
+  r = await pub('POST', '/api/public/booking', { service_id: svc.id, staff_id: staffId, date, time: '10:00', name: 'Kerem Aydın', phone: '0533 444 55 66', sms_consent: true });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const token = r.body.token;
+  // Aynı saat ikinci kez alınamaz, kesişen 10:15 de alınamaz
+  r = await pub('POST', '/api/public/booking', { service_id: svc.id, staff_id: staffId, date, time: '10:15', name: 'Başka Biri', phone: '05334445567' });
+  assert.equal(r.status, 409);
+  r = await pub('GET', `/api/public/booking/slots?date=${date}&service_id=${svc.id}&staff_id=${staffId}`);
+  assert.ok(!r.body.some((s) => ['09:45', '10:00', '10:15'].includes(s.time)));
+  assert.ok(r.body.some((s) => s.time === '10:30'));
+
+  // Müşteri kaydı ve onay oluştu, onay SMS'i gitti
+  const cust = (await call('GET', '/api/customers?q=Kerem')).body[0];
+  assert.equal(cust.sms_consent, 1);
+  assert.equal(cust.consent_source, 'online');
+  const log = (await call('GET', '/api/notifications')).body.rows;
+  assert.ok(log.some((m) => m.kind === 'booking' && m.to_phone === '905334445566'));
+  // Aynı telefonla ikinci randevu yeni müşteri oluşturmaz
+  await pub('POST', '/api/public/booking', { service_id: svc.id, staff_id: staffId, date, time: '11:00', name: 'Kerem A.', phone: '+90 533 444 55 66' });
+  assert.equal((await call('GET', '/api/customers?q=Kerem')).body.length, 1);
+
+  // Kasada randevu "online" kaynağıyla görünür; müşteri iptal eder
+  const appts = (await call('GET', `/api/appointments?date=${date}`)).body;
+  assert.ok(appts.some((a) => a.source === 'online' && a.start_at === `${date} 10:00`));
+  r = await pub('GET', `/api/public/booking/r/${token}`);
+  assert.equal(r.body.service_name, 'Saç Kesimi');
+  r = await pub('POST', `/api/public/booking/r/${token}/cancel`);
+  assert.equal(r.body.status, 'cancelled');
+  r = await pub('POST', `/api/public/booking/r/${token}/cancel`);
+  assert.equal(r.status, 400);
+  r = await pub('GET', '/api/public/booking/r/zzz');
+  assert.equal(r.status, 404);
+});
