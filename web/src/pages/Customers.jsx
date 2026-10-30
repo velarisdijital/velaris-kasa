@@ -10,6 +10,7 @@ export default function Customers() {
   const [open, setOpen] = useState(null);
   const [editing, setEditing] = useState(null);
   const [iys, setIys] = useState(false);
+  const [campaign, setCampaign] = useState(false);
   const { user, settings } = useSession();
   const list = useLoad(() => get(`/customers?q=${encodeURIComponent(q)}${debt ? '&debt=1' : ''}`), [q, debt]);
   const totalDebt = (list.data || []).reduce((a, c) => a + Math.max(0, c.balance), 0);
@@ -20,6 +21,7 @@ export default function Customers() {
         <h1>Müşteriler & Veresiye</h1>
         <div className="grow" />
         {isManager(user) && <button className="btn" onClick={() => setIys(true)}>İYS listesi</button>}
+        {isManager(user) && settings.notify_provider !== 'none' && <button className="btn" onClick={() => setCampaign(true)}>Toplu mesaj</button>}
         <button className="btn primary" onClick={() => setEditing({})}><Icon name="plus" /> Yeni müşteri</button>
       </div>
       <div className="row wrap" style={{ marginBottom: 12 }}>
@@ -51,6 +53,7 @@ export default function Customers() {
       {open && <CustomerDetail id={open} onClose={() => { setOpen(null); list.reload(); }} onEdit={(c) => setEditing(c)} />}
       {editing && <CustomerForm customer={editing.id ? editing : null} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); list.reload(); }} />}
       {iys && <IysModal onClose={() => setIys(false)} />}
+      {campaign && <CampaignModal onClose={() => setCampaign(false)} />}
     </div>
   );
 }
@@ -206,6 +209,44 @@ function CustomerDetail({ id, onClose, onEdit }) {
         </Modal>
       )}
       {pay && <PaymentModal customer={x} mode={pay} onClose={() => setPay(null)} onDone={() => { setPay(null); c.reload(); }} />}
+    </Modal>
+  );
+}
+
+function CampaignModal({ onClose }) {
+  const toast = useToast();
+  const ask = useConfirm();
+  const [message, setMessage] = useState('Merhaba {ad}, ');
+  const [audience, setAudience] = useState('all');
+  const [count, setCount] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const preview = async (a = audience) => {
+    try { setCount((await post('/notify/campaign', { message: message || '-', audience: a, dry: true })).count); } catch { setCount(null); }
+  };
+  const send = async () => {
+    if (!(await ask(`${count} müşteriye kampanya mesajı gönderilsin mi?`, { ok: 'Gönder', danger: false }))) return;
+    setBusy(true);
+    try {
+      const r = await post('/notify/campaign', { message, audience });
+      toast.ok(`${r.sent} mesaj gönderildi${r.failed ? `, ${r.failed} başarısız` : ''}`);
+      onClose();
+    } catch (err) { toast.err(err); } finally { setBusy(false); }
+  };
+  return (
+    <Modal title="Toplu kampanya mesajı" onClose={onClose}
+      footer={<><button className="btn" onClick={onClose}>Vazgeç</button><button className="btn primary" disabled={busy || !count} onClick={send}>{busy ? 'Gönderiliyor…' : `${count ?? 0} kişiye gönder`}</button></>}>
+      <div className="stack">
+        <p className="muted small-text">Yalnızca <b>ticari ileti onayı veren</b> müşterilere gönderilir (İYS). Onayları İYS'ye yüklemeyi unutmayın.</p>
+        <div className="tabs">
+          {[['all', 'Tüm onaylı müşteriler'], ['inactive', '60 gündür gelmeyenler'], ['debtors', 'Borcu olanlar']].map(([k, l]) =>
+            <button key={k} className={`tab ${audience === k ? 'active' : ''}`} onClick={() => { setAudience(k); preview(k); }}>{l}</button>)}
+        </div>
+        <Field label="Mesaj" hint={`{ad} müşterinin adıyla değişir · ${message.length}/600 karakter`}>
+          <textarea className="input" autoFocus value={message} onChange={(e) => setMessage(e.target.value)} onBlur={() => preview()} style={{ minHeight: 100 }} />
+        </Field>
+        <button className="btn small" style={{ alignSelf: 'flex-start' }} onClick={() => preview()}>Alıcı sayısını hesapla</button>
+        {count != null && <div><b>{count}</b> müşteriye gidecek.</div>}
+      </div>
     </Modal>
   );
 }

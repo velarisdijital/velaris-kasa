@@ -4,7 +4,7 @@ import { useSession } from '../App.jsx';
 import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, ROLE_LABELS } from '../format.js';
 
-const TABS = [['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
+const TABS = [['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['sms', 'SMS & WhatsApp'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
 
 export default function Settings() {
   const [tab, setTab] = useState('business');
@@ -20,6 +20,7 @@ export default function Settings() {
         {tab === 'users' && <Users />}
         {tab === 'fiscal' && <Fiscal />}
         {tab === 'loyalty' && <Loyalty />}
+        {tab === 'sms' && <Sms />}
         {tab === 'crm' && <Crm />}
         {tab === 'backup' && <Backup />}
       </div>
@@ -122,6 +123,110 @@ function Loyalty() {
       <div className="muted small-text">Veresiye ve puanla ödenen kısımdan puan kazanılmaz. İade edilen satışta kazanılan puan geri alınır.</div>
       <div><button className="btn primary">Kaydet</button></div>
     </form>
+  );
+}
+
+const NOTIFY_STATUS = { sent: ['Gönderildi', 'green'], pending: ['Bekliyor', 'yellow'], failed: ['Başarısız', 'red'], skipped: ['Atlandı', ''] };
+const NOTIFY_KIND = { reminder: 'Randevu hatırlatma', booking: 'Randevu onayı', balance: 'Borç bildirimi', marketing: 'Kampanya', test: 'Deneme' };
+
+function Sms() {
+  const toast = useToast();
+  const { f, set, save } = useSettingsForm(['notify_provider', 'netgsm_usercode', 'netgsm_password', 'netgsm_header', 'iletimerkezi_key',
+    'iletimerkezi_hash', 'iletimerkezi_sender', 'whatsapp_token', 'whatsapp_phone_id', 'whatsapp_template', 'reminder_enabled', 'reminder_hours',
+    'reminder_template', 'balance_template', 'kvkk_text', 'public_base_url']);
+  const log = useLoad(() => get('/notifications?limit=50'));
+  const [phone, setPhone] = useState('');
+  const test = async () => {
+    await save();
+    try { await post('/notify/test', { phone }); toast.ok('Deneme mesajı gönderildi'); } catch (err) { toast.err(err); }
+    log.reload();
+  };
+  const p = f.notify_provider;
+  return (
+    <div className="stack">
+      <form className="card card-pad stack" onSubmit={save}>
+        <h2>SMS & WhatsApp</h2>
+        <p className="muted">Randevu hatırlatma, borç bildirimi ve kampanya mesajları için. Hatırlatma ve borç bildirimi bilgilendirme mesajıdır; kampanya mesajları yalnızca ticari ileti onayı veren müşterilere gider (İYS).</p>
+        <Field label="Sağlayıcı">
+          <select className="input" value={p} onChange={set('notify_provider')}>
+            <option value="none">Kapalı</option>
+            <option value="netgsm">Netgsm SMS</option>
+            <option value="iletimerkezi">İleti Merkezi SMS</option>
+            <option value="whatsapp">WhatsApp Business (Meta)</option>
+            <option value="log">Deneme (gönderilmez, kayda yazılır)</option>
+          </select>
+        </Field>
+        {p === 'netgsm' && (
+          <div className="grid-3">
+            <Field label="Kullanıcı kodu"><input className="input" value={f.netgsm_usercode} onChange={set('netgsm_usercode')} autoComplete="off" /></Field>
+            <Field label="API şifresi"><input className="input" type="password" value={f.netgsm_password} onChange={set('netgsm_password')} autoComplete="off" /></Field>
+            <Field label="Mesaj başlığı" hint="Netgsm'de onaylı gönderici adı"><input className="input" value={f.netgsm_header} onChange={set('netgsm_header')} /></Field>
+          </div>
+        )}
+        {p === 'iletimerkezi' && (
+          <div className="grid-3">
+            <Field label="API anahtarı (key)"><input className="input" value={f.iletimerkezi_key} onChange={set('iletimerkezi_key')} autoComplete="off" /></Field>
+            <Field label="API hash"><input className="input" type="password" value={f.iletimerkezi_hash} onChange={set('iletimerkezi_hash')} autoComplete="off" /></Field>
+            <Field label="Gönderici adı"><input className="input" value={f.iletimerkezi_sender} onChange={set('iletimerkezi_sender')} /></Field>
+          </div>
+        )}
+        {p === 'whatsapp' && (
+          <>
+            <div className="grid-2">
+              <Field label="Kalıcı erişim anahtarı (token)"><input className="input" type="password" value={f.whatsapp_token} onChange={set('whatsapp_token')} autoComplete="off" /></Field>
+              <Field label="Telefon numarası kimliği (Phone number ID)"><input className="input" value={f.whatsapp_phone_id} onChange={set('whatsapp_phone_id')} /></Field>
+            </div>
+            <Field label="Onaylı şablon adı" hint="Meta'da gövdesi {{1}} olan, Türkçe bir yardımcı (utility) şablon oluşturun; mesaj metni bu değişkene yazılır.">
+              <input className="input" value={f.whatsapp_template} onChange={set('whatsapp_template')} placeholder="velaris_bildirim" />
+            </Field>
+          </>
+        )}
+        <div className="card card-pad stack" style={{ background: 'var(--panel-2)', boxShadow: 'none', gap: 10 }}>
+          <label className="check"><input type="checkbox" checked={f.reminder_enabled === '1'} onChange={set('reminder_enabled')} /> <b>Randevu hatırlatmasını otomatik gönder</b></label>
+          <div className="row wrap">
+            <span>Randevudan</span>
+            <input className="input" style={{ width: 80 }} inputMode="numeric" value={f.reminder_hours} onChange={set('reminder_hours')} aria-label="Saat" />
+            <span>saat önce</span>
+          </div>
+          <Field label="Hatırlatma metni" hint="Kullanılabilir alanlar: {ad} {tarih} {saat} {hizmet} {personel} {isletme} {link}">
+            <textarea className="input" value={f.reminder_template} onChange={set('reminder_template')} />
+          </Field>
+          <Field label="Borç bildirimi metni" hint="{ad} {borc} {isletme}">
+            <textarea className="input" value={f.balance_template} onChange={set('balance_template')} />
+          </Field>
+          <Field label="İnternet adresi (randevu bağlantıları için)" hint="Program bulutta çalışıyorsa adresi; {link} alanında kullanılır">
+            <input className="input" value={f.public_base_url} onChange={set('public_base_url')} placeholder="https://kasa.isletmem.com" />
+          </Field>
+        </div>
+        <Field label="KVKK aydınlatma metni" hint="Müşteri kaydında gösterilir"><textarea className="input" value={f.kvkk_text} onChange={set('kvkk_text')} /></Field>
+        <div className="row wrap">
+          <button className="btn primary">Kaydet</button>
+          {p !== 'none' && <>
+            <input className="input" style={{ maxWidth: 200 }} inputMode="tel" placeholder="05xx xxx xx xx" value={phone} onChange={(e) => setPhone(e.target.value)} aria-label="Deneme numarası" />
+            <button type="button" className="btn" onClick={test}>Deneme mesajı gönder</button>
+          </>}
+        </div>
+      </form>
+      <div className="card card-pad stack">
+        <h3>Son mesajlar</h3>
+        <div className="table-wrap" style={{ maxHeight: 320 }}>
+          <table className="table">
+            <tbody>
+              {(log.data?.rows || []).map((m) => (
+                <tr key={m.id}>
+                  <td className="small-text">{dt(m.created_at)}</td>
+                  <td className="small-text">{NOTIFY_KIND[m.kind] || m.kind}</td>
+                  <td className="small-text">{m.customer_name || m.to_phone}</td>
+                  <td className="small-text" style={{ maxWidth: 320 }}>{m.body}</td>
+                  <td><span className={`badge ${NOTIFY_STATUS[m.status][1]}`}>{NOTIFY_STATUS[m.status][0]}</span>{m.error && <div className="danger-text small-text">{m.error}</div>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!log.data?.rows?.length && <div className="empty">Henüz mesaj yok</div>}
+        </div>
+      </div>
+    </div>
   );
 }
 

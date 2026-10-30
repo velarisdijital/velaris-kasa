@@ -6,9 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { authenticate } from './auth.js';
 import { getSetting, openDatabase, setSettings } from './db.js';
 import { startIntegrationWorker } from './integrations/velaris.js';
+import { startNotifyWorker } from './notify.js';
 import appointmentRoutes from './routes/appointments.js';
 import { publicRoutes, sessionRoutes } from './routes/auth.js';
 import customerRoutes from './routes/customers.js';
+import notifyRoutes from './routes/notify.js';
 import productRoutes from './routes/products.js';
 import reportRoutes from './routes/reports.js';
 import saleRoutes from './routes/sales.js';
@@ -41,6 +43,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
   api.use(saleRoutes(db));
   api.use(appointmentRoutes(db));
   api.use(reportRoutes(db));
+  api.use(notifyRoutes(db));
   api.use(settingsRoutes(db));
   api.use((req, res) => res.status(404).json({ error: 'Bulunamadı' }));
   api.use((err, req, res, _next) => {
@@ -66,8 +69,8 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
     });
   }
 
-  const stopWorker = worker ? startIntegrationWorker(db) : () => {};
-  return { app, db, close: () => { stopWorker(); db.close(); } };
+  const stops = worker ? [startIntegrationWorker(db), startNotifyWorker(db)] : [];
+  return { app, db, close: () => { stops.forEach((s) => s()); db.close(); } };
 }
 
 

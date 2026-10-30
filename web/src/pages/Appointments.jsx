@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { get, post, put } from '../api.js';
 import { Field, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { money, today } from '../format.js';
+import { useSession } from '../App.jsx';
 import { CustomerPicker } from './Pos.jsx';
 
 const START = 8;
@@ -81,6 +82,7 @@ function Row({ m, cols, appts, onNew, onOpen }) {
 
 function ApptModal({ init, staff, services, onClose, onSaved }) {
   const toast = useToast();
+  const { settings } = useSession();
   const ask = useConfirm();
   const navigate = useNavigate();
   const a = init.appt;
@@ -113,6 +115,9 @@ function ApptModal({ init, staff, services, onClose, onSaved }) {
       toast.err(err);
     }
   };
+  const remind = async () => {
+    try { await post(`/appointments/${a.id}/remind`); toast.ok('Hatırlatma gönderildi'); onSaved(); } catch (err) { toast.err(err); }
+  };
   const setStatus = async (status) => {
     try { await post(`/appointments/${a.id}/status`, { status }); onSaved(); } catch (err) { toast.err(err); }
   };
@@ -123,6 +128,7 @@ function ApptModal({ init, staff, services, onClose, onSaved }) {
         {a && a.status === 'scheduled' && <>
           <button className="btn" onClick={() => setStatus('cancelled')}>İptal et</button>
           <button className="btn" onClick={() => setStatus('no_show')}>Gelmedi</button>
+          {settings.notify_provider !== 'none' && <button className="btn" onClick={remind}>{a.reminder_sent_at ? 'Tekrar hatırlat' : 'SMS ile hatırlat'}</button>}
           <button className="btn success" onClick={() => navigate('/kasa', { state: { appointment: a } })}>Kasaya aktar</button>
         </>}
         {a && a.status !== 'scheduled' && <><span className="badge">{STATUS[a.status]}</span><button className="btn" onClick={() => setStatus('scheduled')}>Bekliyor yap</button></>}

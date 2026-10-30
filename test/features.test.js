@@ -161,3 +161,88 @@ test('KVKK/İYS: onay kaydı, İYS dışa aktarma, veri silme', async () => {
   assert.equal(after.phone, null);
   assert.match(after.name, /Silinmiş müşteri/);
 });
+
+test('bildirim: deneme sağlayıcısı, borç mesajı, kampanya onay filtresi', async () => {
+  let r = await call('POST', '/api/notify/test', { phone: '05321234567' });
+  assert.equal(r.status, 400); // sağlayıcı kapalı
+  await call('PUT', '/api/settings', { notify_provider: 'log', business_name: 'Yıldız Market' });
+  r = await call('POST', '/api/notify/test', { phone: '05321234567' });
+  assert.equal(r.body.status, 'sent');
+  assert.equal(r.body.to_phone, '905321234567');
+  r = await call('POST', '/api/notify/test', { phone: '0212 555 00 00' }); // sabit hat
+  assert.equal(r.status, 400);
+
+  const debtor = (await call('POST', '/api/customers', { name: 'Borçlu Ahmet', phone: '05551112233' })).body;
+  await call('POST', `/api/customers/${debtor.id}/adjust`, { amount: 12550 });
+  r = await call('POST', `/api/customers/${debtor.id}/notify-balance`);
+  assert.equal(r.body.status, 'sent');
+  assert.equal(r.body.body, 'Merhaba Borçlu, Yıldız Market hesabınızdaki güncel borç: 125,50 TL. Teşekkür ederiz.');
+
+  // Kampanya yalnızca onaylı müşterilere
+  await call('POST', '/api/customers', { name: 'Onaysız', phone: '05550000001' });
+  await call('POST', '/api/customers', { name: 'Onaylı Ayşe', phone: '05550000002', sms_consent: 1 });
+  r = await call('POST', '/api/notify/campaign', { message: 'Merhaba {ad}, hafta sonu %10 indirim!', dry: true });
+  const consenting = r.body.count;
+  r = await call('POST', '/api/notify/campaign', { message: 'Merhaba {ad}, hafta sonu %10 indirim!' });
+  assert.equal(r.body.sent, consenting);
+  const log = (await call('GET', '/api/notifications')).body.rows;
+  assert.ok(log.some((n) => n.kind === 'marketing' && n.body === 'Merhaba Onaylı, hafta sonu %10 indirim!'));
+  assert.ok(!log.some((n) => n.kind === 'marketing' && n.to_phone === '905550000001'));
+});
+
+test('bildirim: Netgsm isteği ve hata kodu', async () => {
+  const realFetch = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).startsWith('https://api.netgsm.com.tr/')) {
+      seen.push(new URL(url));
+      const pass = new URL(url).searchParams.get('password');
+      return new Response(pass === 'dogru' ? '00 987654321' : '30');
+    }
+    return realFetch(url, opts);
+  };
+  try {
+    await call('PUT', '/api/settings', { notify_provider: 'netgsm', netgsm_usercode: '8503330000', netgsm_password: 'yanlis', netgsm_header: 'YILDIZMRKT' });
+    let r = await call('POST', '/api/notify/test', { phone: '+90 532 123 45 67', message: 'Deneme ğüşıöç' });
+    assert.equal(r.status, 400);
+    assert.match(r.body.error, /kullanıcı adı\/şifre/);
+    await call('PUT', '/api/settings', { netgsm_password: 'dogru' });
+    r = await call('POST', '/api/notify/test', { phone: '+90 532 123 45 67', message: 'Deneme ğüşıöç' });
+    assert.equal(r.body.status, 'sent');
+    assert.equal(r.body.provider_ref, '987654321');
+    const q = seen.at(-1).searchParams;
+    assert.equal(q.get('gsmno'), '905321234567');
+    assert.equal(q.get('msgheader'), 'YILDIZMRKT');
+    assert.equal(q.get('message'), 'Deneme ğüşıöç');
+    assert.equal(q.get('dil'), 'TR');
+    // Şifre ayarlarda maskeli döner
+    const s = (await call('GET', '/api/settings')).body;
+    assert.equal(s.netgsm_password, '••••••••');
+  } finally {
+    globalThis.fetch = realFetch;
+    await call('PUT', '/api/settings', { notify_provider: 'log' });
+  }
+});
+
+test('randevu hatırlatma zamanlayıcısı', async () => {
+  const { runReminders } = await import('../server/notify.js');
+  const { openDatabase } = await import('../server/db.js');
+  const db = openDatabase(dataDir);
+  const pad = (n) => String(n).padStart(2, '0');
+  const at = (mins) => { const d = new Date(Date.now() + mins * 60000); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  await call('PUT', '/api/settings', { reminder_enabled: '1', reminder_hours: '3', public_base_url: 'https://kasa.ornek.com' });
+  const soon = (await call('POST', '/api/appointments', { customer_name: 'Burak Can', phone: '05330001122', start_at: at(90), force: true })).body;
+  const later = (await call('POST', '/api/appointments', { customer_name: 'Uzak', phone: '05330001123', start_at: at(60 * 24), force: true })).body;
+  const noPhone = (await call('POST', '/api/appointments', { customer_name: 'Telefonsuz', start_at: at(30), force: true })).body;
+  assert.ok(soon.id && later.id && noPhone.id);
+  const n = await runReminders(db);
+  assert.equal(n, 2); // yakın olan iki randevu (biri telefonsuz → atlanır)
+  assert.equal(await runReminders(db), 0); // ikinci kez gönderilmez
+  const log = (await call('GET', '/api/notifications')).body.rows;
+  const msg = log.find((m) => m.appointment_id === soon.id);
+  assert.equal(msg.status, 'sent');
+  assert.match(msg.body, /^Merhaba Burak, \d\d\.\d\d\.\d{4} \d\d:\d\d için Yıldız Market randevunuzu hatırlatırız\. İptal\/değişiklik: https:\/\/kasa\.ornek\.com\/#\/r\/[0-9a-f]{24}$/);
+  assert.equal(log.find((m) => m.appointment_id === noPhone.id).status, 'skipped');
+  assert.ok(!log.some((m) => m.appointment_id === later.id));
+  db.close();
+});
