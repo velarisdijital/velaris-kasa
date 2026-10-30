@@ -30,10 +30,10 @@ jobs:
         run: |
           docker run -d --name kasa -p 4848:4848 velaris-kasa
           for i in $(seq 1 30); do curl -fsS http://localhost:4848/api/health && break; sleep 1; done
+          trap 'docker ps -a; docker logs kasa' EXIT
           curl -fsS http://localhost:4848/api/setup/status
           curl -fsS http://localhost:4848/ | grep -q 'Velaris Kasa'
-          docker exec kasa date +%Z | grep -q '+03'
-          docker logs kasa
+          test "$(docker exec kasa date +%z)" = "+0300"
 
   windows:
     # Windows kurulum dosyası (.exe) — etiket (v1.0.0 gibi) atıldığında ya da elle tetiklendiğinde

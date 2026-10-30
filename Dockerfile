@@ -19,6 +19,8 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/bridge ./bridge
 COPY package.json ./
+# Veri klasörü yetkisiz kullanıcıya ait olmalı (adlandırılmış birim bu sahipliği devralır)
+RUN mkdir -p /data && chown node:node /data
 VOLUME /data
 EXPOSE 4848
 USER node
