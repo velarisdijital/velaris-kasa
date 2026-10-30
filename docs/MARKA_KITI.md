@@ -40,16 +40,15 @@ Logolar yazı tipinden vektöre çevrilmiştir; yeniden üretmek için: `node br
 | Turuncu | `#FF4D1A` | Vurgu, dikkat çekilecek tek öğe |
 | Mor | `#7B5CFF` | Birincil düğme, grafik çubukları |
 | Sarı | `#FFC21A` | Logo; koyu zeminde küçük vurgu |
-| Yeşil | `#1FC59B` | Logo; olumlu durum vurgusu |
+| Yeşil | `#20C4A0` | Logo; olumlu durum vurgusu |
 
 Oran: zeminin ~%80'i mürekkep/kâğıt, metin mürekkep/kâğıt, renk %10'u geçmesin. Bir ekranda tek bir turuncu vurgu.
 
 Erişilebilirlik: turuncu ve sarı **açık zeminde metin rengi olarak kullanılmaz** (kontrast yetersiz); mor üzerinde
 beyaz metin kullanılabilir. Arayüzdeki başarı/hata/uyarı renkleri ayrıdır: `#13855F`, `#D6361A`, `#A86A00`.
 
-> Mürekkep, kâğıt, turuncu, mor, çizgi ve ikincil metin renkleri Velaris Dijital'in Canva tasarımlarından birebir
-> alındı. Sarı ve yeşil logo görselinden yaklaşık alındı; Canva'daki "Velaris Dijital 2026" marka kitiyle doğrulayıp
-> `brand/tokens.json` dosyasını güncelleyin.
+> Renkler Velaris Dijital'in Canva tasarımlarından (zemin, metin, çizgi, turuncu, mor) ve Velaris logo görselinin
+> piksellerinden (dört kolun renkleri) birebir alındı.
 
 ## Yazı
 

@@ -17,10 +17,14 @@ const BOLD = font(800);
 const REGULAR = font(400);
 
 /** Velaris simgesi: dört renkli kol, rüzgârgülü düzeninde. (-100..100 koordinatlarında) */
+let maskSeq = 0;
 function markPaths(colors = [C.orange, C.violet, C.mint, C.sun]) {
-  const arm = 'M-34 -66 L-1 -17 L29 -68';
-  return `<g fill="none" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">${
-    colors.map((c, i) => `<path d="${arm}" stroke="${c}"${i ? ` transform="rotate(${i * 90})"` : ''}/>`).join('')}</g>`;
+  // Her kol bir "V"; uçları merkeze bakar, kollar saat yönünde hafif kaydırılmış (rüzgârgülü), ortada yuvarlak boşluk.
+  const arm = 'M-31 -86 L2 -26 L38 -84';
+  const id = `vk-hole-${++maskSeq}`;
+  return `<mask id="${id}" maskUnits="userSpaceOnUse" x="-100" y="-100" width="200" height="200"><rect x="-100" y="-100" width="200" height="200" fill="#fff"/><circle r="14" fill="#000"/></mask>`
+    + `<g mask="url(#${id})" fill="none" stroke-width="31" stroke-linecap="round" stroke-linejoin="round">${
+    colors.map((c, i) => `<path d="${arm}" stroke="${c}" transform="rotate(${i * 90 + 3})"/>`).join('')}</g>`;
 }
 
 function text(fontObj, str, x, baseline, size, fill) {
