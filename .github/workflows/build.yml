@@ -35,13 +35,13 @@ jobs:
       - name: Simülatörle doğrudan
         run: |
           set -e
-          OUT=$(echo '{"action":"status"}' | dotnet okc/VelarisOkc.dll); echo "$OUT"; echo "$OUT" | grep -q '"ok":true'
+          OUT=$(echo '{"action":"status"}' | dotnet okc/VelarisOkc.dll); echo "::notice::status $OUT"; echo "$OUT" | grep -q '"ok":true'
           R='{"action":"receipt","data":{"sale_id":1,"receipt_no":"T-1","items":[{"name":"Peynir","qty":1.25,"unit":"kg","unit_price":32000,"discount":0,"vat_rate":1,"line_total":40000},{"name":"Kola","qty":2,"unit_price":4000,"discount":0,"vat_rate":20,"line_total":8000}],"subtotal":48000,"discount":1000,"total":47000,"payments":[{"method":"cash","amount":20000},{"method":"card","amount":27000}]}}'
-          OUT=$(echo "$R" | dotnet okc/VelarisOkc.dll); echo "$OUT"; echo "$OUT" | grep -q '"fiscal_no":"0001"'
-          OUT=$(echo "$R" | OKC_SIM_DECLINE=1 dotnet okc/VelarisOkc.dll); echo "$OUT"; echo "$OUT" | grep -q 'reddedildi'
-          OUT=$(echo '{"action":"receipt","data":{"items":[{"name":"X","qty":1,"unit_price":100,"vat_rate":18,"line_total":100}],"total":100,"payments":[{"method":"cash","amount":100}]}}' | dotnet okc/VelarisOkc.dll); echo "$OUT"; echo "$OUT" | grep -q 'KDV için cihazda grup'
-          OUT=$(echo '{"action":"status"}' | OKC_BRAND=hugin dotnet okc/VelarisOkc.dll); echo "$OUT"; echo "$OUT" | grep -q 'SDK'
-          OUT=$(echo '{"action":"z-report"}' | dotnet okc/VelarisOkc.dll); echo "$OUT"; echo "$OUT" | grep -q '"z_no":"0001"'
+          OUT=$(echo "$R" | dotnet okc/VelarisOkc.dll); echo "::notice::$OUT"; echo "$OUT" | grep -q '"fiscal_no":"0001"'
+          OUT=$(echo "$R" | OKC_SIM_DECLINE=1 dotnet okc/VelarisOkc.dll); echo "::notice::$OUT"; echo "$OUT" | grep -q 'reddedildi'
+          OUT=$(echo '{"action":"receipt","data":{"items":[{"name":"X","qty":1,"unit_price":100,"vat_rate":18,"line_total":100}],"total":100,"payments":[{"method":"cash","amount":100}]}}' | dotnet okc/VelarisOkc.dll); echo "::notice::$OUT"; echo "$OUT" | grep -q 'cihazda grup'
+          OUT=$(echo '{"action":"status"}' | OKC_BRAND=hugin dotnet okc/VelarisOkc.dll); echo "::notice::$OUT"; echo "$OUT" | grep -q 'SDK'
+          OUT=$(echo '{"action":"z-report"}' | dotnet okc/VelarisOkc.dll); echo "::notice::$OUT"; echo "$OUT" | grep -q '"z_no":"0001"'
       - name: Köprü üzerinden
         run: |
           set -e
