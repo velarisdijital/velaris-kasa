@@ -1,0 +1,15 @@
+{
+  "name": "Velaris Kasa",
+  "short_name": "Velaris Kasa",
+  "description": "Stok takip ve kasa programı",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f6fb",
+  "theme_color": "#1d4ed8",
+  "lang": "tr",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
