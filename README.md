@@ -14,6 +14,16 @@ Tek başına çalışır; istenirse **Velaris CRM** ile entegre olur.
   en çok satanlar, personel performansı ve prim, stok değeri ve sipariş listesi
 - **Kullanıcılar:** PIN ile giriş; yönetici / müdür / kasiyer / personel rolleri
 - **Çevrimdışı:** internet ya da sunucu kesilirse satış yapmaya devam eder, bağlantı gelince otomatik gönderir
+- **Yazarkasa (YN ÖKC):** satış mali fiş için yazarkasaya gönderilir (GMP-3 köprüsü), fiş numarası satışa işlenir,
+  gün sonunda yazarkasa Z raporu alınır; cihaz yanıt vermezse "tekrar gönder". Bkz. [docs/YAZARKASA_ENTEGRASYON.md](docs/YAZARKASA_ENTEGRASYON.md)
+- **e-Arşiv / e-Fatura:** Paraşüt üzerinden tek tıkla fatura; alıcı e-Fatura mükellefiyse otomatik e-Fatura, 12.000 TL sınırı uyarısı
+- **Puan (para puan):** her alışverişte ayarlanabilir oranda puan, kasada puanla ödeme
+- **SMS & WhatsApp:** Netgsm, İleti Merkezi, WhatsApp Business; otomatik randevu hatırlatma, borç bildirimi,
+  onaylı müşterilere kampanya mesajı
+- **Online randevu:** müşterinin kendisi hizmet, personel ve boş saat seçerek randevu alır, linkten iptal eder
+- **KVKK & İYS:** ticari ileti onayı (tarih/kaynak), İYS yükleme listesi, müşteri verisini gösterme ve silme
+- **Kamera ile barkod:** telefon/tablet kamerasıyla okuma; bulunamayan barkod için internetten ürün adı
+- **Bulut kurulumu:** Docker + otomatik HTTPS, şube/kasa bazlı raporlar. Bkz. [docs/BULUT_KURULUM.md](docs/BULUT_KURULUM.md)
 - **Velaris CRM entegrasyonu:** bkz. [docs/VELARIS_ENTEGRASYON.md](docs/VELARIS_ENTEGRASYON.md)
 
 ## Nasıl çalışır?
@@ -58,6 +68,8 @@ ve örnek ürünleri ekler.
 | `npm test` | API testleri |
 | `npm run desktop` | Masaüstü uygulamasını çalıştırır |
 | `npm run dist:win` / `dist:linux` / `dist:mac` | Kurulum dosyası üretir |
+| `npm run demo:build` | Tarayıcıda tek başına çalışan demo (dist-demo/velaris-kasa-demo.html) |
+| `node bridge/okc-bridge.js` | Yazarkasa köprüsü (simülatör ya da üretici kütüphanesiyle) |
 
 Ortam değişkenleri: `PORT` (varsayılan 4848), `HOST` (varsayılan 0.0.0.0), `VELARIS_DATA_DIR` (varsayılan `./data`).
 
@@ -85,17 +97,19 @@ Ortam değişkenleri: `PORT` (varsayılan 4848), `HOST` (varsayılan 0.0.0.0), `
 
 ```
 server/            Express API + SQLite (better-sqlite3)
-  schema.sql       Veritabanı şeması (tutarlar kuruş)
+  schema.sql       Veritabanı şeması (tutarlar kuruş); migrations.js sonraki sürümler
+  fiscal.js        Yazarkasa sürücüleri · invoice.js e-Arşiv · notify.js SMS/WhatsApp
   routes/          products, sales, customers, shifts, appointments, reports, settings
   integrations/    velaris.js — CRM olay kuyruğu, müşteri çekme
 web/               React arayüz (Vite) + PWA
 electron/          Masaüstü kabuğu (sunucuyu içinde çalıştırır)
+bridge/            Yazarkasa köprüsü (GMP-3)
 test/              API testleri (node:test)
 docs/              Velaris CRM entegrasyon sözleşmesi
 ```
 
 ## Notlar
 
-- Fişler **bilgi fişidir**; yazarkasa/ÖKC veya e-Arşiv yerine geçmez. Yasal belge için mevcut ÖKC/e-Arşiv
-  entegrasyonu ayrıca eklenmelidir.
+- Yazarkasa bağlı değilken basılan fişler **bilgi fişidir**. Gerçek usuldeki işletmeler satışları yazarkasadan
+  mali fişle kaydetmek zorundadır (Ayarlar → Yazarkasa). Gerçek cihaz bağlantısı için üreticinin GMP-3 kütüphanesi gerekir.
 - Yedek: Ayarlar → Yedekleme → "Yedeği indir". Düzenli olarak USB/buluta kopyalayın.

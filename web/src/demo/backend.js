@@ -132,7 +132,12 @@ async function seedData(type) {
     business_phone: '0212 555 00 00',
   });
   const T = token;
-  await call('PUT', '/settings', { business_address: 'Bağdat Cad. No: 12, Kadıköy / İstanbul', receipt_footer: 'Bizi tercih ettiğiniz için teşekkürler!' }, T);
+  await call('PUT', '/settings', {
+    business_address: 'Bağdat Cad. No: 12, Kadıköy / İstanbul', receipt_footer: 'Bizi tercih ettiğiniz için teşekkürler!',
+    // Demoda yeni özellikler açık: simülatör yazarkasa ve e-Arşiv, deneme SMS (gönderilmez), puan
+    loyalty_enabled: '1', loyalty_rate: '2', notify_provider: 'log', reminder_enabled: '1',
+    fiscal_driver: 'simulator', invoice_provider: 'simulator', booking_enabled: berber ? '1' : '0', booking_closed_days: '0',
+  }, T);
   const staff = [await call('GET', '/auth/me', null, T).then((r) => r.user)];
   if (berber) {
     staff.push(await call('POST', '/users', { name: 'Emre', role: 'staff', pin: '2222', commission_rate: 40, color: '#db2777' }, T));
@@ -150,9 +155,10 @@ async function seedData(type) {
     ]) await call('POST', '/products', p, T);
   }
   const customers = [];
-  for (const c of [['Mehmet Kaya', '0532 111 22 33'], ['Fatma Demir', '0544 222 33 44'], ['Hüseyin Çelik', '0505 333 44 55'], ['Zeynep Arslan', '0555 444 55 66']]) {
-    customers.push(await call('POST', '/customers', { name: c[0], phone: c[1], credit_limit: 0 }, T));
+  for (const c of [['Mehmet Kaya', '0532 111 22 33', 1], ['Fatma Demir', '0544 222 33 44', 1], ['Hüseyin Çelik', '0505 333 44 55', 0], ['Zeynep Arslan', '0555 444 55 66', 1]]) {
+    customers.push(await call('POST', '/customers', { name: c[0], phone: c[1], credit_limit: 0, sms_consent: c[2] }, T));
   }
+  customers.push(await call('POST', '/customers', { name: 'ABC Gıda Ltd. Şti.', phone: '0216 333 22 11', tax_number: '1234567890', tax_office: 'Kadıköy', address: 'Moda Cad. No: 5', district: 'Kadıköy', city: 'İstanbul' }, T));
   const products = await call('GET', '/products', null, T);
   const services = products.filter((p) => p.type === 'service');
   const goods = products.filter((p) => p.type === 'product' && p.sell_price > 0);

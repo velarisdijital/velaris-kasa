@@ -23,8 +23,9 @@ export default function DemoBar() {
     <div className="banner demo-bar">
       <strong>Demo</strong>
       <span>Yönetici PIN <code>1234</code> · Kasiyer PIN <code>0000</code> · Personel PIN <code>2222</code></span>
-      <span className="muted small-text">Veriler yalnızca bu tarayıcıda tutulur.</span>
+      <span className="muted small-text" title="Veriler yalnızca bu tarayıcıda tutulur. Yazarkasa ve e-Arşiv simülatörde çalışır, SMS'ler gönderilmez.">Simülasyon modu</span>
       <span style={{ flex: 1 }} />
+      <a className="btn small" href="#/randevu-al">Müşteri randevu sayfası</a>
       <span className="muted small-text">Sıfırla:</span>
       {OPTIONS.map(([type, label]) => (
         <button key={label} className="btn small" disabled={busy} onClick={() => reset(type, label)}>{busy ? '…' : label}</button>
