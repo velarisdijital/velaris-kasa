@@ -70,6 +70,12 @@ Hata: HTTP 4xx/5xx ve `{ "ok": false, "error": "Kağıt bitti" }`. Hata metni ka
 
 Fiş geneli indirim (`discount`) satırlara dağıtılmadan fiş altı indirim olarak gönderilir.
 
+## Hazır ara program şablonu (C#)
+
+`bridge/adapter-dotnet/` — `command` adaptörüyle çalışan C# programı. Fiş akışının tamamı (KDV grubu ve ödeme
+eşleme, fiş altı indirim, hata olursa fiş iptali) ortak sınıftadır ve simülatörle test edilir; her marka için
+yalnızca üreticinin SDK çağrıları doldurulur. Ayrıntılar: `bridge/adapter-dotnet/README.md`.
+
 ## `command` adaptörü (gerçek cihaz)
 
 Köprü her işlemde `OKC_COMMAND` programını çalıştırır; isteği **stdin**'den JSON verir, **stdout**'tan JSON bekler:

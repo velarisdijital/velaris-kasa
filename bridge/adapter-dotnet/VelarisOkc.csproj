@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- VelarisKasa yazarkasa ara programı. Köprü (bridge/okc-bridge.js) bu programı OKC_COMMAND ile çağırır. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>VelarisOkc</AssemblyName>
+    <RootNamespace>VelarisOkc</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Update="okc.example.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- Üretici SDK'sı (ör. Hugin/Ingenico GMP-3 DLL) eklendiğinde:
+  <ItemGroup>
+    <Reference Include="VendorGmp3"><HintPath>lib\VendorGmp3.dll</HintPath></Reference>
+  </ItemGroup>
+  -->
+</Project>
