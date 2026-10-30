@@ -1,0 +1,32 @@
+# Bulutta HTTPS ile çalıştırma (Caddy otomatik Let's Encrypt sertifikası alır).
+#   1) Alan adınızın (ör. kasa.isletmem.com) A kaydını sunucunun IP'sine yönlendirin
+#   2) DOMAIN=kasa.isletmem.com docker compose up -d
+#   3) Ayarlar → SMS & WhatsApp / Online randevu → İnternet adresi: https://kasa.isletmem.com
+services:
+  kasa:
+    build: .
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Istanbul
+    volumes:
+      - kasa-data:/data
+    expose:
+      - "4848"
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN ortam değişkenini ayarlayın}
+    command: caddy reverse-proxy --from ${DOMAIN} --to kasa:4848
+    volumes:
+      - caddy-data:/data
+    depends_on:
+      - kasa
+
+volumes:
+  kasa-data:
+  caddy-data:

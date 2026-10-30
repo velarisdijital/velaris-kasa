@@ -400,3 +400,16 @@ test('e-Arşiv: simülatör ve Paraşüt akışı (KDV hariç fiyat, e-Fatura m�
     await call('PUT', '/api/settings', { invoice_provider: 'none' });
   }
 });
+
+test('rapor: kasa / şube kırılımı ve filtre', async () => {
+  for (const reg of ['Kadıköy Kasa 1', 'Kadıköy Kasa 2', 'Beşiktaş Kasa 1']) {
+    await call('POST', '/api/sales', { register_name: reg, items: [{ name: 'X', qty: 1, unit_price: 1000, vat_rate: 20 }], payments: [{ method: 'cash', amount: 1000 }] });
+  }
+  const all = (await call('GET', '/api/reports/summary')).body;
+  assert.ok(all.registers.some((r) => r.name === 'Beşiktaş Kasa 1'));
+  const kd = (await call('GET', '/api/reports/summary?register=Kadıköy')).body;
+  assert.equal(kd.totals.count, 2);
+  assert.equal(kd.totals.total, 2000);
+  const one = (await call('GET', `/api/reports/summary?register=${encodeURIComponent('Kadıköy Kasa 2')}`)).body;
+  assert.equal(one.totals.count, 1);
+});

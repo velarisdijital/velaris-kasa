@@ -20,6 +20,21 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t velaris-kasa .
+      - name: Konteyneri başlat ve sağlık kontrolü
+        run: |
+          docker run -d --name kasa -p 4848:4848 velaris-kasa
+          for i in $(seq 1 30); do curl -fsS http://localhost:4848/api/health && break; sleep 1; done
+          curl -fsS http://localhost:4848/api/setup/status
+          curl -fsS http://localhost:4848/ | grep -q 'Velaris Kasa'
+          docker exec kasa date +%Z | grep -q '+03'
+          docker logs kasa
+
   windows:
     # Windows kurulum dosyası (.exe) — etiket (v1.0.0 gibi) atıldığında ya da elle tetiklendiğinde
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'

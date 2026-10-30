@@ -20,38 +20,44 @@ export default function reportRoutes(db) {
   r.get('/reports/summary', allow(...MANAGERS), h((req, res) => {
     const [from, to] = dateRange(req.query);
     const p = { from, to };
+    // İsteğe bağlı kasa/şube filtresi: register=Kadıköy (ön ek eşleşmesi: "Kadıköy" → "Kadıköy Kasa 1", "Kadıköy Kasa 2")
+    const reg = String(req.query.register || '').trim();
+    const regSql = reg ? ' AND (register_name = @reg OR register_name LIKE @regPrefix)' : '';
+    if (reg) { p.reg = reg; p.regPrefix = `${reg} %`; }
     const totals = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(total),0) AS total, COALESCE(SUM(discount),0) AS discount,
         COALESCE(SUM(vat_total),0) AS vat_total, COALESCE(SUM(cost_total),0) AS cost_total, COALESCE(SUM(refunded_total),0) AS refunded
-      FROM sales WHERE created_at BETWEEN @from AND @to`).get(p);
+      FROM sales WHERE created_at BETWEEN @from AND @to${regSql}`).get(p);
     totals.net = totals.total - totals.refunded;
     totals.gross_profit = totals.total - totals.cost_total;
     totals.avg_basket = totals.count ? Math.round(totals.total / totals.count) : 0;
 
     const payments = db.prepare(`SELECT sp.method, SUM(sp.amount) AS amount FROM sale_payments sp JOIN sales s ON s.id = sp.sale_id
-      WHERE s.created_at BETWEEN @from AND @to GROUP BY sp.method`).all(p);
+      WHERE s.created_at BETWEEN @from AND @to${regSql.replace(/register_name/g, 's.register_name')} GROUP BY sp.method`).all(p);
     const daily = db.prepare(`SELECT substr(created_at,1,10) AS day, COUNT(*) AS count, SUM(total) AS total
-      FROM sales WHERE created_at BETWEEN @from AND @to GROUP BY day ORDER BY day`).all(p);
+      FROM sales WHERE created_at BETWEEN @from AND @to${regSql} GROUP BY day ORDER BY day`).all(p);
     const hourly = db.prepare(`SELECT CAST(substr(created_at,12,2) AS INTEGER) AS hour, COUNT(*) AS count, SUM(total) AS total
-      FROM sales WHERE created_at BETWEEN @from AND @to GROUP BY hour ORDER BY hour`).all(p);
+      FROM sales WHERE created_at BETWEEN @from AND @to${regSql} GROUP BY hour ORDER BY hour`).all(p);
     const topProducts = db.prepare(`SELECT i.product_id, i.name, i.unit, SUM(i.qty - i.refunded_qty) AS qty, SUM(i.line_total) AS total,
         SUM(i.line_total - ROUND(i.unit_cost * i.qty)) AS profit
-      FROM sale_items i JOIN sales s ON s.id = i.sale_id WHERE s.created_at BETWEEN @from AND @to
+      FROM sale_items i JOIN sales s ON s.id = i.sale_id WHERE s.created_at BETWEEN @from AND @to${regSql.replace(/register_name/g, 's.register_name')}
       GROUP BY COALESCE(i.product_id, i.name) ORDER BY total DESC LIMIT 20`).all(p);
     const categories = db.prepare(`SELECT COALESCE(c.name, 'Kategorisiz') AS name, c.color, SUM(i.line_total) AS total
       FROM sale_items i JOIN sales s ON s.id = i.sale_id LEFT JOIN products pr ON pr.id = i.product_id
-      LEFT JOIN categories c ON c.id = pr.category_id WHERE s.created_at BETWEEN @from AND @to GROUP BY c.id ORDER BY total DESC`).all(p);
+      LEFT JOIN categories c ON c.id = pr.category_id WHERE s.created_at BETWEEN @from AND @to${regSql.replace(/register_name/g, 's.register_name')} GROUP BY c.id ORDER BY total DESC`).all(p);
     // Personel performansı: hizmeti yapan (staff_id) yoksa satışı yapan kasiyer
     const staff = db.prepare(`SELECT u.id, u.name, u.commission_rate, COUNT(DISTINCT s.id) AS sale_count,
         SUM(i.line_total) AS total, SUM(CASE WHEN i.type = 'service' THEN i.line_total ELSE 0 END) AS service_total
       FROM sale_items i JOIN sales s ON s.id = i.sale_id JOIN users u ON u.id = COALESCE(i.staff_id, s.user_id)
-      WHERE s.created_at BETWEEN @from AND @to GROUP BY u.id ORDER BY total DESC`).all(p)
+      WHERE s.created_at BETWEEN @from AND @to${regSql.replace(/register_name/g, 's.register_name')} GROUP BY u.id ORDER BY total DESC`).all(p)
       .map((s) => ({ ...s, commission: Math.round((s.service_total * s.commission_rate) / 100) }));
     const collections = db.prepare(`SELECT COALESCE(-SUM(amount),0) AS total FROM customer_transactions
       WHERE type = 'payment' AND created_at BETWEEN @from AND @to`).get(p).total;
     const newDebt = db.prepare(`SELECT COALESCE(SUM(amount),0) AS total FROM customer_transactions
       WHERE type = 'debt' AND created_at BETWEEN @from AND @to`).get(p).total;
 
-    res.json({ from, to, totals, payments, daily, hourly, top_products: topProducts, categories, staff, collections, new_debt: newDebt });
+    const registers = db.prepare(`SELECT COALESCE(register_name, 'Kasa 1') AS name, COUNT(*) AS count, SUM(total - refunded_total) AS net
+      FROM sales WHERE created_at BETWEEN @from AND @to GROUP BY name ORDER BY net DESC`).all({ from, to });
+    res.json({ from, to, register: reg || null, registers, totals, payments, daily, hourly, top_products: topProducts, categories, staff, collections, new_debt: newDebt });
   }));
 
   r.get('/reports/stock', allow(...MANAGERS), h((req, res) => {

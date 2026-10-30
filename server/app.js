@@ -30,6 +30,8 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
 
   const app = express();
   app.disable('x-powered-by');
+  // Ters vekil (Caddy/Nginx) arkasında gerçek istemci IP'si için
+  app.set('trust proxy', process.env.TRUST_PROXY || 'loopback, uniquelocal');
   app.use(express.json({ limit: '5mb', verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8'); } }));
 
   const api = express.Router();

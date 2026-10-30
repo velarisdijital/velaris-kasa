@@ -15,7 +15,8 @@ const PRESETS = [
 
 export default function Reports() {
   const [[from, to], setRange] = useState([today(), today()]);
-  const r = useLoad(() => get(`/reports/summary?from=${from}&to=${to}`), [from, to]);
+  const [register, setRegister] = useState('');
+  const r = useLoad(() => get(`/reports/summary?from=${from}&to=${to}&register=${encodeURIComponent(register)}`), [from, to, register]);
   const stock = useLoad(() => get('/reports/stock'));
   const x = r.data;
 
@@ -32,6 +33,14 @@ export default function Reports() {
         </div>
         <input type="date" className="input" style={{ width: 160 }} value={from} onChange={(e) => setRange([e.target.value, to])} aria-label="Başlangıç" />
         <input type="date" className="input" style={{ width: 160 }} value={to} onChange={(e) => setRange([from, e.target.value])} aria-label="Bitiş" />
+        {x?.registers?.length > 1 && (
+          <select className="input" style={{ width: 200 }} value={register} onChange={(e) => setRegister(e.target.value)} aria-label="Kasa / şube">
+            <option value="">Tüm kasalar</option>
+            {[...new Set(x.registers.map((g) => g.name.split(' Kasa')[0]))].filter((b) => !x.registers.some((g) => g.name === b))
+              .map((b) => <option key={`b-${b}`} value={b}>{b} (tüm kasalar)</option>)}
+            {x.registers.map((g) => <option key={g.name} value={g.name}>{g.name}</option>)}
+          </select>
+        )}
       </div>
       {x && (
         <div className="stack">
@@ -52,6 +61,10 @@ export default function Reports() {
             <div className="card card-pad stack" style={{ gap: 8 }}>
               <h3>Ödeme türleri</h3>
               <HBars data={x.payments.map((p) => ({ label: METHOD_LABELS[p.method], value: p.amount }))} />
+              {x.registers.length > 1 && !register && <>
+                <h3 style={{ marginTop: 8 }}>Kasalar / şubeler</h3>
+                <HBars data={x.registers.map((g) => ({ label: `${g.name} · ${g.count} satış`, value: g.net }))} />
+              </>}
               <h3 style={{ marginTop: 8 }}>Kategoriler</h3>
               <HBars data={x.categories.map((c) => ({ label: c.name, value: c.total, color: c.color }))} />
             </div>
