@@ -465,3 +465,62 @@ test('şube bazlı stok: kasa-şube eşlemesi, satış, transfer, iade, rapor', 
   const list = (await call('GET', '/api/branches')).body;
   assert.ok(list.registers.some((g) => g.name === 'Kadıköy Kasa 1' && g.branch_id === kad.id));
 });
+
+test('İYS: onayların otomatik yüklenmesi (sahte İYS sunucusu)', async () => {
+  const realFetch = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (!u.startsWith('https://api.sandbox.iys.org.tr/')) return realFetch(url, opts);
+    const body = JSON.parse(opts.body || '{}');
+    seen.push({ path: u.replace('https://api.sandbox.iys.org.tr', ''), body, auth: opts.headers?.Authorization });
+    const json = (o, status = 200) => new Response(JSON.stringify(o), { status });
+    if (u.endsWith('/oauth2/token')) return body.password === 'dogru' ? json({ access_token: 'iys-tok', expires_in: 7200 }) : json({ errors: [{ code: 'H102', message: 'Kullanıcı adı veya şifre hatalı' }] }, 401);
+    if (u.endsWith('/sps/654321/brands/654322/consents')) {
+      if (body.recipient === '+905009999999') return json({ errors: [{ code: 'H174', message: 'Alıcı formatı hatalı' }] }, 400);
+      if (body.recipient === 'zaten@ornek.com') return json({ errors: [{ message: 'Kayıt mevcut' }] }, 409);
+      return json({ transactionId: 'tx1', creationDate: '2026-10-30 12:00:00' });
+    }
+    return json({}, 404);
+  };
+  try {
+    // Önceki testlerdeki onaylar dışa aktarılmış sayılsın
+    await call('GET', '/api/iys/export?mark=1');
+    let r = await call('POST', '/api/iys/push');
+    assert.equal(r.status, 400); // kapalı
+
+    await call('PUT', '/api/settings', { iys_enabled: '1', iys_env: 'sandbox', iys_username: 'u', iys_password: 'yanlis', iys_code: '654321', iys_brand_code: '654322' });
+    const a = (await call('POST', '/api/customers', { name: 'İYS Bir', phone: '0532 111 00 01', sms_consent: 1 })).body;
+    const b = (await call('POST', '/api/customers', { name: 'İYS İki', phone: '0500 999 99 99', email: 'zaten@ornek.com', sms_consent: 1, email_consent: 1 })).body;
+    r = await call('POST', '/api/iys/push');
+    assert.equal(r.status, 400);
+    assert.match(r.body.error, /şifre hatalı/);
+
+    await call('PUT', '/api/settings', { iys_password: 'dogru' });
+    r = await call('POST', '/api/iys/push');
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.ok(r.body.sent >= 1);
+    assert.equal(r.body.failed, 1);
+    assert.ok(!seen.some((x) => x.path.endsWith('/consents') && x.body.recipient === '+905321112233')); // anonimleştirilmiş müşteri gönderilmez
+    const first = seen.find((x) => x.body.recipient === '+905321110001');
+    assert.deepEqual(Object.keys(first.body).sort(), ['consentDate', 'recipient', 'recipientType', 'source', 'status', 'type']);
+    assert.equal(first.body.status, 'ONAY');
+    assert.equal(first.body.source, 'HS_FIZIKSEL_ORTAM');
+    assert.equal(first.body.recipientType, 'BIREYSEL');
+    assert.match(first.body.consentDate, /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
+    assert.equal(first.auth, 'Bearer iys-tok');
+    const st = (await call('GET', '/api/iys/status')).body;
+    assert.equal(st.failed, 1);
+    assert.match(st.errors[0].iys_error, /Alıcı formatı hatalı/);
+    assert.ok((await call('GET', `/api/customers/${a.id}`)).body.iys_exported_at);
+    assert.equal((await call('GET', `/api/customers/${b.id}`)).body.iys_exported_at, null);
+
+    // Onay geri alınınca RET olarak yeniden gönderilir
+    await call('PUT', `/api/customers/${a.id}`, { sms_consent: 0 });
+    await call('POST', '/api/iys/push');
+    assert.equal(seen.filter((x) => x.body.recipient === '+905321110001').at(-1).body.status, 'RET');
+  } finally {
+    globalThis.fetch = realFetch;
+    await call('PUT', '/api/settings', { iys_enabled: '0' });
+  }
+});

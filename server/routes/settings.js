@@ -11,8 +11,8 @@ import { flushOutbox, outboxStatus, pullCustomers, sign, testConnection } from '
 import { bad, bool, h, int, notFound, num, str } from '../util.js';
 import { upsertCustomerFromCrm } from './customers.js';
 
-const SECRET_KEYS = ['license_key', 'crm_api_key', 'crm_webhook_secret', 'netgsm_password', 'iletimerkezi_hash', 'whatsapp_token', 'parasut_client_secret', 'parasut_password', 'parasut_access_token'];
-const ADMIN_ONLY_KEYS = [...SECRET_KEYS, 'crm_base_url', 'install_id', 'netgsm_usercode', 'iletimerkezi_key', 'whatsapp_phone_id', 'parasut_client_id', 'parasut_username', 'parasut_company_id'];
+const SECRET_KEYS = ['license_key', 'crm_api_key', 'crm_webhook_secret', 'netgsm_password', 'iletimerkezi_hash', 'whatsapp_token', 'parasut_client_secret', 'parasut_password', 'parasut_access_token', 'iys_password', 'iys_access_token'];
+const ADMIN_ONLY_KEYS = [...SECRET_KEYS, 'crm_base_url', 'install_id', 'netgsm_usercode', 'iletimerkezi_key', 'whatsapp_phone_id', 'parasut_client_id', 'parasut_username', 'parasut_company_id', 'iys_username', 'iys_code', 'iys_brand_code', 'iys_token_expires'];
 
 export default function settingsRoutes(db) {
   const r = Router();
@@ -38,11 +38,14 @@ export default function settingsRoutes(db) {
     const ON = { fiscal_driver: ['fiscal', (v) => v && v !== 'none'], invoice_provider: ['invoice', (v) => v && v !== 'none'],
       notify_provider: ['sms', (v) => v && v !== 'none'], loyalty_enabled: ['loyalty', (v) => String(v) === '1'],
       booking_enabled: ['booking', (v) => String(v) === '1'], reminder_enabled: ['reminders', (v) => String(v) === '1'],
-      crm_enabled: ['crm', (v) => String(v) === '1'], modules_appointments: ['appointments', (v) => String(v) === '1'] };
+      crm_enabled: ['crm', (v) => String(v) === '1'], iys_enabled: ['sms', (v) => String(v) === '1'], modules_appointments: ['appointments', (v) => String(v) === '1'] };
     const before = getSettings(db);
     for (const [k, [feat, isOn]] of Object.entries(ON)) if (k in values && isOn(values[k]) && !isOn(before[k])) requireFeature(db, feat);
     delete values.parasut_access_token;
     delete values.parasut_token_expires;
+    delete values.iys_access_token;
+    delete values.iys_token_expires;
+    if (['iys_username', 'iys_password', 'iys_env'].some((k) => k in values)) { values.iys_access_token = ''; values.iys_token_expires = ''; }
     // Paraşüt bilgileri değiştiyse eski oturum anahtarı geçersiz
     const current = getSettings(db);
     if (Object.keys(values).some((k) => k.startsWith('parasut_') && values[k] !== current[k])) {

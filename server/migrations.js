@@ -104,6 +104,8 @@ const MIGRATIONS = [
   ALTER TABLE stock_movements ADD COLUMN branch_id INTEGER NOT NULL DEFAULT 1;
   ALTER TABLE sales ADD COLUMN branch_id INTEGER NOT NULL DEFAULT 1;
   `,
+  // 5: İYS'ye otomatik yüklemede son hata
+  `ALTER TABLE customers ADD COLUMN iys_error TEXT;`,
 ];
 
 export function migrate(db) {

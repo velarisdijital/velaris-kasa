@@ -268,6 +268,47 @@ function Loyalty() {
 const NOTIFY_STATUS = { sent: ['Gönderildi', 'green'], pending: ['Bekliyor', 'yellow'], failed: ['Başarısız', 'red'], skipped: ['Atlandı', ''] };
 const NOTIFY_KIND = { reminder: 'Randevu hatırlatma', booking: 'Randevu onayı', balance: 'Borç bildirimi', marketing: 'Kampanya', test: 'Deneme' };
 
+function IysSettings() {
+  const toast = useToast();
+  const { f, set, save } = useSettingsForm(['iys_enabled', 'iys_env', 'iys_username', 'iys_password', 'iys_code', 'iys_brand_code']);
+  const status = useLoad(() => get('/iys/status'));
+  const push = async () => {
+    await save();
+    try { const r = await post('/iys/push'); toast.ok(`İYS: ${r.sent} gönderildi${r.failed ? `, ${r.failed} hata` : ''}`); status.setData(r); } catch (err) { toast.err(err); }
+  };
+  const s = status.data;
+  return (
+    <form className="card card-pad stack" onSubmit={save}>
+      <div className="row">
+        <h3 style={{ flex: 1 }}>İYS'ye otomatik bildirim</h3>
+        <label className="check"><input type="checkbox" checked={f.iys_enabled === '1'} onChange={set('iys_enabled')} /> <b>Açık</b></label>
+      </div>
+      <p className="muted small-text">Kasada ve online randevuda alınan ticari ileti onayları ile retler, 3 iş günü sınırına uyulması için birkaç dakika içinde İYS'ye gönderilir. Bilgileri İYS hesabınızdaki "Entegrasyon" bölümünden alırsınız. Önce deneme ortamında test edin.</p>
+      <div className="grid-3">
+        <Field label="Ortam">
+          <select className="input" value={f.iys_env} onChange={set('iys_env')}>
+            <option value="sandbox">Deneme (sandbox)</option>
+            <option value="live">Canlı</option>
+          </select>
+        </Field>
+        <Field label="İYS numarası"><input className="input" inputMode="numeric" value={f.iys_code} onChange={set('iys_code')} /></Field>
+        <Field label="Marka kodu"><input className="input" inputMode="numeric" value={f.iys_brand_code} onChange={set('iys_brand_code')} /></Field>
+        <Field label="API kullanıcı adı"><input className="input" value={f.iys_username} onChange={set('iys_username')} autoComplete="off" /></Field>
+        <Field label="API şifresi"><input className="input" type="password" value={f.iys_password} onChange={set('iys_password')} autoComplete="off" /></Field>
+      </div>
+      {s && (
+        <div className="row wrap small-text">
+          <span className="badge yellow">Bekleyen {s.pending}</span>
+          <span className="badge green">Gönderilen {s.sent}</span>
+          {s.failed > 0 && <span className="badge red">Hatalı {s.failed}</span>}
+          {s.errors?.map((e) => <span key={e.id} className="danger-text">{e.name}: {e.iys_error}</span>)}
+        </div>
+      )}
+      <div className="row wrap"><button className="btn primary">Kaydet</button>{f.iys_enabled === '1' && <button type="button" className="btn" onClick={push}>Şimdi gönder</button>}</div>
+    </form>
+  );
+}
+
 function Sms() {
   const toast = useToast();
   const { f, set, save } = useSettingsForm(['notify_provider', 'netgsm_usercode', 'netgsm_password', 'netgsm_header', 'iletimerkezi_key',
@@ -346,6 +387,7 @@ function Sms() {
           </>}
         </div>
       </form>
+      <IysSettings />
       <div className="card card-pad stack">
         <h3>Son mesajlar</h3>
         <div className="table-wrap" style={{ maxHeight: 320 }}>

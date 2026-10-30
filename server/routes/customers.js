@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { allow, MANAGERS } from '../auth.js';
 import { emitEvent } from '../db.js';
+import { iysEnabled, iysStatus, pushConsents } from '../iys.js';
+import { requireFeature } from '../license.js';
 import { bad, bool, h, int, notFound, phoneTR, str } from '../util.js';
 import { openShiftFor } from './shifts.js';
 
@@ -208,6 +210,14 @@ export default function customerRoutes(db) {
       db.prepare(`UPDATE customers SET iys_exported_at = datetime('now','localtime') WHERE id IN (${rows.map(() => '?').join(',')})`).run(...rows.map((r) => r.id));
     }
     res.json({ count: out.length, rows: out });
+  }));
+
+  r.get('/iys/status', allow(...MANAGERS), h((req, res) => res.json(iysStatus(db))));
+  r.post('/iys/push', allow(...MANAGERS), h(async (req, res) => {
+    requireFeature(db, 'sms');
+    if (!iysEnabled(db)) throw bad('İYS otomatik gönderimi kapalı (Ayarlar → SMS & WhatsApp → İYS)');
+    // Hata almış kayıtlar da yeniden denensin
+    try { res.json({ ...(await pushConsents(db, { limit: 500 })), ...iysStatus(db) }); } catch (e) { throw bad(e.message); }
   }));
 
   /** Veresiye tahsilatı. body: { amount (kuruş), method: cash|card|transfer, note, register_name } */

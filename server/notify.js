@@ -213,6 +213,8 @@ export function startNotifyWorker(db, log = console) {
     try {
       await runReminders(db);
       await retryPending(db);
+      const { iysEnabled, pushConsents } = await import('./iys.js');
+      if (iysEnabled(db)) await pushConsents(db).catch((e) => log.warn?.(`[iys] ${e.message}`));
     } catch (e) {
       log.warn?.(`[bildirim] ${e.message}`);
     } finally {

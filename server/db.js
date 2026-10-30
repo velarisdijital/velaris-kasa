@@ -81,6 +81,16 @@ export const DEFAULT_SETTINGS = {
 
   license_key: '',
 
+  // İYS otomatik yükleme
+  iys_enabled: '0',
+  iys_env: 'sandbox',                // sandbox | live
+  iys_username: '',
+  iys_password: '',
+  iys_code: '',                      // İYS numarası
+  iys_brand_code: '',
+  iys_access_token: '',
+  iys_token_expires: '',
+
   // Ürün bilgisi
   product_lookup: '1',               // bulunamayan barkodu Open Food Facts'te ara
 };
