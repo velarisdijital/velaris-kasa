@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { get, post, registerName } from '../api.js';
 import { useSession } from '../App.jsx';
 import { printElement } from '../components/Receipt.jsx';
-import { Field, Icon, Modal, useLoad, useToast } from '../components/ui.jsx';
+import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, METHOD_LABELS, money, plain, toKurus } from '../format.js';
 
 export default function Shift() {
@@ -114,12 +114,13 @@ function CashMoveModal({ shift, type, onClose, onDone }) {
 
 function CloseModal({ s, onClose, onDone }) {
   const toast = useToast();
+  const ask = useConfirm();
   const [counted, setCounted] = useState('');
   const [note, setNote] = useState('');
   const diff = counted === '' ? null : toKurus(counted) - s.expected_cash;
   const save = async (e) => {
     e.preventDefault();
-    if (!confirm('Gün kapatılsın mı? Bu işlem geri alınamaz.')) return;
+    if (!(await ask('Gün kapatılsın mı? Bu işlem geri alınamaz.', { ok: 'Günü kapat', danger: false }))) return;
     try { onDone(await post(`/shifts/${s.shift.id}/close`, { counted_cash: toKurus(counted), note })); toast.ok('Gün kapatıldı'); } catch (err) { toast.err(err); }
   };
   return (

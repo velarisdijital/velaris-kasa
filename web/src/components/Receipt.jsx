@@ -54,6 +54,13 @@ let root;
 export function printElement(element) {
   root ??= createRoot(document.getElementById('print-area'));
   flushSync(() => root.render(element));
+  if (import.meta.env.VITE_DEMO) {
+    // Demo ortamı yazdırma penceresi açamaz; fişi ekranda önizleme olarak göster
+    const el = document.getElementById('print-area');
+    el.classList.add('preview');
+    el.onclick = () => el.classList.remove('preview');
+    return;
+  }
   if (window.velarisDesktop?.print) window.velarisDesktop.print();
   else window.print();
 }

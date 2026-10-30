@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import logo from './assets/logo.svg';
 import { HashRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { flushQueue, get, getToken, offlineQueue, onQueueChange, post, setToken, setUnauthorizedHandler } from './api.js';
-import { Icon, ToastProvider } from './components/ui.jsx';
+import { ConfirmProvider, Icon, ToastProvider } from './components/ui.jsx';
+import DemoBar from './demo/DemoBar.jsx';
 import Appointments from './pages/Appointments.jsx';
 import Customers from './pages/Customers.jsx';
 import Login from './pages/Login.jsx';
@@ -20,9 +22,12 @@ export const isManager = (u) => u && ['admin', 'manager'].includes(u.role);
 export default function App() {
   return (
     <ToastProvider>
-      <HashRouter>
-        <Root />
-      </HashRouter>
+      <ConfirmProvider>
+        <HashRouter>
+          {import.meta.env.VITE_DEMO && <DemoBar />}
+          <Root />
+        </HashRouter>
+      </ConfirmProvider>
     </ToastProvider>
   );
 }
@@ -81,7 +86,9 @@ function Root() {
       </div>
     );
   }
-  if (!status?.setup_done) return <Setup onDone={login} />;
+  if (!status?.setup_done) {
+    return <Setup onDone={async (res) => { await login(res); setStatus(await get('/setup/status')); }} />;
+  }
   if (!user) return <Login status={status} onLogin={login} />;
 
   const appointmentsOn = settings.modules_appointments === '1';
@@ -89,7 +96,7 @@ function Root() {
     <SessionCtx.Provider value={{ user, settings, reloadSettings, logout }}>
       <div className="app">
         <nav className="sidebar">
-          <div className="logo"><img src="./icon.svg" alt="Velaris Kasa" /></div>
+          <div className="logo"><img src={logo} alt="Velaris Kasa" /></div>
           <NavItem to="/kasa" icon="pos" label="Kasa" />
           {appointmentsOn && <NavItem to="/randevu" icon="calendar" label="Randevu" />}
           <NavItem to="/urunler" icon="box" label="Stok" />

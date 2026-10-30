@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { del, get, post, put } from '../api.js';
 import { isManager, useSession } from '../App.jsx';
-import { Field, Icon, Modal, useLoad, useToast } from '../components/ui.jsx';
+import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, money, parseQty, qty, toInput, toKurus } from '../format.js';
 
 const UNITS = ['adet', 'kg', 'lt', 'm', 'paket', 'kutu'];
@@ -97,6 +97,7 @@ export default function Products() {
 
 function ProductForm({ product, categories, onClose, onSaved }) {
   const toast = useToast();
+  const ask = useConfirm();
   const { settings } = useSession();
   const p = product || {};
   const [f, setF] = useState({
@@ -120,7 +121,7 @@ function ProductForm({ product, categories, onClose, onSaved }) {
     } catch (err) { toast.err(err); }
   };
   const remove = async () => {
-    if (!confirm(`${product.name} silinsin mi? (Geçmiş satışlar korunur)`)) return;
+    if (!(await ask(`${product.name} silinsin mi? Geçmiş satışlar korunur.`, { ok: 'Sil' }))) return;
     try { await del(`/products/${product.id}`); onSaved(); } catch (err) { toast.err(err); }
   };
   const service = f.type === 'service';
@@ -220,6 +221,7 @@ function StockModal({ product, onClose, onSaved }) {
 
 function CategoryModal({ categories, onClose, reload }) {
   const toast = useToast();
+  const ask = useConfirm();
   const [name, setName] = useState('');
   const [color, setColor] = useState('#3b82f6');
   const add = async (e) => {
@@ -240,7 +242,7 @@ function CategoryModal({ categories, onClose, reload }) {
               onBlur={(e) => put(`/categories/${c.id}`, { ...c, color: e.target.value }).then(reload)} />
             <input className="input" defaultValue={c.name} onBlur={(e) => e.target.value !== c.name && put(`/categories/${c.id}`, { ...c, name: e.target.value }).then(reload)} />
             <span className="muted small-text" style={{ whiteSpace: 'nowrap' }}>{c.product_count} ürün</span>
-            <button className="btn small" onClick={() => confirm(`${c.name} silinsin mi?`) && del(`/categories/${c.id}`).then(reload)} aria-label="Sil"><Icon name="trash" /></button>
+            <button className="btn small" onClick={async () => (await ask(`${c.name} kategorisi silinsin mi?`, { ok: 'Sil' })) && del(`/categories/${c.id}`).then(reload)} aria-label="Sil"><Icon name="trash" /></button>
           </div>
         ))}
       </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { get, post } from '../api.js';
+import logo from '../assets/logo.svg';
+import { post } from '../api.js';
 import { Field, useToast } from '../components/ui.jsx';
 
 const TYPES = [
@@ -20,11 +21,7 @@ export default function Setup({ onDone }) {
     if (f.admin_pin !== f.pin2) return toast.err('PIN kodları eşleşmiyor');
     setBusy(true);
     try {
-      const res = await post('/setup', f);
-      await get('/setup/status');
-      onDone(res);
-      location.hash = '#/kasa';
-      location.reload();
+      await onDone(await post('/setup', f));
     } catch (err) {
       toast.err(err);
     } finally {
@@ -36,7 +33,7 @@ export default function Setup({ onDone }) {
     <div className="center-screen">
       <form className="card card-pad stack" style={{ width: '100%', maxWidth: 620 }} onSubmit={submit}>
         <div className="row">
-          <img src="./icon.svg" width="44" height="44" alt="" />
+          <img src={logo} width="44" height="44" alt="" />
           <div>
             <h1>Velaris Kasa'ya hoş geldiniz</h1>
             <div className="muted">İşletmenizi birkaç adımda kuralım.</div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { get, post, put } from '../api.js';
-import { Field, Modal, useLoad, useToast } from '../components/ui.jsx';
+import { Field, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { money, today } from '../format.js';
 import { CustomerPicker } from './Pos.jsx';
 
@@ -69,7 +69,7 @@ function Row({ m, cols, appts, onNew, onOpen }) {
               <div key={a.id} className={`appt ${a.status}`} onClick={(e) => { e.stopPropagation(); onOpen(a); }}
                 style={{ background: a.staff_color || 'var(--primary)', top: ((toMin(a.start_at.slice(11)) - m) / SLOT) * SLOT_H + 2, height: Math.max(22, (a.duration_min / SLOT) * SLOT_H - 4) }}>
                 <b>{a.start_at.slice(11)}</b> {a.customer_display}
-                <div style={{ opacity: 0.9 }}>{a.service_name}</div>
+                {a.duration_min >= SLOT ? <div style={{ opacity: 0.9 }}>{a.service_name}</div> : a.service_name ? <span style={{ opacity: 0.9 }}> · {a.service_name}</span> : null}
               </div>
             ))}
           </div>
@@ -81,6 +81,7 @@ function Row({ m, cols, appts, onNew, onOpen }) {
 
 function ApptModal({ init, staff, services, onClose, onSaved }) {
   const toast = useToast();
+  const ask = useConfirm();
   const navigate = useNavigate();
   const a = init.appt;
   const [f, setF] = useState({
@@ -108,7 +109,7 @@ function ApptModal({ init, staff, services, onClose, onSaved }) {
       toast.ok('Randevu kaydedildi');
       onSaved();
     } catch (err) {
-      if (err.status === 409 && confirm(`${err.message}. Yine de kaydedilsin mi?`)) return save(null, true);
+      if (err.status === 409 && await ask(`${err.message}. Yine de kaydedilsin mi?`, { ok: 'Kaydet', danger: false })) return save(null, true);
       toast.err(err);
     }
   };

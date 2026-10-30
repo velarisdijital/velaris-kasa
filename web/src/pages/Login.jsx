@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import logo from '../assets/logo.svg';
 import { post } from '../api.js';
 import { Avatar } from '../components/ui.jsx';
 import { ROLE_LABELS } from '../format.js';
@@ -46,7 +47,7 @@ export default function Login({ status, onLogin }) {
     <div className="center-screen">
       <div className="card login-card stack">
         <div className="row" style={{ justifyContent: 'center' }}>
-          <img src="./icon.svg" width="44" height="44" alt="" />
+          <img src={logo} width="44" height="44" alt="" />
           <div>
             <h1>{status.business_name}</h1>
             <div className="muted small-text">Velaris Kasa</div>

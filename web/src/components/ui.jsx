@@ -25,6 +25,31 @@ export function ToastProvider({ children }) {
   );
 }
 
+// ---------- Onay penceresi (tarayıcının confirm() kutusu yerine) ----------
+const ConfirmCtx = createContext(async () => false);
+/** const ask = useConfirm(); if (await ask('Silinsin mi?')) … */
+export const useConfirm = () => useContext(ConfirmCtx);
+
+export function ConfirmProvider({ children }) {
+  const [state, setState] = useState(null);
+  const ask = useCallback((message, { ok = 'Evet', danger = true } = {}) => new Promise((resolve) => {
+    setState({ message, ok, danger, resolve });
+  }), []);
+  const close = (v) => { state?.resolve(v); setState(null); };
+  return (
+    <ConfirmCtx.Provider value={ask}>
+      {children}
+      {state && (
+        <Modal title="Onay" onClose={() => close(false)}
+          footer={<><button className="btn" onClick={() => close(false)}>Vazgeç</button>
+            <button className={`btn ${state.danger ? 'danger' : 'primary'}`} autoFocus onClick={() => close(true)}>{state.ok}</button></>}>
+          <p style={{ margin: 0 }}>{state.message}</p>
+        </Modal>
+      )}
+    </ConfirmCtx.Provider>
+  );
+}
+
 // ---------- Modal ----------
 export function Modal({ title, onClose, children, footer, wide }) {
   useEffect(() => {

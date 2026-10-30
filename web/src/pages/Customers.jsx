@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { del, get, post, put, registerName } from '../api.js';
 import { isManager, useSession } from '../App.jsx';
-import { Field, Icon, Modal, useLoad, useToast } from '../components/ui.jsx';
+import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { d, dt, METHOD_LABELS, money, toInput, toKurus } from '../format.js';
 
 export default function Customers() {
@@ -82,6 +82,7 @@ function CustomerForm({ customer, onClose, onSaved }) {
 
 function CustomerDetail({ id, onClose, onEdit }) {
   const toast = useToast();
+  const ask = useConfirm();
   const { user } = useSession();
   const c = useLoad(() => get(`/customers/${id}`), [id]);
   const [pay, setPay] = useState(null);
@@ -89,7 +90,7 @@ function CustomerDetail({ id, onClose, onEdit }) {
   const x = c.data;
 
   const remove = async () => {
-    if (!confirm(`${x.name} silinsin mi?`)) return;
+    if (!(await ask(`${x.name} silinsin mi?`, { ok: 'Sil' }))) return;
     try { await del(`/customers/${x.id}`); onClose(); } catch (err) { toast.err(err); }
   };
 

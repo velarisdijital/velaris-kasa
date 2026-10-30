@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, del, get, post, put, registerName, setRegisterName, storage } from '../api.js';
 import { useSession } from '../App.jsx';
-import { Avatar, Field, Icon, Modal, useLoad, useToast } from '../components/ui.jsx';
+import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, ROLE_LABELS } from '../format.js';
 
 const TABS = [['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
@@ -151,6 +151,7 @@ function UserForm({ user, onClose, onSaved }) {
 
 function Crm() {
   const toast = useToast();
+  const ask = useConfirm();
   const { f, set, save } = useSettingsForm(['crm_enabled', 'crm_base_url', 'crm_api_key', 'crm_webhook_secret',
     'crm_sync_customers', 'crm_sync_sales', 'crm_sync_stock', 'crm_sync_appointments']);
   const status = useLoad(() => get('/integration/status'));
@@ -194,7 +195,7 @@ function Crm() {
           <button className="btn primary">Kaydet</button>
           <button type="button" className="btn" onClick={() => action('/integration/test', {}, 'Bağlantı başarılı ✓')}><Icon name="link" /> Bağlantıyı test et</button>
           <button type="button" className="btn" onClick={() => action('/integration/pull-customers', { full: true }, (r) => `${r.imported} müşteri alındı`)}>CRM'den müşterileri çek</button>
-          <button type="button" className="btn" onClick={() => confirm('Tüm müşteri ve ürünler CRM\'e gönderilsin mi?') && action('/integration/push-all', {}, (r) => `${r.queued} kayıt sıraya alındı`)}>Tümünü CRM'e gönder</button>
+          <button type="button" className="btn" onClick={async () => (await ask('Tüm müşteri ve ürünler CRM\'e gönderilsin mi?', { ok: 'Gönder', danger: false })) && action('/integration/push-all', {}, (r) => `${r.queued} kayıt sıraya alındı`)}>Tümünü CRM'e gönder</button>
         </div>
       </form>
 
@@ -233,7 +234,7 @@ function Crm() {
           <div key={k.id} className="row">
             <code style={{ flex: 1 }}>{k.prefix}…  <span className="muted">{k.name}</span></code>
             <span className="muted small-text">{k.last_used ? `Son kullanım ${dt(k.last_used)}` : 'Hiç kullanılmadı'}</span>
-            <button className="btn small" onClick={() => confirm('Anahtar iptal edilsin mi?') && del(`/api-keys/${k.id}`).then(keys.reload)}>İptal et</button>
+            <button className="btn small" onClick={async () => (await ask('Anahtar iptal edilsin mi? CRM bu anahtarla artık bağlanamaz.', { ok: 'İptal et' })) && del(`/api-keys/${k.id}`).then(keys.reload)}>İptal et</button>
           </div>
         ))}
       </div>

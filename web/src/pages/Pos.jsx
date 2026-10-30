@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { get, loadProducts, post, registerName, storage, submitSale, uuid } from '../api.js';
 import { useSession } from '../App.jsx';
 import { printReceipt } from '../components/Receipt.jsx';
-import { Field, Icon, Modal, useToast } from '../components/ui.jsx';
+import { Field, Icon, Modal, useConfirm, useToast } from '../components/ui.jsx';
 import { METHOD_LABELS, money, nowSql, parseQty, plain, qty as fmtQty, toInput, toKurus } from '../format.js';
 
 const lineTotal = (l) => Math.round(l.qty * l.unit_price) - (l.discount || 0);
@@ -12,6 +12,7 @@ const HELD_KEY = 'vk_held_carts';
 export default function Pos() {
   const { user, settings } = useSession();
   const toast = useToast();
+  const ask = useConfirm();
   const location = useLocation();
   const navigate = useNavigate();
   const register = registerName();
@@ -296,7 +297,7 @@ export default function Pos() {
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <button className="btn small ghost" disabled={!cart.length} onClick={() => setModal({ type: 'discount' })}>İndirim <span className="kbd">F9</span></button>
             <button className="btn small ghost" disabled={!cart.length} onClick={() => setModal({ type: 'split' })}>Parçalı <span className="kbd">F6</span></button>
-            <button className="btn small ghost danger-text" disabled={!cart.length} onClick={() => { if (confirm('Sepet temizlensin mi?')) clearCart(); }}>Temizle</button>
+            <button className="btn small ghost danger-text" disabled={!cart.length} onClick={async () => { if (await ask('Sepet temizlensin mi?', { ok: 'Temizle' })) clearCart(); }}>Temizle</button>
           </div>
           <div className="total"><span>TOPLAM</span><span>{money(total)}</span></div>
         </div>
