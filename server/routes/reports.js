@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { allow, MANAGERS } from '../auth.js';
-import { dateRange, h } from '../util.js';
+import { dateRange, h, int } from '../util.js';
 
 export default function reportRoutes(db) {
   const r = Router();
@@ -61,11 +61,17 @@ export default function reportRoutes(db) {
   }));
 
   r.get('/reports/stock', allow(...MANAGERS), h((req, res) => {
+    // ?branch_id= ile o şubenin stoğu; yoksa tüm şubelerin toplamı
+    const bid = req.query.branch_id ? int(req.query.branch_id) : null;
+    const src = bid
+      ? `(SELECT p.id, p.name, p.unit, p.barcode, p.buy_price, p.sell_price, p.min_stock, p.active, p.track_stock, COALESCE(bs.stock, 0) AS stock
+          FROM products p LEFT JOIN branch_stock bs ON bs.product_id = p.id AND bs.branch_id = ${bid})`
+      : 'products';
     const value = db.prepare(`SELECT COUNT(*) AS product_count, COALESCE(SUM(stock * buy_price),0) AS cost_value,
-      COALESCE(SUM(stock * sell_price),0) AS sale_value FROM products WHERE active = 1 AND track_stock = 1 AND stock > 0`).get();
-    const low = db.prepare(`SELECT id, name, stock, min_stock, unit, barcode FROM products
+      COALESCE(SUM(stock * sell_price),0) AS sale_value FROM ${src} WHERE active = 1 AND track_stock = 1 AND stock > 0`).get();
+    const low = db.prepare(`SELECT id, name, stock, min_stock, unit, barcode FROM ${src}
       WHERE active = 1 AND track_stock = 1 AND min_stock > 0 AND stock <= min_stock ORDER BY stock - min_stock`).all();
-    const negative = db.prepare('SELECT id, name, stock, unit FROM products WHERE active = 1 AND track_stock = 1 AND stock < 0').all();
+    const negative = db.prepare(`SELECT id, name, stock, unit FROM ${src} WHERE active = 1 AND track_stock = 1 AND stock < 0`).all();
     res.json({ value: { ...value, cost_value: Math.round(value.cost_value), sale_value: Math.round(value.sale_value) }, low, negative });
   }));
 

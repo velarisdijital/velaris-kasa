@@ -10,6 +10,7 @@ import { startNotifyWorker } from './notify.js';
 import appointmentRoutes from './routes/appointments.js';
 import { publicRoutes, sessionRoutes } from './routes/auth.js';
 import bookingRoutes from './routes/booking.js';
+import branchRoutes from './routes/branches.js';
 import customerRoutes from './routes/customers.js';
 import notifyRoutes from './routes/notify.js';
 import productRoutes from './routes/products.js';
@@ -42,6 +43,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
   api.use(authenticate(db));
   api.use(sessionRoutes(db));
   api.use(productRoutes(db));
+  api.use(branchRoutes(db));
   api.use(customerRoutes(db));
   api.use(shiftRoutes(db));
   api.use(saleRoutes(db));

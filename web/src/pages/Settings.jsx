@@ -4,7 +4,7 @@ import { useCan, useSession } from '../App.jsx';
 import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { d, dt, ROLE_LABELS } from '../format.js';
 
-const TABS = [['plan', 'Paket'], ['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['sms', 'SMS & WhatsApp'], ['booking', 'Online randevu'], ['invoice', 'e-Fatura'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
+const TABS = [['plan', 'Paket'], ['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['branches', 'Şubeler'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['sms', 'SMS & WhatsApp'], ['booking', 'Online randevu'], ['invoice', 'e-Fatura'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
 
 export default function Settings() {
   const [tab, setTab] = useState(() => (location.hash.includes('sekme=paket') ? 'plan' : 'business'));
@@ -19,6 +19,7 @@ export default function Settings() {
         {tab === 'business' && <Business />}
         {tab === 'device' && <Device />}
         {tab === 'users' && <Users />}
+        {tab === 'branches' && <Locked feature="branches"><Branches /></Locked>}
         {tab === 'fiscal' && <Locked feature="fiscal"><Fiscal /></Locked>}
         {tab === 'loyalty' && <Locked feature="loyalty"><Loyalty /></Locked>}
         {tab === 'sms' && <Locked feature="sms"><Sms /></Locked>}
@@ -145,6 +146,64 @@ function Business() {
       <label className="check"><input type="checkbox" checked={f.modules_appointments === '1'} onChange={set('modules_appointments')} /> Randevu modülünü aç (berber, kuaför, güzellik vb.)</label>
       <div><button className="btn primary">Kaydet</button></div>
     </form>
+  );
+}
+
+function Branches() {
+  const toast = useToast();
+  const data = useLoad(() => get('/branches'));
+  const [name, setName] = useState('');
+  const branches = data.data?.branches || [];
+  const active = branches.filter((b) => b.active);
+  const add = async (e) => {
+    e.preventDefault();
+    try { await post('/branches', { name }); setName(''); data.reload(); toast.ok('Şube eklendi'); } catch (err) { toast.err(err); }
+  };
+  const update = async (b, patch) => {
+    try { await put(`/branches/${b.id}`, { ...b, ...patch }); data.reload(); } catch (err) { toast.err(err); }
+  };
+  const assign = async (reg, branchId) => {
+    try { await put(`/registers/${encodeURIComponent(reg)}`, { branch_id: Number(branchId) }); data.reload(); toast.ok(`${reg} bağlandı`); } catch (err) { toast.err(err); }
+  };
+  return (
+    <div className="stack">
+      <div className="card card-pad stack">
+        <h2>Şubeler</h2>
+        <p className="muted">Her şubenin stoğu ayrı tutulur. Kasalar bağlı oldukları şubenin stoğundan satar; ürün listesindeki toplam stok bütün şubelerin toplamıdır. Şubeler arası ürün göndermek için Stok → ürün → Stok → Transfer.</p>
+        <form className="row" onSubmit={add}>
+          <input className="input" required placeholder="Yeni şube adı (ör. Kadıköy)" value={name} onChange={(e) => setName(e.target.value)} />
+          <button className="btn primary">Ekle</button>
+        </form>
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Şube</th><th className="right">Kasa</th><th className="right">Stok değeri (maliyet)</th><th>Durum</th></tr></thead>
+            <tbody>
+              {branches.map((b) => (
+                <tr key={b.id}>
+                  <td><input className="input" defaultValue={b.name} onBlur={(e) => e.target.value !== b.name && update(b, { name: e.target.value })} aria-label="Şube adı" /></td>
+                  <td className="right num">{b.register_count}</td>
+                  <td className="right num">{(b.stock_cost_value / 100).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}</td>
+                  <td>{b.id === 1 ? <span className="badge">Merkez</span> : <button className="btn small" onClick={() => update(b, { active: b.active ? 0 : 1 })}>{b.active ? 'Kapat' : 'Aç'}</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="card card-pad stack">
+        <h3>Kasalar</h3>
+        <p className="muted small-text">Kasa adları cihazlarda Ayarlar → Bu cihaz'dan verilir; ilk satışta burada görünür. Şubeli işletmelerde "Şube Kasa N" biçimi önerilir.</p>
+        {(data.data?.registers || []).map((g) => (
+          <div key={g.name} className="row">
+            <strong style={{ flex: 1 }}>{g.name}</strong>
+            <select className="input" style={{ maxWidth: 220 }} value={g.branch_id} onChange={(e) => assign(g.name, e.target.value)} aria-label={`${g.name} şubesi`}>
+              {active.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+        ))}
+        {!data.data?.registers?.length && <div className="muted">Henüz kasa yok.</div>}
+      </div>
+    </div>
   );
 }
 

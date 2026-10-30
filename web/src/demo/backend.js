@@ -28,11 +28,11 @@ async function boot(bytes) {
   globalThis.__VK_DEMO__ = true; // demoda tüm paket özellikleri açık
   const SQL = await initSqlJs();
   useSqlJs(SQL, bytes);
-  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR] = await Promise.all([
+  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR] = await Promise.all([
     import('../../../server/db.js'), import('../../../server/auth.js'), import('../../../server/routes/auth.js'),
     import('../../../server/routes/products.js'), import('../../../server/routes/customers.js'), import('../../../server/routes/shifts.js'),
     import('../../../server/routes/sales.js'), import('../../../server/routes/appointments.js'), import('../../../server/routes/reports.js'),
-    import('../../../server/routes/settings.js'), import('../../../server/routes/notify.js'), import('../../../server/routes/booking.js'),
+    import('../../../server/routes/settings.js'), import('../../../server/routes/notify.js'), import('../../../server/routes/booking.js'), import('../../../server/routes/branches.js'),
   ]);
   db = openDatabase('/demo');
   if (!getSetting(db, 'install_id')) setSettings(db, { install_id: crypto.randomUUID() });
@@ -44,7 +44,7 @@ async function boot(bytes) {
   api.use(bookingR.default(db));
   api.use(authenticate(db));
   api.use(authR.sessionRoutes(db));
-  for (const m of [productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));
+  for (const m of [productR, branchR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));
   handler = api;
 }
 
@@ -222,6 +222,13 @@ async function seedData(type) {
     const milk = products.find((p) => p.name.startsWith('Süt'));
     if (milk) await call('POST', `/products/${milk.id}/stock`, { type: 'in', qty: 24, unit_cost: 2600, note: 'Pınar - İrsaliye 4512' }, T);
     await call('POST', `/shifts/${(await call('GET', '/shifts/current?register=Kasa%201', null, T)).shift.id}/cash`, { type: 'out', amount: 15000, note: 'Ekmek fırınına ödeme' }, T);
+    // İkinci şube: Moda (Pro paket özelliği) — birkaç ürün transfer edilir
+    const moda = await call('POST', '/branches', { name: 'Moda' }, T);
+    await call('PUT', `/registers/${encodeURIComponent('Moda Kasa 1')}`, { branch_id: moda.id }, T);
+    for (const name of ['Süt 1 L', 'Su 0.5 L', 'Çikolatalı Gofret', 'Sigara']) {
+      const prod = products.find((x) => x.name === name);
+      if (prod) await call('POST', '/stock/transfer', { product_id: prod.id, from_branch_id: 1, to_branch_id: moda.id, qty: 4 + Math.floor(rnd() * 6), note: 'Haftalık sevk' }, T).catch(() => {});
+    }
   } else {
     const day = today.toLocaleDateString('sv-SE');
     const slots = ['10:00', '11:00', '13:30', '15:00', '16:30', '18:00'];

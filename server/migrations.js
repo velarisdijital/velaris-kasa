@@ -75,6 +75,35 @@ const MIGRATIONS = [
   `,
   // 3: e-belge sağlayıcısındaki iş/belge kimliği
   `ALTER TABLE sales ADD COLUMN invoice_ref TEXT;`,
+  // 4: şubeler ve şube bazlı stok. products.stock tüm şubelerin toplamıdır.
+  `
+  CREATE TABLE branches (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    address    TEXT,
+    active     INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  INSERT INTO branches (id, name) VALUES (1, 'Merkez');
+
+  CREATE TABLE registers (
+    name      TEXT PRIMARY KEY,
+    branch_id INTEGER NOT NULL DEFAULT 1 REFERENCES branches(id)
+  );
+  INSERT OR IGNORE INTO registers (name) SELECT DISTINCT register_name FROM sales WHERE register_name IS NOT NULL;
+  INSERT OR IGNORE INTO registers (name) SELECT DISTINCT register_name FROM shifts;
+
+  CREATE TABLE branch_stock (
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    branch_id  INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+    stock      REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (product_id, branch_id)
+  );
+  INSERT INTO branch_stock (product_id, branch_id, stock) SELECT id, 1, stock FROM products WHERE stock != 0;
+
+  ALTER TABLE stock_movements ADD COLUMN branch_id INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE sales ADD COLUMN branch_id INTEGER NOT NULL DEFAULT 1;
+  `,
 ];
 
 export function migrate(db) {

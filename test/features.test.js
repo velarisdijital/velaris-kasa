@@ -413,3 +413,55 @@ test('rapor: kasa / şube kırılımı ve filtre', async () => {
   const one = (await call('GET', `/api/reports/summary?register=${encodeURIComponent('Kadıköy Kasa 2')}`)).body;
   assert.equal(one.totals.count, 1);
 });
+
+test('şube bazlı stok: kasa-şube eşlemesi, satış, transfer, iade, rapor', async () => {
+  const p = (await call('POST', '/api/products', { name: 'Çay 1 kg', barcode: '8690000999001', sell_price: 20000, buy_price: 15000, vat_rate: 1, stock: 50, min_stock: 5 })).body;
+  // İlk stok Merkez'e
+  let br = (await call('GET', `/api/products/${p.id}/branches`)).body;
+  assert.deepEqual(br.map((b) => [b.name, b.stock]), [['Merkez', 50]]);
+
+  const kad = (await call('POST', '/api/branches', { name: 'Kadıköy' })).body;
+  assert.ok(kad.id > 1);
+  await call('PUT', `/api/registers/${encodeURIComponent('Kadıköy Kasa 1')}`, { branch_id: kad.id });
+
+  // Transfer Merkez → Kadıköy
+  let r = await call('POST', '/api/stock/transfer', { product_id: p.id, from_branch_id: 1, to_branch_id: kad.id, qty: 12 });
+  assert.deepEqual(r.body.map((b) => [b.name, b.stock]), [['Merkez', 38], ['Kadıköy', 12]]);
+  r = await call('POST', '/api/stock/transfer', { product_id: p.id, from_branch_id: 1, to_branch_id: 1, qty: 1 });
+  assert.equal(r.status, 400);
+
+  // Kadıköy kasasından satış Kadıköy stoğundan düşer, toplam stok da düşer
+  await call('POST', '/api/shifts/open', { register_name: 'Kadıköy Kasa 1' });
+  const sale = (await call('POST', '/api/sales', { register_name: 'Kadıköy Kasa 1', items: [{ product_id: p.id, qty: 2 }], payments: [{ method: 'cash', amount: 40000 }] })).body;
+  assert.equal(sale.branch_id, kad.id);
+  br = (await call('GET', `/api/products/${p.id}/branches`)).body;
+  assert.deepEqual(br.map((b) => b.stock), [38, 10]);
+  assert.equal((await call('GET', `/api/products/${p.id}`)).body.stock, 48);
+
+  // Kasa görünümünde stok = şube stoğu
+  const pos = (await call('GET', `/api/products?register=${encodeURIComponent('Kadıköy Kasa 1')}&q=${encodeURIComponent('Çay 1')}`)).body[0];
+  assert.equal(pos.stock, 10);
+  assert.equal(pos.total_stock, 48);
+
+  // İade satışın şubesine geri girer
+  await call('POST', `/api/sales/${sale.id}/refund`, { method: 'cash', register_name: 'Kadıköy Kasa 1' });
+  br = (await call('GET', `/api/products/${p.id}/branches`)).body;
+  assert.deepEqual(br.map((b) => b.stock), [38, 12]);
+
+  // Şubeye göre sayım ve hareket kaydı
+  await call('POST', `/api/products/${p.id}/stock`, { type: 'count', qty: 9, branch_id: kad.id, note: 'Sayım' });
+  const mv = (await call('GET', `/api/stock-movements?product_id=${p.id}&branch_id=${kad.id}`)).body;
+  assert.equal(mv[0].branch_name, 'Kadıköy');
+  assert.equal(mv[0].stock_after, 9);
+  assert.equal((await call('GET', `/api/products/${p.id}`)).body.stock, 47);
+
+  // Şube stok raporu
+  const rep = (await call('GET', `/api/reports/stock?branch_id=${kad.id}`)).body;
+  assert.equal(rep.value.cost_value, 9 * 15000);
+
+  // Stoklu şube kapatılamaz
+  r = await call('PUT', `/api/branches/${kad.id}`, { active: 0 });
+  assert.equal(r.status, 400);
+  const list = (await call('GET', '/api/branches')).body;
+  assert.ok(list.registers.some((g) => g.name === 'Kadıköy Kasa 1' && g.branch_id === kad.id));
+});

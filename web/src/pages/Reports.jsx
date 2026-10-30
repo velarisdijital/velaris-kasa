@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { get } from '../api.js';
+import { useCan } from '../App.jsx';
 import { useLoad } from '../components/ui.jsx';
 import { METHOD_LABELS, money, qty, today } from '../format.js';
 
@@ -17,7 +18,10 @@ export default function Reports() {
   const [[from, to], setRange] = useState([today(), today()]);
   const [register, setRegister] = useState('');
   const r = useLoad(() => get(`/reports/summary?from=${from}&to=${to}&register=${encodeURIComponent(register)}`), [from, to, register]);
-  const stock = useLoad(() => get('/reports/stock'));
+  const can = useCan();
+  const [stockBranch, setStockBranch] = useState('');
+  const branchList = useLoad(() => (can('branches') ? get('/branches').then((b) => b.branches.filter((x) => x.active)) : Promise.resolve([])), []);
+  const stock = useLoad(() => get(`/reports/stock${stockBranch ? `?branch_id=${stockBranch}` : ''}`), [stockBranch]);
   const x = r.data;
 
   return (
@@ -91,7 +95,15 @@ export default function Reports() {
 
       {stock.data && (
         <div className="stack" style={{ marginTop: 24 }}>
-          <h2>Stok durumu</h2>
+          <div className="row wrap">
+            <h2 style={{ flex: 1 }}>Stok durumu</h2>
+            {(branchList.data || []).length > 1 && (
+              <select className="input" style={{ width: 220 }} value={stockBranch} onChange={(e) => setStockBranch(e.target.value)} aria-label="Şube">
+                <option value="">Tüm şubeler</option>
+                {branchList.data.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            )}
+          </div>
           <div className="stats">
             <Stat label="Stok değeri (maliyet)" value={money(stock.data.value.cost_value)} sub={`${stock.data.value.product_count} ürün`} />
             <Stat label="Stok değeri (satış)" value={money(stock.data.value.sale_value)} />

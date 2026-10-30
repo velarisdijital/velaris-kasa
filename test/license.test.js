@@ -121,3 +121,11 @@ test('süresi biten lisans: 7 gün ek süre, sonra Ücretsiz paket', async () =>
   r = await call('DELETE', '/api/license');
   assert.equal(r.body.plan, 'free');
 });
+
+test('şube özelliği yalnızca Pro paketinde', async () => {
+  let r = await call('POST', '/api/branches', { name: 'Beşiktaş' });
+  assert.equal(r.status, 402);
+  assert.equal(r.body.required_plan, 'pro');
+  r = await call('POST', '/api/stock/transfer', { product_id: 1, from_branch_id: 1, to_branch_id: 2, qty: 1 });
+  assert.equal(r.status, 402);
+});

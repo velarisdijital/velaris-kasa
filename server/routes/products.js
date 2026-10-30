@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { allow, MANAGERS } from '../auth.js';
 import { emitEvent, getSetting } from '../db.js';
-import { changeStock } from '../stock.js';
+import { hasFeature, requireFeature } from '../license.js';
+import { branchForRegister, branchStock, changeStock } from '../stock.js';
 import { bad, bool, h, int, notFound, num, str } from '../util.js';
 
 const PRODUCT_SELECT = `
@@ -44,8 +45,22 @@ export function parseScaleBarcode(code, prefixes) {
   return { candidates: [code.slice(0, 7), plu, String(parseInt(plu, 10))], qty: grams / 1000 };
 }
 
+/** İstekteki şube: branch_id ya da kasa adından. Şube özelliği yoksa her zaman Merkez (1). */
+export function resolveBranch(db, req) {
+  if (!hasFeature(db, 'branches')) return 1;
+  const raw = req.body?.branch_id ?? req.query?.branch_id;
+  if (raw) {
+    const b = db.prepare('SELECT id FROM branches WHERE id = ? AND active = 1').get(int(raw));
+    if (!b) throw bad('Şube bulunamadı');
+    return b.id;
+  }
+  const reg = req.body?.register_name ?? req.query?.register;
+  return reg ? branchForRegister(db, reg) : 1;
+}
+
 export default function productRoutes(db) {
   const r = Router();
+  const multiBranch = () => hasFeature(db, 'branches') && db.prepare('SELECT COUNT(*) AS n FROM branches WHERE active = 1').get().n > 1;
   const getProduct = (id) => db.prepare(`${PRODUCT_SELECT} WHERE p.id = ?`).get(id);
 
   // ---- Kategoriler ----
@@ -83,12 +98,22 @@ export default function productRoutes(db) {
     }
     if (req.query.category_id) { where.push('p.category_id = @cat'); params.cat = int(req.query.category_id); }
     if (req.query.type) { where.push('p.type = @type'); params.type = req.query.type; }
-    if (req.query.low === '1') where.push('p.track_stock = 1 AND p.stock <= p.min_stock');
+    // Şube görünümü: ?branch_id= ya da kasadan ?register= → stok o şubenin stoğu olur, toplam total_stock'ta kalır
+    const branchView = multiBranch() && (req.query.branch_id || req.query.register);
+    const bid = branchView ? resolveBranch(db, req) : null;
+    if (branchView) params.bid = bid;
+    const stockExpr = branchView ? 'COALESCE(bs.stock, 0)' : 'p.stock';
+    if (req.query.low === '1') where.push(`p.track_stock = 1 AND ${stockExpr} <= p.min_stock`);
     if (req.query.favorite === '1') where.push('p.favorite = 1');
     if (req.query.updated_since) { where.push('p.updated_at >= @since'); params.since = req.query.updated_since; }
-    const sql = `${PRODUCT_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY p.name LIMIT @limit`;
+    const select = branchView
+      ? PRODUCT_SELECT.replace('FROM products p', 'FROM products p LEFT JOIN branch_stock bs ON bs.product_id = p.id AND bs.branch_id = @bid')
+        .replace('SELECT p.*,', 'SELECT p.*, p.stock AS total_stock, COALESCE(bs.stock, 0) AS branch_stock, @bid AS branch_id,')
+      : PRODUCT_SELECT;
+    const sql = `${select} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY p.name LIMIT @limit`;
     params.limit = Math.min(int(req.query.limit, 5000) || 5000, 5000);
-    res.json(db.prepare(sql).all(params));
+    const rows = db.prepare(sql).all(params);
+    res.json(branchView ? rows.map((x) => ({ ...x, stock: x.branch_stock })) : rows);
   }));
 
   r.get('/products/barcode/:code', h((req, res) => {
@@ -149,7 +174,7 @@ export default function productRoutes(db) {
           stock, min_stock, track_stock, duration_min, favorite, active, crm_id)
         VALUES (@name, @barcode, @sku, @category_id, @type, @unit, @buy_price, @sell_price, @vat_rate,
           0, @min_stock, @track_stock, @duration_min, @favorite, @active, @crm_id)`).run(p).lastInsertRowid;
-      if (initial) changeStock(db, id, initial, 'in', { unitCost: p.buy_price, note: 'Açılış stoku', userId: req.user.id });
+      if (initial) changeStock(db, id, initial, 'in', { unitCost: p.buy_price, note: 'Açılış stoku', userId: req.user.id, branchId: resolveBranch(db, req) });
       emitEvent(db, 'product.upserted', getProduct(id));
       return id;
     })();
@@ -187,16 +212,45 @@ export default function productRoutes(db) {
     if (!Number.isFinite(qty)) throw bad('Miktar gerekli');
     if (type !== 'count' && type !== 'adjust' && qty <= 0) throw bad('Miktar sıfırdan büyük olmalı');
     const unitCost = req.body.unit_cost != null && req.body.unit_cost !== '' ? int(req.body.unit_cost) : null;
+    const branchId = resolveBranch(db, req);
 
     db.transaction(() => {
       const delta = type === 'out' ? -qty : qty;
-      changeStock(db, p.id, delta, type, { unitCost, note: str(req.body.note), userId: req.user.id, absolute: type === 'count' });
+      changeStock(db, p.id, delta, type, { unitCost, note: str(req.body.note), userId: req.user.id, absolute: type === 'count', branchId });
       // Alışta yeni maliyet geldiyse ürün alış fiyatını güncelle
       if (type === 'in' && unitCost != null && unitCost > 0) {
         db.prepare('UPDATE products SET buy_price = ? WHERE id = ?').run(unitCost, p.id);
       }
     })();
-    res.json(getProduct(p.id));
+    res.json({ ...getProduct(p.id), branch_id: branchId, branch_stock: branchStock(db, p.id, branchId) });
+  }));
+
+  /** Şube stokları (ürün detayı için). */
+  r.get('/products/:id/branches', h((req, res) => {
+    res.json(db.prepare(`SELECT b.id, b.name, COALESCE(bs.stock, 0) AS stock FROM branches b
+      LEFT JOIN branch_stock bs ON bs.branch_id = b.id AND bs.product_id = ? WHERE b.active = 1 ORDER BY b.id`).all(req.params.id));
+  }));
+
+  /** Şubeler arası transfer. body: { product_id, from_branch_id, to_branch_id, qty, note } */
+  r.post('/stock/transfer', allow(...MANAGERS), h((req, res) => {
+    requireFeature(db, 'branches');
+    const p = db.prepare('SELECT * FROM products WHERE id = ?').get(int(req.body.product_id));
+    if (!p) throw notFound('Ürün bulunamadı');
+    if (p.type === 'service' || !p.track_stock) throw bad('Bu ürün için stok takibi kapalı');
+    const from = db.prepare('SELECT * FROM branches WHERE id = ? AND active = 1').get(int(req.body.from_branch_id));
+    const to = db.prepare('SELECT * FROM branches WHERE id = ? AND active = 1').get(int(req.body.to_branch_id));
+    if (!from || !to) throw bad('Şube bulunamadı');
+    if (from.id === to.id) throw bad('Çıkış ve giriş şubesi aynı olamaz');
+    const qty = num(req.body.qty);
+    if (!(qty > 0)) throw bad('Miktar sıfırdan büyük olmalı');
+    if (getSetting(db, 'allow_negative_stock') !== '1' && branchStock(db, p.id, from.id) < qty) throw bad(`${from.name} şubesinde yeterli stok yok`);
+    const note = str(req.body.note);
+    db.transaction(() => {
+      changeStock(db, p.id, -qty, 'out', { userId: req.user.id, branchId: from.id, note: `Transfer → ${to.name}${note ? ` · ${note}` : ''}` });
+      changeStock(db, p.id, qty, 'in', { userId: req.user.id, branchId: to.id, note: `Transfer ← ${from.name}${note ? ` · ${note}` : ''}`, unitCost: p.buy_price });
+    })();
+    res.json(db.prepare(`SELECT b.id, b.name, COALESCE(bs.stock, 0) AS stock FROM branches b
+      LEFT JOIN branch_stock bs ON bs.branch_id = b.id AND bs.product_id = ? WHERE b.active = 1 ORDER BY b.id`).all(p.id));
   }));
 
   r.get('/stock-movements', h((req, res) => {
@@ -204,8 +258,10 @@ export default function productRoutes(db) {
     const params = { limit: Math.min(int(req.query.limit, 200) || 200, 2000) };
     if (req.query.product_id) { where.push('m.product_id = @pid'); params.pid = int(req.query.product_id); }
     if (req.query.type) { where.push('m.type = @type'); params.type = req.query.type; }
-    res.json(db.prepare(`SELECT m.*, p.name AS product_name, p.unit, u.name AS user_name
+    if (req.query.branch_id) { where.push('m.branch_id = @bid'); params.bid = int(req.query.branch_id); }
+    res.json(db.prepare(`SELECT m.*, p.name AS product_name, p.unit, u.name AS user_name, b.name AS branch_name
       FROM stock_movements m JOIN products p ON p.id = m.product_id LEFT JOIN users u ON u.id = m.user_id
+      LEFT JOIN branches b ON b.id = m.branch_id
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY m.id DESC LIMIT @limit`).all(params));
   }));
 
@@ -214,6 +270,7 @@ export default function productRoutes(db) {
    * rows: [{ name, barcode, category, buy_price, sell_price, vat_rate, stock, min_stock, unit }]
    */
   r.post('/products/import', allow(...MANAGERS), h((req, res) => {
+    const branchId = resolveBranch(db, req);
     const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
     if (!rows.length) throw bad('İçe aktarılacak satır yok');
     let created = 0, updated = 0;
@@ -234,8 +291,8 @@ export default function productRoutes(db) {
             db.prepare(`UPDATE products SET name=@name, category_id=@category_id, unit=@unit, buy_price=@buy_price,
               sell_price=@sell_price, vat_rate=@vat_rate, min_stock=@min_stock, active=1, updated_at=datetime('now','localtime')
               WHERE id=@id`).run({ ...p, id: existing.id });
-            if (row.stock !== undefined && row.stock !== '' && num(row.stock) !== existing.stock) {
-              changeStock(db, existing.id, num(row.stock), 'count', { note: 'İçe aktarma', userId: req.user.id, absolute: true });
+            if (row.stock !== undefined && row.stock !== '' && num(row.stock) !== branchStock(db, existing.id, branchId)) {
+              changeStock(db, existing.id, num(row.stock), 'count', { note: 'İçe aktarma', userId: req.user.id, absolute: true, branchId });
             }
             updated++;
           } else {
@@ -243,7 +300,7 @@ export default function productRoutes(db) {
                 stock, min_stock, track_stock, duration_min, favorite, active)
               VALUES (@name, @barcode, @sku, @category_id, @type, @unit, @buy_price, @sell_price, @vat_rate,
                 0, @min_stock, @track_stock, @duration_min, @favorite, 1)`).run(p).lastInsertRowid;
-            if (p.stock) changeStock(db, id, p.stock, 'in', { note: 'İçe aktarma', userId: req.user.id });
+            if (p.stock) changeStock(db, id, p.stock, 'in', { note: 'İçe aktarma', userId: req.user.id, branchId });
             created++;
           }
         } catch (e) {

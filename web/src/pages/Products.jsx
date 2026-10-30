@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { del, get, post, put } from '../api.js';
-import { isManager, useSession } from '../App.jsx';
+import { isManager, useCan, useSession } from '../App.jsx';
 import CameraScanner, { cameraSupported } from '../components/CameraScanner.jsx';
 import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, money, parseQty, qty, toInput, toKurus } from '../format.js';
@@ -15,7 +15,11 @@ export default function Products() {
   const [filter, setFilter] = useState('all');
   const [cat, setCat] = useState('');
   const [modal, setModal] = useState(null);
-  const products = useLoad(() => get('/products'));
+  const can = useCan();
+  const [branch, setBranch] = useState('');
+  const branches = useLoad(() => (can('branches') ? get('/branches').then((b) => b.branches.filter((x) => x.active)) : Promise.resolve([])), []);
+  const multi = (branches.data || []).length > 1;
+  const products = useLoad(() => get(`/products${branch ? `?branch_id=${branch}` : ''}`), [branch]);
   const categories = useLoad(() => get('/categories'));
   const manager = isManager(user);
 
@@ -54,6 +58,12 @@ export default function Products() {
       </div>
       <div className="row wrap" style={{ marginBottom: 12 }}>
         <input className="input" style={{ maxWidth: 320 }} placeholder="Ürün adı veya barkod…" value={q} onChange={(e) => setQ(e.target.value)} />
+        {multi && (
+          <select className="input" style={{ maxWidth: 220 }} value={branch} onChange={(e) => setBranch(e.target.value)} aria-label="Şube">
+            <option value="">Tüm şubeler (toplam stok)</option>
+            {branches.data.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        )}
         <select className="input" style={{ maxWidth: 200 }} value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="">Tüm kategoriler</option>
           {(categories.data || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -89,7 +99,7 @@ export default function Products() {
       </div>
 
       {modal?.type === 'edit' && <ProductForm product={modal.product} categories={categories.data || []} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}
-      {modal?.type === 'stock' && <StockModal product={modal.product} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); toast.ok('Stok güncellendi'); }} />}
+      {modal?.type === 'stock' && <StockModal product={modal.product} branches={multi ? branches.data : null} defaultBranch={branch} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); toast.ok('Stok güncellendi'); }} />}
       {modal?.type === 'categories' && <CategoryModal categories={categories.data || []} onClose={() => { setModal(null); reload(); }} reload={categories.reload} />}
       {modal?.type === 'import' && <ImportModal onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
     </div>
@@ -191,7 +201,10 @@ function ProductForm({ product, categories, onClose, onSaved }) {
   );
 }
 
-function StockModal({ product, onClose, onSaved }) {
+function StockModal({ product, branches, defaultBranch, onClose, onSaved }) {
+  const [branchId, setBranchId] = useState(String(defaultBranch || branches?.[0]?.id || 1));
+  const perBranch = useLoad(() => (branches ? get(`/products/${product.id}/branches`) : Promise.resolve(null)), [product.id]);
+  const [tr, setTr] = useState({ to: '', qty: '' });
   const toast = useToast();
   const [type, setType] = useState('in');
   const [f, setF] = useState({ qty: '', unit_cost: toInput(product.buy_price), note: '' });
@@ -199,15 +212,45 @@ function StockModal({ product, onClose, onSaved }) {
   const save = async (e) => {
     e.preventDefault();
     try {
-      await post(`/products/${product.id}/stock`, { type, qty: parseQty(f.qty), unit_cost: type === 'in' ? toKurus(f.unit_cost) : null, note: f.note });
+      await post(`/products/${product.id}/stock`, { type, qty: parseQty(f.qty), unit_cost: type === 'in' ? toKurus(f.unit_cost) : null, note: f.note, branch_id: branches ? Number(branchId) : undefined });
       onSaved();
     } catch (err) { toast.err(err); }
   };
   return (
     <Modal title={`${product.name} — Stok`} onClose={onClose} wide>
       <div className="stack">
-        <div className="row"><span className="muted">Mevcut stok:</span><strong style={{ fontSize: 20 }}>{qty(product.stock)} {product.unit}</strong></div>
+        <div className="row"><span className="muted">{branches ? 'Toplam stok:' : 'Mevcut stok:'}</span><strong style={{ fontSize: 20 }}>{qty(product.total_stock ?? product.stock)} {product.unit}</strong></div>
+        {branches && perBranch.data && (
+          <div className="card card-pad stack" style={{ gap: 10 }}>
+            <div className="row wrap" style={{ gap: 14 }}>
+              {perBranch.data.map((b) => <span key={b.id}><span className="muted">{b.name}:</span> <b className="num">{qty(b.stock)}</b></span>)}
+            </div>
+            <form className="row wrap" onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                perBranch.setData(await post('/stock/transfer', { product_id: product.id, from_branch_id: Number(branchId), to_branch_id: Number(tr.to), qty: parseQty(tr.qty) }));
+                setTr({ to: '', qty: '' });
+                toast.ok('Transfer yapıldı');
+              } catch (err) { toast.err(err); }
+            }}>
+              <span className="small-text muted">Transfer: {branches.find((b) => String(b.id) === branchId)?.name} →</span>
+              <select className="input" style={{ width: 160 }} required value={tr.to} onChange={(e) => setTr({ ...tr, to: e.target.value })} aria-label="Hedef şube">
+                <option value="">Şube seçin</option>
+                {branches.filter((b) => String(b.id) !== branchId).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              <input className="input" style={{ width: 100 }} required inputMode="decimal" placeholder="Miktar" value={tr.qty} onChange={(e) => setTr({ ...tr, qty: e.target.value })} aria-label="Transfer miktarı" />
+              <button className="btn small">Gönder</button>
+            </form>
+          </div>
+        )}
         <form className="stack card card-pad" onSubmit={save}>
+          {branches && (
+            <Field label="Şube">
+              <select className="input" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </Field>
+          )}
           <div className="tabs">
             {[['in', 'Mal girişi'], ['out', 'Çıkış / Fire'], ['count', 'Sayım (yeni miktar)']].map(([k, l]) =>
               <button type="button" key={k} className={`tab ${type === k ? 'active' : ''}`} onClick={() => setType(k)}>{l}</button>)}
@@ -222,11 +265,11 @@ function StockModal({ product, onClose, onSaved }) {
         <h3>Son hareketler</h3>
         <div className="table-wrap" style={{ maxHeight: 280 }}>
           <table className="table">
-            <thead><tr><th>Tarih</th><th>Tür</th><th className="right">Miktar</th><th className="right">Sonra</th><th>Not</th><th>Kullanıcı</th></tr></thead>
+            <thead><tr><th>Tarih</th><th>Tür</th>{branches && <th>Şube</th>}<th className="right">Miktar</th><th className="right">Sonra</th><th>Not</th><th>Kullanıcı</th></tr></thead>
             <tbody>
               {(moves.data || []).map((m) => (
                 <tr key={m.id}>
-                  <td>{dt(m.created_at)}</td><td>{MOVE_LABELS[m.type]}</td>
+                  <td>{dt(m.created_at)}</td><td>{MOVE_LABELS[m.type]}</td>{branches && <td>{m.branch_name}</td>}
                   <td className={`right num ${m.qty < 0 ? 'danger-text' : 'success-text'}`}>{m.qty > 0 ? '+' : ''}{qty(m.qty)}</td>
                   <td className="right num">{qty(m.stock_after)}</td><td className="muted">{m.note}</td><td>{m.user_name}</td>
                 </tr>

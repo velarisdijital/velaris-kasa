@@ -4,7 +4,7 @@ import { emitEvent, getSetting, nextReceiptNo } from '../db.js';
 import { fiscalEnabled, fiscalRefund, printFiscal } from '../fiscal.js';
 import { createInvoice, refreshInvoice } from '../invoice.js';
 import { hasFeature } from '../license.js';
-import { changeStock, round3 } from '../stock.js';
+import { branchForRegister, branchStock, changeStock, round3 } from '../stock.js';
 import { bad, dateRange, h, int, notFound, num, str, vatOf } from '../util.js';
 import { addCustomerTx, addPointsTx, customerPayload } from './customers.js';
 import { openShiftFor } from './shifts.js';
@@ -141,21 +141,22 @@ export default function saleRoutes(db) {
     }
 
     const saleId = db.transaction(() => {
+      const branchId = branchForRegister(db, b.register_name);
       if (!allowNegative) {
         for (const it of items) {
           if (it.product?.track_stock && it.type === 'product') {
-            const cur = db.prepare('SELECT stock FROM products WHERE id = ?').get(it.product_id).stock;
+            const cur = branchStock(db, it.product_id, branchId);
             if (cur < it.qty) throw bad(`${it.name}: yetersiz stok (${cur})`);
           }
         }
       }
       const shift = openShiftFor(db, b.register_name);
       const saleId = db.prepare(`INSERT INTO sales (receipt_no, client_uuid, shift_id, register_name, user_id, customer_id,
-          subtotal, discount, vat_total, total, cost_total, note, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now','localtime')))`)
+          subtotal, discount, vat_total, total, cost_total, note, created_at, branch_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now','localtime')), ?)`)
         .run(nextReceiptNo(db), b.client_uuid ? String(b.client_uuid) : null, shift?.id ?? null, str(b.register_name) || 'Kasa 1',
           req.user.id, customer?.id ?? null, subtotal, discount, vat_total, total, cost_total, str(b.note),
-          /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(b.offline_created_at || '') ? b.offline_created_at : null).lastInsertRowid;
+          /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(b.offline_created_at || '') ? b.offline_created_at : null, branchId).lastInsertRowid;
 
       const insItem = db.prepare(`INSERT INTO sale_items (sale_id, product_id, name, type, qty, unit, unit_price, unit_cost, discount,
           vat_rate, line_total, staff_id) VALUES (@sale_id, @product_id, @name, @type, @qty, @unit, @unit_price, @unit_cost, @discount,
@@ -163,7 +164,7 @@ export default function saleRoutes(db) {
       for (const it of items) {
         const { product, ...row } = it;
         insItem.run({ ...row, sale_id: saleId });
-        if (product) changeStock(db, product.id, -it.qty, 'sale', { saleId, userId: req.user.id });
+        if (product) changeStock(db, product.id, -it.qty, 'sale', { saleId, userId: req.user.id, branchId });
       }
       const insPay = db.prepare('INSERT INTO sale_payments (sale_id, method, amount) VALUES (?, ?, ?)');
       for (const [m, a] of Object.entries(pays)) insPay.run(saleId, m, a);
@@ -268,7 +269,7 @@ export default function saleRoutes(db) {
       const shift = openShiftFor(db, req.body.register_name || sale.register_name);
       for (const l of lines) {
         db.prepare('UPDATE sale_items SET refunded_qty = refunded_qty + ? WHERE id = ?').run(l.qty, l.item.id);
-        if (l.item.product_id) changeStock(db, l.item.product_id, l.qty, 'refund', { saleId: sale.id, userId: req.user.id, note: `İade ${sale.receipt_no}` });
+        if (l.item.product_id) changeStock(db, l.item.product_id, l.qty, 'refund', { saleId: sale.id, userId: req.user.id, note: `İade ${sale.receipt_no}`, branchId: sale.branch_id || 1 });
       }
       db.prepare('INSERT INTO refunds (sale_id, shift_id, amount, method, items_json, note, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .run(sale.id, shift?.id ?? null, amount, method,

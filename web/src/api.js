@@ -50,7 +50,7 @@ export const del = (p) => api(p, { method: 'DELETE' });
 // ---- Ürün önbelleği (kasa çevrimdışı açılabilsin) ----
 export async function loadProducts() {
   try {
-    const list = await get('/products');
+    const list = await get(`/products?register=${encodeURIComponent(registerName())}`);
     safe.set(PRODUCTS_KEY, list);
     return list;
   } catch (e) {
