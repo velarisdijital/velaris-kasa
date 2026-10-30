@@ -130,6 +130,7 @@ const PATHS = {
   refund: 'M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
   wifi_off: 'M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5.2-2.8M19 13a10 10 0 0 0-2.2-1.6M2 8.8a15 15 0 0 1 4.2-2.6M22 8.8A15 15 0 0 0 11 5M12 20h.01',
   edit: 'M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4',
+  camera: 'M4 7h3l2-3h6l2 3h3v13H4zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
 };
 
 export function Icon({ name, ...props }) {

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { del, get, post, put } from '../api.js';
 import { isManager, useSession } from '../App.jsx';
+import CameraScanner, { cameraSupported } from '../components/CameraScanner.jsx';
 import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, money, parseQty, qty, toInput, toKurus } from '../format.js';
 
@@ -106,6 +107,13 @@ function ProductForm({ product, categories, onClose, onSaved }) {
     stock: '', min_stock: p.min_stock ?? '', track_stock: p.track_stock ?? 1, duration_min: p.duration_min || '', favorite: p.favorite || 0,
   });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? (e.target.checked ? 1 : 0) : e.target.value });
+  const [camera, setCamera] = useState(false);
+  const [suggest, setSuggest] = useState(null);
+  const lookup = async (code) => {
+    setSuggest(null);
+    if (!/^\d{8,14}$/.test(code || '') || f.name) return;
+    try { setSuggest(await get(`/products/lookup/${code}`)); } catch { /* bulunamadı */ }
+  };
   const buy = toKurus(f.buy_price);
   const sell = toKurus(f.sell_price);
   const margin = buy > 0 && sell > 0 ? (((sell - buy) / buy) * 100).toFixed(0) : null;
@@ -137,8 +145,20 @@ function ProductForm({ product, categories, onClose, onSaved }) {
         </div>
         <div className="grid-2">
           <Field label="Ad"><input className="input" autoFocus required value={f.name} onChange={set('name')} /></Field>
-          <Field label="Barkod"><input className="input" value={f.barcode} onChange={set('barcode')} placeholder="Okutun veya yazın" /></Field>
+          <Field label="Barkod">
+            <div className="row">
+              <input className="input" value={f.barcode} onChange={set('barcode')} onBlur={(e) => lookup(e.target.value)} placeholder="Okutun veya yazın" />
+              {cameraSupported() && <button type="button" className="btn" onClick={() => setCamera(true)} aria-label="Kamerayla okut"><Icon name="camera" /></button>}
+            </div>
+          </Field>
         </div>
+        {suggest && (
+          <div className="row small-text success-text">
+            <span style={{ flex: 1 }}>İnternette bulundu: <b>{suggest.name}</b></span>
+            <button type="button" className="btn small" onClick={() => { setF({ ...f, name: suggest.name }); setSuggest(null); }}>Adı kullan</button>
+          </div>
+        )}
+        {camera && <CameraScanner onClose={() => setCamera(false)} onResult={(code) => { setCamera(false); setF((x) => ({ ...x, barcode: code })); lookup(code); }} />}
         <div className="grid-3">
           <Field label="Kategori">
             <select className="input" value={f.category_id} onChange={set('category_id')}>

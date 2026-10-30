@@ -106,6 +106,35 @@ export default function productRoutes(db) {
     throw notFound('Barkod bulunamadı');
   }));
 
+  /** Bulunamayan barkod için internette ürün adı arar (Open Food Facts, ücretsiz açık veritabanı). */
+  const lookupCache = new Map();
+  r.get('/products/lookup/:code', h(async (req, res) => {
+    const code = String(req.params.code);
+    if (!/^\d{8,14}$/.test(code)) throw bad('Barkod geçersiz');
+    if (getSetting(db, 'product_lookup') !== '1') throw notFound('İnternetten ürün arama kapalı');
+    if (!lookupCache.has(code)) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 5000);
+      try {
+        const r2 = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_tr,brands,quantity`, {
+          signal: ctrl.signal, headers: { 'User-Agent': 'VelarisKasa/1.0 (velaris-kasa)' },
+        });
+        const j = await r2.json();
+        const p = j.status === 1 ? j.product : null;
+        const name = p && [p.brands?.split(',')[0]?.trim(), p.product_name_tr || p.product_name, p.quantity]
+          .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+        lookupCache.set(code, name || null);
+      } catch {
+        throw notFound('Ürün bilgisi alınamadı');
+      } finally {
+        clearTimeout(t);
+      }
+    }
+    const name = lookupCache.get(code);
+    if (!name) throw notFound('Ürün internette bulunamadı');
+    res.json({ barcode: code, name, source: 'openfoodfacts' });
+  }));
+
   r.get('/products/:id', h((req, res) => {
     const p = getProduct(req.params.id);
     if (!p) throw notFound();

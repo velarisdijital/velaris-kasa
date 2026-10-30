@@ -302,3 +302,30 @@ test('online randevu: kapalıyken erişilmez, boş saat, çakışma, iptal', asy
   r = await pub('GET', '/api/public/booking/r/zzz');
   assert.equal(r.status, 404);
 });
+
+test('bulunamayan barkod için internetten ürün adı', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).startsWith('https://world.openfoodfacts.org/')) {
+      const code = String(url).match(/product\/(\d+)/)[1];
+      return new Response(JSON.stringify(code === '8690504000017'
+        ? { status: 1, product: { product_name: 'Gofret', product_name_tr: 'Çikolatalı Gofret', brands: 'Ülker, Ülker Bisküvi', quantity: '36 g' } }
+        : { status: 0 }));
+    }
+    return realFetch(url, opts);
+  };
+  try {
+    let r = await call('GET', '/api/products/lookup/8690504000017');
+    assert.equal(r.body.name, 'Ülker Çikolatalı Gofret 36 g');
+    r = await call('GET', '/api/products/lookup/8690000000000');
+    assert.equal(r.status, 404);
+    r = await call('GET', '/api/products/lookup/abc');
+    assert.equal(r.status, 400);
+    await call('PUT', '/api/settings', { product_lookup: '0' });
+    r = await call('GET', '/api/products/lookup/8690504000018');
+    assert.equal(r.status, 404);
+  } finally {
+    globalThis.fetch = realFetch;
+    await call('PUT', '/api/settings', { product_lookup: '1' });
+  }
+});

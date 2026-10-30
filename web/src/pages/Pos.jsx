@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { get, loadProducts, post, registerName, storage, submitSale, uuid } from '../api.js';
 import { useSession } from '../App.jsx';
+import CameraScanner, { cameraSupported } from '../components/CameraScanner.jsx';
 import { printReceipt } from '../components/Receipt.jsx';
 import { Field, Icon, Modal, useConfirm, useToast } from '../components/ui.jsx';
 import { METHOD_LABELS, money, nowSql, parseQty, plain, qty as fmtQty, toInput, toKurus } from '../format.js';
@@ -379,6 +380,7 @@ export function FiscalLine({ sale, onUpdate }) {
 function ScanBox({ inputRef, products, onScan, onPick }) {
   const [text, setText] = useState('');
   const [hl, setHl] = useState(0);
+  const [camera, setCamera] = useState(false);
   const q = text.trim().toLocaleLowerCase('tr');
   const results = useMemo(() => {
     if (q.length < 2 || /^\d+[*xX]/.test(q)) return [];
@@ -406,6 +408,8 @@ function ScanBox({ inputRef, products, onScan, onPick }) {
       <Icon name="search" />
       <input ref={inputRef} className="input" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKeyDown}
         placeholder="Barkod okutun ya da ürün adı yazın… (çoklu: 3*barkod)" autoComplete="off" aria-label="Barkod veya ürün ara" />
+      {cameraSupported() && <button className="btn small ghost cam-btn" onClick={() => setCamera(true)} title="Kamerayla okut" aria-label="Kamerayla barkod okut"><Icon name="camera" /></button>}
+      {camera && <CameraScanner onClose={() => setCamera(false)} onResult={(code) => { setCamera(false); onScan(code); }} />}
       {results.length > 0 && (
         <div className="suggest card">
           {results.map((p, i) => (
@@ -608,6 +612,10 @@ function QuickProduct({ barcode, onCreated, onClose }) {
   const toast = useToast();
   const { user } = useSession();
   const [f, setF] = useState({ name: '', price: '', vat_rate: 20 });
+  const [found, setFound] = useState(null);
+  useEffect(() => {
+    get(`/products/lookup/${encodeURIComponent(barcode)}`).then((r) => { setFound(r); setF((x) => (x.name ? x : { ...x, name: r.name })); }, () => {});
+  }, [barcode]);
   if (!['admin', 'manager'].includes(user.role)) {
     return <Modal title="Ürün bulunamadı" onClose={onClose}><p><b>{barcode}</b> barkodlu ürün kayıtlı değil. Yöneticinizden ürünü eklemesini isteyin.</p></Modal>;
   }
@@ -622,6 +630,7 @@ function QuickProduct({ barcode, onCreated, onClose }) {
     <Modal title="Yeni ürün ekle" onClose={onClose}>
       <form className="stack" onSubmit={save}>
         <p className="muted"><b>{barcode}</b> barkodu kayıtlı değil. Hızlıca ekleyip satışa devam edebilirsiniz.</p>
+        {found && <div className="small-text success-text">İnternette bulundu: <b>{found.name}</b> (Open Food Facts). Adı kontrol edip fiyatı girin.</div>}
         <Field label="Ürün adı"><input className="input" autoFocus required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <div className="grid-2">
           <Field label="Satış fiyatı (₺)"><input className="input" required inputMode="decimal" value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} /></Field>
