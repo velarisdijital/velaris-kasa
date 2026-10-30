@@ -73,6 +73,8 @@ const MIGRATIONS = [
   ALTER TABLE sale_payments_new RENAME TO sale_payments;
   CREATE INDEX idx_sale_payments_sale ON sale_payments(sale_id);
   `,
+  // 3: e-belge sağlayıcısındaki iş/belge kimliği
+  `ALTER TABLE sales ADD COLUMN invoice_ref TEXT;`,
 ];
 
 export function migrate(db) {

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { allow, MANAGERS } from '../auth.js';
 import { emitEvent, getSetting, nextReceiptNo } from '../db.js';
 import { fiscalEnabled, fiscalRefund, printFiscal } from '../fiscal.js';
+import { createInvoice, refreshInvoice } from '../invoice.js';
 import { changeStock, round3 } from '../stock.js';
 import { bad, dateRange, h, int, notFound, num, str, vatOf } from '../util.js';
 import { addCustomerTx, addPointsTx, customerPayload } from './customers.js';
@@ -185,6 +186,18 @@ export default function saleRoutes(db) {
 
     if (fiscalEnabled(db) && getSetting(db, 'fiscal_auto') === '1') await printFiscal(db, saleId, loadSale);
     res.status(201).json({ ...loadSale(db, saleId), change });
+  }));
+
+  /** Satış için e-Arşiv / e-Fatura düzenler (müşterinin VKN/TCKN'si yoksa nihai tüketici adına). */
+  r.post('/sales/:id/invoice', h(async (req, res) => {
+    const sale = await createInvoice(db, req.params.id, loadSale);
+    if (!sale) throw notFound();
+    res.json(sale);
+  }));
+  r.post('/sales/:id/invoice/refresh', h(async (req, res) => {
+    const sale = await refreshInvoice(db, req.params.id, loadSale);
+    if (!sale) throw notFound();
+    res.json(sale);
   }));
 
   /** Mali fişi (yeniden) yazarkasaya gönderir. */

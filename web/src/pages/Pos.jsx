@@ -288,6 +288,7 @@ export default function Pos() {
                 <div className="card card-pad stack" style={{ textAlign: 'left', marginTop: 12 }}>
                   <div className="row"><strong style={{ flex: 1 }}>Son satış {lastSale.sale.receipt_no}</strong><strong>{money(lastSale.sale.total)}</strong></div>
                   <FiscalLine sale={lastSale.sale} onUpdate={(s) => setLastSale({ ...lastSale, sale: s })} />
+                  <InvoiceLine sale={lastSale.sale} onUpdate={(s) => setLastSale({ ...lastSale, sale: s })} />
                   {lastSale.sale.points_earned > 0 && <div className="success-text small-text">Müşteri {money(lastSale.sale.points_earned)} puan kazandı</div>}
                   {lastSale.change > 0 && <div className="change-box">Para üstü: {money(lastSale.change)}</div>}
                   <button className="btn" onClick={() => printReceipt(lastSale.sale, settings, lastSale.change)}><Icon name="print" /> Fiş yazdır</button>
@@ -354,6 +355,41 @@ export default function Pos() {
 }
 
 // ---------------------------------------------------------------------------
+
+/** Satışın e-Arşiv / e-Fatura durumu ve "Fatura kes" düğmesi. */
+export function InvoiceLine({ sale, onUpdate }) {
+  const toast = useToast();
+  const { settings } = useSession();
+  const [busy, setBusy] = useState(false);
+  const enabled = settings.invoice_provider && settings.invoice_provider !== 'none';
+  const overLimit = sale.total >= Number(settings.invoice_threshold || 1200000);
+  if (!sale.id) return null;
+  const run = async (path) => {
+    setBusy(true);
+    try {
+      const s = await post(path);
+      onUpdate?.(s);
+      if (s.invoice_status === 'done') toast.ok(`Fatura kesildi: ${s.invoice_no}`);
+      else if (s.invoice_status === 'pending') toast('Fatura hazırlanıyor, birazdan "Durumu yenile"ye basın');
+      else toast.err(s.invoice_error || 'Fatura kesilemedi');
+    } catch (e) { toast.err(e); } finally { setBusy(false); }
+  };
+  if (sale.invoice_status === 'done') {
+    return <div className="small-text success-text">✓ Fatura {sale.invoice_no}{sale.invoice_url && <> · <a href={sale.invoice_url} target="_blank" rel="noreferrer">PDF'i aç</a></>}</div>;
+  }
+  if (!enabled) {
+    return overLimit ? <div className="small-text warn-text">Bu satış {money(Number(settings.invoice_threshold))} fatura sınırını aşıyor; fatura düzenlenmeli (e-Fatura bağlantısı kapalı).</div> : null;
+  }
+  return (
+    <div className="row wrap small-text">
+      {overLimit && <span className="warn-text">Fatura sınırı aşıldı, fatura düzenleyin.</span>}
+      {sale.invoice_status === 'failed' && <span className="danger-text" style={{ flex: 1 }}>Fatura kesilemedi: {sale.invoice_error}</span>}
+      {sale.invoice_status === 'pending'
+        ? <><span style={{ flex: 1 }}>Fatura hazırlanıyor…</span><button className="btn small" disabled={busy} onClick={() => run(`/sales/${sale.id}/invoice/refresh`)}>Durumu yenile</button></>
+        : <button className="btn small" disabled={busy} onClick={() => run(`/sales/${sale.id}/invoice`)}>{busy ? 'Kesiliyor…' : sale.customer_tax_number ? 'e-Fatura / e-Arşiv kes' : 'e-Arşiv fatura kes'}</button>}
+    </div>
+  );
+}
 
 /** Satışın mali fiş durumu; basılamadıysa "Tekrar gönder" düğmesi. */
 export function FiscalLine({ sale, onUpdate }) {

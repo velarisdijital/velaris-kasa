@@ -4,7 +4,7 @@ import { useSession } from '../App.jsx';
 import { printReceipt } from '../components/Receipt.jsx';
 import { Icon, Modal, useLoad, useToast } from '../components/ui.jsx';
 import { dt, FISCAL_LABELS, METHOD_LABELS, money, parseQty, plain, qty, today } from '../format.js';
-import { FiscalLine } from './Pos.jsx';
+import { FiscalLine, InvoiceLine } from './Pos.jsx';
 
 const STATUS = { completed: ['Tamamlandı', 'green'], partial_refund: ['Kısmi iade', 'yellow'], refunded: ['İade edildi', 'red'] };
 
@@ -71,6 +71,7 @@ function SaleDetail({ id, onClose }) {
           {s.customer_name && <><span>·</span><span>Müşteri: <b>{s.customer_name}</b></span></>}
         </div>
         <FiscalLine sale={s} onUpdate={() => sale.reload()} />
+        <InvoiceLine sale={s} onUpdate={(x) => sale.setData(x)} />
         {s.points_earned > 0 && <div className="small-text success-text">Bu satıştan {money(s.points_earned)} puan kazanıldı</div>}
         <div className="table-wrap">
           <table className="table">

@@ -329,3 +329,74 @@ test('bulunamayan barkod için internetten ürün adı', async () => {
     await call('PUT', '/api/settings', { product_lookup: '1' });
   }
 });
+
+test('e-Arşiv: simülatör ve Paraşüt akışı (KDV hariç fiyat, e-Fatura mükellefi kontrolü)', async () => {
+  let s = await sell();
+  let r = await call('POST', `/api/sales/${s.body.id}/invoice`);
+  assert.equal(r.status, 400); // kapalı
+  await call('PUT', '/api/settings', { invoice_provider: 'simulator' });
+  r = await call('POST', `/api/sales/${s.body.id}/invoice`);
+  assert.equal(r.body.invoice_status, 'done');
+  assert.match(r.body.invoice_no, /^VLR\d{4}\d{9}$/);
+  r = await call('POST', `/api/sales/${s.body.id}/invoice`);
+  assert.equal(r.status, 400); // ikinci kez kesilmez
+
+  // Paraşüt (sahte sunucu)
+  const realFetch = globalThis.fetch;
+  const reqs = [];
+  let jobPolls = 0;
+  globalThis.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (!u.startsWith('https://api.parasut.com/')) return realFetch(url, opts);
+    const path = u.replace('https://api.parasut.com', '');
+    const body = opts.body ? JSON.parse(opts.body) : null;
+    reqs.push({ method: opts.method || 'GET', path, body, auth: opts.headers?.Authorization });
+    const json = (o, status = 200) => new Response(JSON.stringify(o), { status });
+    if (path === '/oauth/token') return body.password === 'dogru' ? json({ access_token: 'tok', expires_in: 7200 }) : json({ error: 'invalid_grant', error_description: 'Kullanıcı adı veya şifre hatalı' }, 401);
+    if (path === '/v4/555/contacts') return json({ data: { id: 'c1', type: 'contacts' } });
+    if (path === '/v4/555/sales_invoices') return json({ data: { id: 'inv1', type: 'sales_invoices' } });
+    if (path.startsWith('/v4/555/e_invoice_inboxes')) return json({ data: path.includes('1234567890') ? [{ attributes: { e_invoice_address: 'urn:mail:defaultpk@firma.com' } }] : [] });
+    if (path === '/v4/555/e_archives') return json({ data: { id: 'job1' } });
+    if (path === '/v4/555/e_invoices') return json({ data: { id: 'job2' } });
+    if (path.startsWith('/v4/555/trackable_jobs/')) return json({ data: { attributes: { status: ++jobPolls % 2 ? 'running' : 'done' } } });
+    if (path.startsWith('/v4/555/sales_invoices/inv1')) return json({ data: { attributes: { invoice_no: 'PRS2026000000042' } }, included: [{ type: 'e_archives', id: 'ea1' }, { type: 'e_invoices', id: 'ei1' }] });
+    if (path.endsWith('/pdf')) return json({ data: { attributes: { url: 'https://cdn.parasut.com/fatura.pdf' } } });
+    return json({ errors: [{ detail: `bilinmeyen ${path}` }] }, 404);
+  };
+  try {
+    await call('PUT', '/api/settings', { invoice_provider: 'parasut', parasut_client_id: 'id', parasut_client_secret: 'sec', parasut_username: 'a@b.com', parasut_password: 'yanlis', parasut_company_id: '555', parasut_poll_ms: '5' });
+    // Nihai tüketici, fiş indirimi: 2 x 50 TL (%20) + 1 x 100 TL (%1), 20 TL indirim
+    s = await call('POST', '/api/sales', { register_name: 'Kasa 1', discount: 2000,
+      items: [{ name: 'Kalem', qty: 2, unit_price: 5000, vat_rate: 20 }, { name: 'Peynir', qty: 1, unit_price: 10000, vat_rate: 1 }],
+      payments: [{ method: 'card', amount: 18000 }] });
+    r = await call('POST', `/api/sales/${s.body.id}/invoice`);
+    assert.equal(r.body.invoice_status, 'failed');
+    assert.match(r.body.invoice_error, /şifre hatalı/);
+
+    await call('PUT', '/api/settings', { parasut_password: 'dogru' });
+    r = await call('POST', `/api/sales/${s.body.id}/invoice`);
+    assert.equal(r.body.invoice_status, 'done', JSON.stringify(r.body));
+    assert.equal(r.body.invoice_no, 'PRS2026000000042');
+    assert.equal(r.body.invoice_url, 'https://cdn.parasut.com/fatura.pdf');
+    const contact = reqs.find((x) => x.path === '/v4/555/contacts').body.data.attributes;
+    assert.equal(contact.tax_number, '11111111111');
+    assert.equal(contact.name, 'Nihai Tüketici');
+    const details = reqs.find((x) => x.path === '/v4/555/sales_invoices').body.data.relationships.details.data.map((d) => d.attributes);
+    // 100 TL'lik satır 10 TL indirim payı alır → 90 TL KDV dahil → 2 adet → birim 45/1,20 = 37,5
+    assert.deepEqual(details.map((d) => [d.description, d.quantity, d.unit_price, d.vat_rate]), [['Kalem', 2, 37.5, 20], ['Peynir', 1, 89.1089, 1]]);
+    assert.ok(reqs.some((x) => x.path === '/v4/555/e_archives'));
+    assert.ok(reqs.every((x) => x.path === '/oauth/token' || x.auth === 'Bearer tok'));
+
+    // VKN'li ve e-Fatura mükellefi müşteri → e-Fatura
+    const firm = (await call('POST', '/api/customers', { name: 'ABC Ltd', tax_number: '1234567890', tax_office: 'Kadıköy' })).body;
+    s = await sell({ customer_id: firm.id });
+    r = await call('POST', `/api/sales/${s.body.id}/invoice`);
+    assert.equal(r.body.invoice_status, 'done');
+    const einv = reqs.find((x) => x.path === '/v4/555/e_invoices').body.data;
+    assert.equal(einv.attributes.to, 'urn:mail:defaultpk@firma.com');
+    assert.equal(reqs.filter((x) => x.path === '/oauth/token').length, 2); // oturum tekrar kullanıldı
+  } finally {
+    globalThis.fetch = realFetch;
+    await call('PUT', '/api/settings', { invoice_provider: 'none' });
+  }
+});

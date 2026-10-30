@@ -10,7 +10,7 @@ import { flushOutbox, outboxStatus, pullCustomers, sign, testConnection } from '
 import { bad, bool, h, int, notFound, num, str } from '../util.js';
 import { upsertCustomerFromCrm } from './customers.js';
 
-const SECRET_KEYS = ['crm_api_key', 'crm_webhook_secret', 'netgsm_password', 'iletimerkezi_hash', 'whatsapp_token', 'parasut_client_secret', 'parasut_password'];
+const SECRET_KEYS = ['crm_api_key', 'crm_webhook_secret', 'netgsm_password', 'iletimerkezi_hash', 'whatsapp_token', 'parasut_client_secret', 'parasut_password', 'parasut_access_token'];
 const ADMIN_ONLY_KEYS = [...SECRET_KEYS, 'crm_base_url', 'install_id', 'netgsm_usercode', 'iletimerkezi_key', 'whatsapp_phone_id', 'parasut_client_id', 'parasut_username', 'parasut_company_id'];
 
 export default function settingsRoutes(db) {
@@ -32,6 +32,14 @@ export default function settingsRoutes(db) {
       values[k] = v;
     }
     if (values.crm_base_url && !/^https?:\/\//.test(values.crm_base_url)) throw bad('CRM adresi http:// veya https:// ile başlamalı');
+    delete values.parasut_access_token;
+    delete values.parasut_token_expires;
+    // Paraşüt bilgileri değiştiyse eski oturum anahtarı geçersiz
+    const current = getSettings(db);
+    if (Object.keys(values).some((k) => k.startsWith('parasut_') && values[k] !== current[k])) {
+      values.parasut_access_token = '';
+      values.parasut_token_expires = '';
+    }
     setSettings(db, values);
     res.json({ ok: true });
   }));

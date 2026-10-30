@@ -4,7 +4,7 @@ import { useSession } from '../App.jsx';
 import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, ROLE_LABELS } from '../format.js';
 
-const TABS = [['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['sms', 'SMS & WhatsApp'], ['booking', 'Online randevu'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
+const TABS = [['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['sms', 'SMS & WhatsApp'], ['booking', 'Online randevu'], ['invoice', 'e-Fatura'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
 
 export default function Settings() {
   const [tab, setTab] = useState('business');
@@ -22,6 +22,7 @@ export default function Settings() {
         {tab === 'loyalty' && <Loyalty />}
         {tab === 'sms' && <Sms />}
         {tab === 'booking' && <BookingSettings />}
+        {tab === 'invoice' && <InvoiceSettings />}
         {tab === 'crm' && <Crm />}
         {tab === 'backup' && <Backup />}
       </div>
@@ -273,6 +274,40 @@ function BookingSettings() {
         <textarea className="input" value={f.booking_template} onChange={set('booking_template')} />
       </Field>
       <div className="row wrap"><button className="btn primary">Kaydet</button><a className="btn" href="#/randevu-al" target="_blank" rel="noreferrer">Sayfayı aç</a></div>
+    </form>
+  );
+}
+
+function InvoiceSettings() {
+  const { f, set, save } = useSettingsForm(['invoice_provider', 'invoice_threshold', 'parasut_client_id', 'parasut_client_secret',
+    'parasut_username', 'parasut_password', 'parasut_company_id']);
+  return (
+    <form className="card card-pad stack" onSubmit={save}>
+      <h2>e-Arşiv / e-Fatura</h2>
+      <p className="muted">Satış ekranından ya da Satışlar listesinden tek tıkla fatura kesilir. Müşterinin VKN/TCKN'si kayıtlıysa onun adına, değilse nihai tüketici adına e-Arşiv düzenlenir; alıcı e-Fatura mükellefiyse otomatik e-Fatura gönderilir.</p>
+      <Field label="Bağlantı">
+        <select className="input" value={f.invoice_provider} onChange={set('invoice_provider')}>
+          <option value="none">Kapalı</option>
+          <option value="parasut">Paraşüt</option>
+          <option value="simulator">Simülatör (deneme)</option>
+        </select>
+      </Field>
+      {f.invoice_provider === 'parasut' && (
+        <>
+          <p className="small-text muted">Paraşüt hesabınızda e-Arşiv/e-Fatura açık olmalı. API bilgilerini Paraşüt destek ekibinden alabilirsiniz; firma numarası Paraşüt adres çubuğundaki sayıdır.</p>
+          <div className="grid-2">
+            <Field label="Client ID"><input className="input" value={f.parasut_client_id} onChange={set('parasut_client_id')} autoComplete="off" /></Field>
+            <Field label="Client Secret"><input className="input" type="password" value={f.parasut_client_secret} onChange={set('parasut_client_secret')} autoComplete="off" /></Field>
+            <Field label="Paraşüt e-posta"><input className="input" value={f.parasut_username} onChange={set('parasut_username')} autoComplete="off" /></Field>
+            <Field label="Paraşüt şifre"><input className="input" type="password" value={f.parasut_password} onChange={set('parasut_password')} autoComplete="off" /></Field>
+            <Field label="Firma numarası (company id)"><input className="input" inputMode="numeric" value={f.parasut_company_id} onChange={set('parasut_company_id')} /></Field>
+          </div>
+        </>
+      )}
+      <Field label="Fatura uyarı sınırı (₺, KDV dahil)" hint="2026 için 12.000 TL; bu tutarın üzerindeki satışlarda kasada fatura uyarısı çıkar">
+        <input className="input" style={{ maxWidth: 200 }} inputMode="decimal" value={(Number(f.invoice_threshold || 0) / 100).toString()} onChange={(e) => set('invoice_threshold')({ target: { value: String(Math.round(Number(e.target.value.replace(',', '.')) * 100) || 0), type: 'text' } })} />
+      </Field>
+      <div><button className="btn primary">Kaydet</button></div>
     </form>
   );
 }

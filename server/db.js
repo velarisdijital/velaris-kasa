@@ -75,6 +75,9 @@ export const DEFAULT_SETTINGS = {
   parasut_username: '',
   parasut_password: '',
   parasut_company_id: '',
+  parasut_access_token: '',
+  parasut_token_expires: '',
+  parasut_poll_ms: '1500',
 
   // Ürün bilgisi
   product_lookup: '1',               // bulunamayan barkodu Open Food Facts'te ara
