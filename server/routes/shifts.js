@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { allow, MANAGERS } from '../auth.js';
 import { emitEvent } from '../db.js';
 import { fiscalEnabled, fiscalZReport } from '../fiscal.js';
+import { currentLicense, limitError } from '../license.js';
 import { bad, h, int, notFound, str } from '../util.js';
 
 const regName = (v) => str(v) || 'Kasa 1';
@@ -68,6 +69,9 @@ export default function shiftRoutes(db) {
   r.post('/shifts/open', h((req, res) => {
     const name = regName(req.body.register_name);
     if (openShiftFor(db, name)) throw bad(`${name} zaten açık`);
+    const lic = currentLicense(db);
+    const others = db.prepare('SELECT COUNT(DISTINCT register_name) AS n FROM shifts WHERE closed_at IS NULL AND register_name != ?').get(name).n;
+    if (lic.limits.registers != null && others + 1 > lic.limits.registers) throw limitError('kasa (aynı anda açık)', lic.limits.registers, lic.plan_name);
     const opening = int(req.body.opening_cash);
     if (opening < 0) throw bad('Açılış tutarı negatif olamaz');
     const id = db.prepare('INSERT INTO shifts (register_name, user_id, opening_cash) VALUES (?, ?, ?)')

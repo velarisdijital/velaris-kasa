@@ -9,6 +9,7 @@
 // Fiyatlarımız KDV dahil; faturaya KDV hariç birim fiyat yazılır. Fiş geneli indirim satırlara dağıtılır.
 
 import { getSettings, setSettings } from './db.js';
+import { hasFeature, requireFeature } from './license.js';
 
 export const INVOICE_PROVIDERS = { none: 'Kapalı', simulator: 'Simülatör (deneme)', parasut: 'Paraşüt' };
 export const FINAL_CONSUMER_TCKN = '11111111111'; // nihai tüketici (kimlik bilgisi verilmeyen)
@@ -149,10 +150,11 @@ async function parasutPoll(db, ref, s = getSettings(db), tries = 8) {
 
 // ---------------------------------------------------------------------------
 
-export const invoiceEnabled = (db) => ['simulator', 'parasut'].includes(getSettings(db).invoice_provider);
+export const invoiceEnabled = (db) => hasFeature(db, 'invoice') && ['simulator', 'parasut'].includes(getSettings(db).invoice_provider);
 
 /** Satış için e-Arşiv/e-Fatura düzenler. Sonucu satışa yazar ve satışı döner. */
 export async function createInvoice(db, saleId, loadSale) {
+  requireFeature(db, 'invoice');
   const s = getSettings(db);
   const sale = loadSale(db, saleId);
   if (!sale) return null;

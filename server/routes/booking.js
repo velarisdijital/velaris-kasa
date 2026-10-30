@@ -3,6 +3,7 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
 import { emitEvent, getSettings } from '../db.js';
+import { hasFeature } from '../license.js';
 import { appointmentVars, notifyEnabled, render, sendMessage } from '../notify.js';
 import { bad, h, int, notFound, phoneTR, str } from '../util.js';
 
@@ -30,7 +31,7 @@ export default function bookingRoutes(db) {
 
   const config = () => {
     const s = getSettings(db);
-    if (s.booking_enabled !== '1') throw Object.assign(new Error('Bu işletme şu an online randevu almıyor'), { status: 403 });
+    if (s.booking_enabled !== '1' || !hasFeature(db, 'booking')) throw Object.assign(new Error('Bu işletme şu an online randevu almıyor'), { status: 403 });
     return s;
   };
   const services = () => db.prepare(`SELECT id, name, sell_price AS price, COALESCE(duration_min, 30) AS duration_min FROM products

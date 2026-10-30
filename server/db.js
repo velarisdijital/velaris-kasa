@@ -79,6 +79,8 @@ export const DEFAULT_SETTINGS = {
   parasut_token_expires: '',
   parasut_poll_ms: '1500',
 
+  license_key: '',
+
   // Ürün bilgisi
   product_lookup: '1',               // bulunamayan barkodu Open Food Facts'te ara
 };

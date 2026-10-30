@@ -30,12 +30,13 @@
     "dev": "concurrently -k -n api,web -c blue,green \"node --watch server/index.js\" \"vite\"",
     "build": "vite build",
     "start": "node server/index.js",
-    "test": "node --test test/*.test.js",
+    "test": "NODE_ENV=test VK_TEST_DEFAULT_PLAN=pro node --test test/*.test.js",
     "desktop": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win --publish never",
     "dist:linux": "npm run build && electron-builder --linux --publish never",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
-    "demo:build": "node scripts/build-demo.mjs"
+    "demo:build": "node scripts/build-demo.mjs",
+    "license:issue": "node scripts/license.mjs issue"
   },
   "build": {
     "appId": "com.velarisdijital.velariskasa",

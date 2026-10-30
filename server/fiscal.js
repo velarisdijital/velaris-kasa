@@ -11,6 +11,7 @@
 // Cihaz yanıt vermezse satış "failed" olarak işaretlenir ve kasada "Tekrar gönder" çıkar.
 
 import { getSettings } from './db.js';
+import { hasFeature } from './license.js';
 
 const TIMEOUT_MS = 60_000; // kartla ödemede müşteri şifre girerken bekleyebilir
 
@@ -92,13 +93,13 @@ function driverFor(settings) {
   }
 }
 
-export const fiscalEnabled = (db) => !!driverFor(getSettings(db));
+export const fiscalEnabled = (db) => hasFeature(db, 'fiscal') && !!driverFor(getSettings(db));
 
 /** Satışın mali fişini cihaza gönderir ve sonucu satışa yazar. Hata fırlatmaz. */
 export async function printFiscal(db, saleId, loadSale) {
   const settings = getSettings(db);
   const driver = driverFor(settings);
-  if (!driver) return null;
+  if (!driver || !hasFeature(db, 'fiscal')) return null;
   const sale = loadSale(db, saleId);
   if (!sale || sale.fiscal_status === 'done') return sale;
   db.prepare("UPDATE sales SET fiscal_status = 'pending', fiscal_error = NULL WHERE id = ?").run(saleId);
@@ -115,6 +116,7 @@ export async function printFiscal(db, saleId, loadSale) {
 export async function fiscalStatus(db) {
   const driver = driverFor(getSettings(db));
   if (!driver) return { ok: true, driver: 'none', message: 'Yazarkasa bağlı değil; bilgi fişi basılır.' };
+  if (!hasFeature(db, 'fiscal')) return { ok: false, driver: getSettings(db).fiscal_driver, message: 'Yazarkasa bağlantısı Esnaf paketinde.' };
   try {
     return { ...(await driver.status()), driver: getSettings(db).fiscal_driver };
   } catch (e) {

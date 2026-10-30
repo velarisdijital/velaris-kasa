@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { del, get, post, put, registerName } from '../api.js';
-import { isManager, useSession } from '../App.jsx';
+import { isManager, useCan, useSession } from '../App.jsx';
 import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { d, dt, METHOD_LABELS, money, toInput, toKurus } from '../format.js';
 
@@ -11,6 +11,7 @@ export default function Customers() {
   const [editing, setEditing] = useState(null);
   const [iys, setIys] = useState(false);
   const [campaign, setCampaign] = useState(false);
+  const can = useCan();
   const { user, settings } = useSession();
   const list = useLoad(() => get(`/customers?q=${encodeURIComponent(q)}${debt ? '&debt=1' : ''}`), [q, debt]);
   const totalDebt = (list.data || []).reduce((a, c) => a + Math.max(0, c.balance), 0);
@@ -21,7 +22,7 @@ export default function Customers() {
         <h1>Müşteriler & Veresiye</h1>
         <div className="grow" />
         {isManager(user) && <button className="btn" onClick={() => setIys(true)}>İYS listesi</button>}
-        {isManager(user) && settings.notify_provider !== 'none' && <button className="btn" onClick={() => setCampaign(true)}>Toplu mesaj</button>}
+        {isManager(user) && can('campaign') && settings.notify_provider !== 'none' && <button className="btn" onClick={() => setCampaign(true)}>Toplu mesaj</button>}
         <button className="btn primary" onClick={() => setEditing({})}><Icon name="plus" /> Yeni müşteri</button>
       </div>
       <div className="row wrap" style={{ marginBottom: 12 }}>

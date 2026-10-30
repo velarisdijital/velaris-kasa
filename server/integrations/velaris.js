@@ -11,6 +11,7 @@
 
 import crypto from 'node:crypto';
 import { getSetting, getSettings, setSettings } from '../db.js';
+import { hasFeature } from '../license.js';
 import { upsertCustomerFromCrm } from '../routes/customers.js';
 
 const MAX_ATTEMPTS = 12;
@@ -76,7 +77,7 @@ function applyResponse(db, row, payload, response) {
 
 export async function flushOutbox(db, { limit = 25 } = {}) {
   const cfg = config(db);
-  if (!cfg.enabled) return { sent: 0, failed: 0 };
+  if (!cfg.enabled || !hasFeature(db, 'crm')) return { sent: 0, failed: 0 };
   const rows = db.prepare(`SELECT * FROM outbox WHERE status = 'pending' AND next_attempt_at <= datetime('now','localtime')
     ORDER BY id LIMIT ?`).all(limit);
   let sent = 0, failed = 0;

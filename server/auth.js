@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { hasFeature } from './license.js';
 
 export function hashSecret(secret) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -41,6 +42,7 @@ export function authenticate(db) {
     if (apiKey) {
       const row = db.prepare('SELECT id, name FROM api_keys WHERE key_hash = ?').get(sha256(apiKey));
       if (!row) return res.status(401).json({ error: 'Geçersiz API anahtarı' });
+      if (!hasFeature(db, 'api')) return res.status(402).json({ error: 'API erişimi Pro paketinde', code: 'PLAN_REQUIRED' });
       db.prepare("UPDATE api_keys SET last_used = datetime('now','localtime') WHERE id = ?").run(row.id);
       req.user = { id: null, name: `API: ${row.name}`, role: 'integration' };
       return next();

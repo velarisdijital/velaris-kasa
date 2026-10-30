@@ -56,7 +56,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
       return res.status(409).json({ error: 'Bu barkod başka bir üründe kayıtlı' });
     }
     if (!err.status) console.error(err);
-    res.status(err.status || 500).json({ error: err.status ? err.message : 'Sunucu hatası' });
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Sunucu hatası', ...(err.code ? { code: err.code, required_plan: err.required_plan } : {}) });
   });
 
   // /api/v1 = harici entegrasyonlar (Velaris CRM) için kararlı adres

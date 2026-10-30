@@ -6,11 +6,12 @@ import path from 'node:path';
 import { allow, createApiKey, hashSecret } from '../auth.js';
 import { DEFAULT_SETTINGS, emitEvent, getSettings, setSettings } from '../db.js';
 import { FISCAL_DRIVERS, fiscalStatus } from '../fiscal.js';
+import { currentLicense, FEATURE_LABELS, limitError, PLANS, requireFeature, verifyLicense } from '../license.js';
 import { flushOutbox, outboxStatus, pullCustomers, sign, testConnection } from '../integrations/velaris.js';
 import { bad, bool, h, int, notFound, num, str } from '../util.js';
 import { upsertCustomerFromCrm } from './customers.js';
 
-const SECRET_KEYS = ['crm_api_key', 'crm_webhook_secret', 'netgsm_password', 'iletimerkezi_hash', 'whatsapp_token', 'parasut_client_secret', 'parasut_password', 'parasut_access_token'];
+const SECRET_KEYS = ['license_key', 'crm_api_key', 'crm_webhook_secret', 'netgsm_password', 'iletimerkezi_hash', 'whatsapp_token', 'parasut_client_secret', 'parasut_password', 'parasut_access_token'];
 const ADMIN_ONLY_KEYS = [...SECRET_KEYS, 'crm_base_url', 'install_id', 'netgsm_usercode', 'iletimerkezi_key', 'whatsapp_phone_id', 'parasut_client_id', 'parasut_username', 'parasut_company_id'];
 
 export default function settingsRoutes(db) {
@@ -32,6 +33,14 @@ export default function settingsRoutes(db) {
       values[k] = v;
     }
     if (values.crm_base_url && !/^https?:\/\//.test(values.crm_base_url)) throw bad('CRM adresi http:// veya https:// ile başlamalı');
+    delete values.license_key; // lisans yalnızca /license ucundan
+    // Paket dışı bir özellik açılmaya çalışılıyorsa durdur
+    const ON = { fiscal_driver: ['fiscal', (v) => v && v !== 'none'], invoice_provider: ['invoice', (v) => v && v !== 'none'],
+      notify_provider: ['sms', (v) => v && v !== 'none'], loyalty_enabled: ['loyalty', (v) => String(v) === '1'],
+      booking_enabled: ['booking', (v) => String(v) === '1'], reminder_enabled: ['reminders', (v) => String(v) === '1'],
+      crm_enabled: ['crm', (v) => String(v) === '1'], modules_appointments: ['appointments', (v) => String(v) === '1'] };
+    const before = getSettings(db);
+    for (const [k, [feat, isOn]] of Object.entries(ON)) if (k in values && isOn(values[k]) && !isOn(before[k])) requireFeature(db, feat);
     delete values.parasut_access_token;
     delete values.parasut_token_expires;
     // Paraşüt bilgileri değiştiyse eski oturum anahtarı geçersiz
@@ -42,6 +51,27 @@ export default function settingsRoutes(db) {
     }
     setSettings(db, values);
     res.json({ ok: true });
+  }));
+
+  // ---- Paket / lisans ----
+  r.get('/license', h((req, res) => {
+    res.json({
+      ...currentLicense(db), install_id: req.user.role === 'admin' ? getSettings(db).install_id : undefined,
+      feature_labels: FEATURE_LABELS,
+      plans: Object.fromEntries(Object.entries(PLANS).map(([k, p]) => [k, { name: p.name, price: p.price, features: p.features,
+        limits: { registers: p.limits.registers === Infinity ? null : p.limits.registers, users: p.limits.users === Infinity ? null : p.limits.users } }])),
+    });
+  }));
+  r.post('/license', allow(), h((req, res) => {
+    let p;
+    try { p = verifyLicense(req.body.key); } catch (e) { throw bad(e.message); }
+    if (p.install && p.install !== getSettings(db).install_id) throw bad('Bu lisans başka bir kuruluma ait');
+    setSettings(db, { license_key: String(req.body.key).trim() });
+    res.json(currentLicense(db));
+  }));
+  r.delete('/license', allow(), h((req, res) => {
+    setSettings(db, { license_key: '' });
+    res.json(currentLicense(db));
   }));
 
   // ---- Yazarkasa ----
@@ -55,6 +85,9 @@ export default function settingsRoutes(db) {
 
   const ROLES = ['admin', 'manager', 'cashier', 'staff'];
   r.post('/users', allow(), h((req, res) => {
+    const lic = currentLicense(db);
+    const active = db.prepare('SELECT COUNT(*) AS n FROM users WHERE active = 1').get().n;
+    if (lic.limits.users != null && active >= lic.limits.users) throw limitError('kullanıcı', lic.limits.users, lic.plan_name);
     const name = str(req.body.name);
     if (!name) throw bad('Ad gerekli');
     if (!/^\d{4,8}$/.test(String(req.body.pin || ''))) throw bad('PIN 4-8 haneli rakam olmalı');
@@ -86,6 +119,7 @@ export default function settingsRoutes(db) {
     res.json(db.prepare('SELECT id, name, prefix, last_used, created_at FROM api_keys ORDER BY id DESC').all());
   }));
   r.post('/api-keys', allow(), h((req, res) => {
+    requireFeature(db, 'api');
     const name = str(req.body.name) || 'Velaris CRM';
     res.status(201).json({ ...createApiKey(db, name), name });
   }));

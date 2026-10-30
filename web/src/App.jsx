@@ -19,6 +19,8 @@ import Shift from './pages/Shift.jsx';
 const SessionCtx = createContext(null);
 export const useSession = () => useContext(SessionCtx);
 export const isManager = (u) => u && ['admin', 'manager'].includes(u.role);
+/** Paket özelliği açık mı? (sunucu da ayrıca denetler) */
+export const useCan = () => { const s = useSession(); return (f) => !!s?.license?.features?.includes(f); };
 
 export default function App() {
   return (
@@ -49,7 +51,12 @@ function Root() {
   const [settings, setSettings] = useState({});
   const [booting, setBooting] = useState(true);
 
-  const reloadSettings = useCallback(async () => setSettings(await get('/settings')), []);
+  const [license, setLicense] = useState(null);
+  const reloadSettings = useCallback(async () => {
+    const [s, l] = await Promise.all([get('/settings'), get('/license').catch(() => null)]);
+    setSettings(s);
+    setLicense(l);
+  }, []);
 
   const boot = useCallback(async () => {
     try {
@@ -102,9 +109,9 @@ function Root() {
   }
   if (!user) return <Login status={status} onLogin={login} />;
 
-  const appointmentsOn = settings.modules_appointments === '1';
+  const appointmentsOn = settings.modules_appointments === '1' && !!license?.features?.includes('appointments');
   return (
-    <SessionCtx.Provider value={{ user, settings, reloadSettings, logout }}>
+    <SessionCtx.Provider value={{ user, settings, license, reloadSettings, logout }}>
       <div className="app">
         <nav className="sidebar">
           <div className="logo"><img src={logo} alt="VelarisKasa" /></div>
@@ -123,6 +130,7 @@ function Root() {
         </nav>
         <div className="main">
           <OfflineBanner />
+          <LicenseBanner license={license} admin={user.role === 'admin'} />
           <Routes>
             <Route path="/kasa" element={<Pos />} />
             {appointmentsOn && <Route path="/randevu" element={<Appointments />} />}
@@ -146,6 +154,15 @@ function NavItem({ to, icon, label }) {
       <Icon name={icon} /><span>{label}</span>
     </NavLink>
   );
+}
+
+function LicenseBanner({ license, admin }) {
+  if (!license || !['grace', 'expired', 'invalid'].includes(license.status)) return null;
+  const text = license.status === 'grace'
+    ? `${license.plan_name} lisansınızın süresi doldu. ${license.grace_until} tarihine kadar yenilemezseniz Ücretsiz pakete geçilecek.`
+    : license.status === 'expired' ? 'Lisans süresi doldu; Ücretsiz pakete geçildi. Yenilemek için Velaris Dijital ile iletişime geçin.'
+      : `Lisans geçersiz: ${license.error}`;
+  return <div className="banner red">{text}{admin && <NavLink className="btn small" to="/ayarlar?sekme=paket">Paket</NavLink>}</div>;
 }
 
 function OfflineBanner() {

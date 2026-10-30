@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { allow, MANAGERS } from '../auth.js';
 import { getSettings } from '../db.js';
+import { requireFeature } from '../license.js';
 import { notifyEnabled, NOTIFY_PROVIDERS, render, sendAppointmentReminder, sendMessage } from '../notify.js';
 import { bad, h, int, notFound, str } from '../util.js';
 
@@ -8,7 +9,10 @@ const money = (k) => `${(k / 100).toLocaleString('tr-TR', { minimumFractionDigit
 
 export default function notifyRoutes(db) {
   const r = Router();
-  const requireProvider = () => { if (!notifyEnabled(db)) throw bad('SMS/WhatsApp kapalı (Ayarlar → SMS & WhatsApp)'); };
+  const requireProvider = () => {
+    requireFeature(db, 'sms');
+    if (!notifyEnabled(db)) throw bad('SMS/WhatsApp kapalı (Ayarlar → SMS & WhatsApp)');
+  };
 
   r.get('/notifications', allow(...MANAGERS), h((req, res) => {
     res.json({
@@ -54,6 +58,7 @@ export default function notifyRoutes(db) {
    * audience: all | debtors | inactive (60 gündür gelmeyen) | dry=1 ile yalnızca sayı döner.
    */
   r.post('/notify/campaign', allow(...MANAGERS), h(async (req, res) => {
+    requireFeature(db, 'campaign');
     const message = str(req.body.message);
     if (!message) throw bad('Mesaj metni gerekli');
     if (message.length > 600) throw bad('Mesaj en fazla 600 karakter olabilir');

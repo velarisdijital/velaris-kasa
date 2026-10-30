@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { emitEvent } from '../db.js';
+import { requireFeature } from '../license.js';
 import { bad, h, int, notFound, str } from '../util.js';
 
 const SELECT = `SELECT a.*, COALESCE(c.name, a.customer_name) AS customer_display, COALESCE(c.phone, a.phone) AS phone_display,
@@ -69,6 +70,7 @@ export default function appointmentRoutes(db) {
   }));
 
   r.post('/appointments', h((req, res) => {
+    requireFeature(db, 'appointments');
     const a = normalize(req.body);
     const c = conflict(a);
     if (c && !req.body.force) return res.status(409).json({ error: `${c.staff_name} için ${c.start_at.slice(11)} saatinde randevu var`, conflict: c });
@@ -82,6 +84,7 @@ export default function appointmentRoutes(db) {
   }));
 
   r.put('/appointments/:id', h((req, res) => {
+    requireFeature(db, 'appointments');
     const existing = db.prepare('SELECT * FROM appointments WHERE id = ?').get(req.params.id);
     if (!existing) throw notFound();
     const a = normalize(req.body, existing);

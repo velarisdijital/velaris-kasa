@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { api, del, get, post, put, registerName, setRegisterName, storage } from '../api.js';
-import { useSession } from '../App.jsx';
+import { useCan, useSession } from '../App.jsx';
 import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
-import { dt, ROLE_LABELS } from '../format.js';
+import { d, dt, ROLE_LABELS } from '../format.js';
 
-const TABS = [['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['sms', 'SMS & WhatsApp'], ['booking', 'Online randevu'], ['invoice', 'e-Fatura'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
+const TABS = [['plan', 'Paket'], ['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['sms', 'SMS & WhatsApp'], ['booking', 'Online randevu'], ['invoice', 'e-Fatura'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
 
 export default function Settings() {
-  const [tab, setTab] = useState('business');
+  const [tab, setTab] = useState(() => (location.hash.includes('sekme=paket') ? 'plan' : 'business'));
   return (
     <div className="page">
       <div className="page-head"><h1>Ayarlar</h1></div>
@@ -15,15 +15,16 @@ export default function Settings() {
         {TABS.map(([k, l]) => <button key={k} className={`tab ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{l}</button>)}
       </div>
       <div style={{ maxWidth: 820 }}>
+        {tab === 'plan' && <Plan />}
         {tab === 'business' && <Business />}
         {tab === 'device' && <Device />}
         {tab === 'users' && <Users />}
-        {tab === 'fiscal' && <Fiscal />}
-        {tab === 'loyalty' && <Loyalty />}
-        {tab === 'sms' && <Sms />}
-        {tab === 'booking' && <BookingSettings />}
-        {tab === 'invoice' && <InvoiceSettings />}
-        {tab === 'crm' && <Crm />}
+        {tab === 'fiscal' && <Locked feature="fiscal"><Fiscal /></Locked>}
+        {tab === 'loyalty' && <Locked feature="loyalty"><Loyalty /></Locked>}
+        {tab === 'sms' && <Locked feature="sms"><Sms /></Locked>}
+        {tab === 'booking' && <Locked feature="booking"><BookingSettings /></Locked>}
+        {tab === 'invoice' && <Locked feature="invoice"><InvoiceSettings /></Locked>}
+        {tab === 'crm' && <Locked feature="crm"><Crm /></Locked>}
         {tab === 'backup' && <Backup />}
       </div>
     </div>
@@ -40,6 +41,83 @@ function useSettingsForm(keys) {
     try { await put('/settings', f); await reloadSettings(); toast.ok('Ayarlar kaydedildi'); } catch (err) { toast.err(err); }
   };
   return { f, set, save };
+}
+
+/** Paket dışı özellik ayarlarının üstünde gösterilen uyarı. */
+function Locked({ feature, children }) {
+  const can = useCan();
+  const { license } = useSession();
+  if (can(feature)) return children;
+  const plan = Object.entries(license?.plans || {}).find(([k, p]) => k !== 'free' && p.features.includes(feature));
+  return (
+    <div className="stack">
+      <div className="card card-pad row wrap" style={{ borderColor: 'var(--accent)' }}>
+        <span style={{ flex: 1 }}><b>{license?.feature_labels?.[feature]}</b> {plan ? `${plan[1].name} paketinde` : 'üst pakette'} yer alıyor. Şu anki paket: {license?.plan_name}.</span>
+      </div>
+      <div style={{ opacity: 0.55, pointerEvents: 'none' }} aria-hidden="true">{children}</div>
+    </div>
+  );
+}
+
+function Plan() {
+  const toast = useToast();
+  const ask = useConfirm();
+  const { license, reloadSettings } = useSession();
+  const [key, setKey] = useState('');
+  if (!license) return null;
+  const activate = async (e) => {
+    e.preventDefault();
+    try { const l = await post('/license', { key }); setKey(''); await reloadSettings(); toast.ok(`${l.plan_name} paketi etkinleştirildi`); } catch (err) { toast.err(err); }
+  };
+  const remove = async () => {
+    if (!(await ask('Lisans kaldırılsın mı? Program Ücretsiz pakete döner.', { ok: 'Kaldır' }))) return;
+    await del('/license'); await reloadSettings();
+  };
+  const order = ['free', 'esnaf', 'salon', 'pro'];
+  const allFeatures = Object.keys(license.feature_labels);
+  const lim = (v, unit) => (v == null ? `Sınırsız ${unit}` : `${v} ${unit}`);
+  return (
+    <div className="stack">
+      <div className="card card-pad stack">
+        <div className="row wrap">
+          <div style={{ flex: 1 }}>
+            <div className="muted small-text">Şu anki paket</div>
+            <h2 style={{ fontSize: 28 }}>{license.plan_name}</h2>
+          </div>
+          <span className={`badge ${license.status === 'active' || license.status === 'demo' ? 'green' : license.status === 'free' ? '' : 'red'}`}>
+            {{ active: 'Etkin', demo: 'Demo', free: 'Lisans yok', grace: 'Süresi doldu (ek süre)', expired: 'Süresi doldu', invalid: 'Geçersiz' }[license.status]}
+          </span>
+        </div>
+        <div className="muted small-text">
+          {license.business && <>Lisans sahibi: <b>{license.business}</b> · </>}
+          {license.exp && <>Bitiş: <b>{d(license.exp)}</b> · </>}
+          {lim(license.limits.registers, 'kasa')} · {lim(license.limits.users, 'kullanıcı')}
+          {license.install_id && <> · Kurulum kimliği: <code>{license.install_id}</code></>}
+        </div>
+        {license.error && <div className="danger-text small-text">{license.error}</div>}
+        <form className="row wrap" onSubmit={activate}>
+          <input className="input" style={{ flex: 1, minWidth: 220, fontFamily: 'monospace' }} placeholder="VK1.… lisans anahtarı" value={key} onChange={(e) => setKey(e.target.value)} aria-label="Lisans anahtarı" />
+          <button className="btn primary" disabled={!key.trim()}>Etkinleştir</button>
+          {license.status !== 'free' && license.status !== 'demo' && <button type="button" className="btn" onClick={remove}>Lisansı kaldır</button>}
+        </form>
+        <small className="muted">Lisans anahtarını Velaris Dijital'den alırsınız. Anahtar internete bağlanmadan doğrulanır.</small>
+      </div>
+      <div className="card table-wrap">
+        <table className="table">
+          <thead><tr><th />{order.map((p) => <th key={p} className="right">{license.plans[p].name}<div className="muted" style={{ textTransform: 'none', letterSpacing: 0 }}>{license.plans[p].price ? `${license.plans[p].price.toLocaleString('tr-TR')} ₺/ay` : 'Ücretsiz'}</div></th>)}</tr></thead>
+          <tbody>
+            <tr><td>Kasa (aynı anda açık)</td>{order.map((p) => <td key={p} className="right">{license.plans[p].limits.registers ?? 'Sınırsız'}</td>)}</tr>
+            <tr><td>Kullanıcı</td>{order.map((p) => <td key={p} className="right">{license.plans[p].limits.users ?? 'Sınırsız'}</td>)}</tr>
+            <tr><td>Satış, stok, veresiye, gün sonu, raporlar</td>{order.map((p) => <td key={p} className="right success-text">✓</td>)}</tr>
+            {allFeatures.map((f) => (
+              <tr key={f}><td>{license.feature_labels[f]}</td>{order.map((p) => <td key={p} className="right">{license.plans[p].features.includes(f) ? <span className="success-text">✓</span> : <span className="muted">—</span>}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <small className="muted">Fiyatlara KDV dahil değildir.</small>
+    </div>
+  );
 }
 
 function Business() {

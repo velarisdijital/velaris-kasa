@@ -8,6 +8,7 @@
 
 import crypto from 'node:crypto';
 import { getSettings } from './db.js';
+import { hasFeature } from './license.js';
 import { phoneTR } from './util.js';
 
 export const NOTIFY_PROVIDERS = {
@@ -102,7 +103,7 @@ const providers = {
 
 export const notifyEnabled = (db) => {
   const p = getSettings(db).notify_provider;
-  return !!p && p !== 'none';
+  return !!p && p !== 'none' && hasFeature(db, 'sms');
 };
 
 /** Şablondaki {alan} yer tutucularını doldurur. */
@@ -189,7 +190,7 @@ export async function sendAppointmentReminder(db, apptId) {
 /** Yaklaşan randevular için hatırlatma gönderir (işçi her dakika çağırır). */
 export async function runReminders(db) {
   const s = getSettings(db);
-  if (s.reminder_enabled !== '1' || !notifyEnabled(db)) return 0;
+  if (s.reminder_enabled !== '1' || !notifyEnabled(db) || !hasFeature(db, 'reminders')) return 0;
   const hours = Math.max(1, Number(s.reminder_hours) || 3);
   const due = db.prepare(`SELECT id FROM appointments WHERE status = 'scheduled' AND reminder_sent_at IS NULL
     AND start_at > strftime('%Y-%m-%d %H:%M', 'now', 'localtime')

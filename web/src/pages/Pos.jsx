@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { get, loadProducts, post, registerName, storage, submitSale, uuid } from '../api.js';
-import { useSession } from '../App.jsx';
+import { useCan, useSession } from '../App.jsx';
 import CameraScanner, { cameraSupported } from '../components/CameraScanner.jsx';
 import { printReceipt } from '../components/Receipt.jsx';
 import { Field, Icon, Modal, useConfirm, useToast } from '../components/ui.jsx';
@@ -361,7 +361,8 @@ export function InvoiceLine({ sale, onUpdate }) {
   const toast = useToast();
   const { settings } = useSession();
   const [busy, setBusy] = useState(false);
-  const enabled = settings.invoice_provider && settings.invoice_provider !== 'none';
+  const can = useCan();
+  const enabled = can('invoice') && settings.invoice_provider && settings.invoice_provider !== 'none';
   const overLimit = sale.total >= Number(settings.invoice_threshold || 1200000);
   if (!sale.id) return null;
   const run = async (path) => {

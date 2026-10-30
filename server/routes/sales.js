@@ -3,6 +3,7 @@ import { allow, MANAGERS } from '../auth.js';
 import { emitEvent, getSetting, nextReceiptNo } from '../db.js';
 import { fiscalEnabled, fiscalRefund, printFiscal } from '../fiscal.js';
 import { createInvoice, refreshInvoice } from '../invoice.js';
+import { hasFeature } from '../license.js';
 import { changeStock, round3 } from '../stock.js';
 import { bad, dateRange, h, int, notFound, num, str, vatOf } from '../util.js';
 import { addCustomerTx, addPointsTx, customerPayload } from './customers.js';
@@ -122,7 +123,7 @@ export default function saleRoutes(db) {
       if ((pays.cash || 0) < change) throw bad('Fazla ödeme yalnızca nakitte olabilir');
       pays.cash -= change;
     }
-    const loyaltyOn = getSetting(db, 'loyalty_enabled') === '1';
+    const loyaltyOn = getSetting(db, 'loyalty_enabled') === '1' && hasFeature(db, 'loyalty');
     if (pays.points) {
       if (!loyaltyOn) throw bad('Puan sistemi kapalı');
       if (!customer) throw bad('Puanla ödeme için müşteri seçmelisiniz');
