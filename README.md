@@ -1,5 +1,7 @@
 # VelarisKasa
 
+![VelarisKasa](brand/logo/velariskasa-light.png)
+
 Bakkal, market, berber/kuaför, kafe/büfe ve her türlü küçük işletme için **stok takip ve kasa (POS) programı**.
 Tek başına çalışır; istenirse **Velaris CRM** ile entegre olur.
 
@@ -25,6 +27,16 @@ Tek başına çalışır; istenirse **Velaris CRM** ile entegre olur.
 - **Kamera ile barkod:** telefon/tablet kamerasıyla okuma; bulunamayan barkod için internetten ürün adı
 - **Bulut kurulumu:** Docker + otomatik HTTPS, şube/kasa bazlı raporlar. Bkz. [docs/BULUT_KURULUM.md](docs/BULUT_KURULUM.md)
 - **Velaris CRM entegrasyonu:** bkz. [docs/VELARIS_ENTEGRASYON.md](docs/VELARIS_ENTEGRASYON.md)
+- **Paketler ve lisans:** Ücretsiz / Esnaf / Salon / Pro; imzalı lisans anahtarı, internetsiz doğrulama.
+  Bkz. [docs/LISANS.md](docs/LISANS.md)
+- **Şube bazlı stok:** kasa→şube eşlemesi, şubeler arası transfer, şube stok raporu (Pro)
+- **İYS'ye otomatik bildirim:** onay/ret kayıtları birkaç dakika içinde İYS API'ye gönderilir
+- **Yazarkasa ara programı (C#):** marka sürücüsü şablonu ve simülatör, `bridge/adapter-dotnet/`
+
+## Marka ve tanıtım
+
+- Marka kiti: [docs/MARKA_KITI.md](docs/MARKA_KITI.md) · tokenlar ve logolar `brand/`
+- Tanıtım sayfası: `landing/page.html` (kaynak) → `node landing/build.mjs` → `landing/public/index.html`
 
 ## Nasıl çalışır?
 

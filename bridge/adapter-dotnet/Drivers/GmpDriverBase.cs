@@ -90,7 +90,7 @@ public abstract class GmpDriverBase(Config config)
     protected int VatGroup(decimal rate)
     {
         var key = decimal.Truncate(rate) == rate ? ((int)rate).ToString() : rate.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return Config.VatGroups.TryGetValue(key, out var g) ? g : throw new OkcException($"%{key} KDV için cihazda grup tanımlı değil (okc.json → vatGroups)");
+        return Config.VatGroups.TryGetValue(key, out var g) ? g : throw new OkcException($"%{key} KDV için cihazda grup tanımlı değil (okc.json → vat_groups)");
     }
 
     protected string PaymentType(string method) =>
