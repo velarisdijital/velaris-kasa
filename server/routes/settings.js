@@ -5,12 +5,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { allow, createApiKey, hashSecret } from '../auth.js';
 import { DEFAULT_SETTINGS, emitEvent, getSettings, setSettings } from '../db.js';
+import { FISCAL_DRIVERS, fiscalStatus } from '../fiscal.js';
 import { flushOutbox, outboxStatus, pullCustomers, sign, testConnection } from '../integrations/velaris.js';
 import { bad, bool, h, int, notFound, num, str } from '../util.js';
 import { upsertCustomerFromCrm } from './customers.js';
 
-const SECRET_KEYS = ['crm_api_key', 'crm_webhook_secret'];
-const ADMIN_ONLY_KEYS = [...SECRET_KEYS, 'crm_base_url', 'install_id'];
+const SECRET_KEYS = ['crm_api_key', 'crm_webhook_secret', 'netgsm_password', 'iletimerkezi_hash', 'whatsapp_token', 'parasut_client_secret', 'parasut_password'];
+const ADMIN_ONLY_KEYS = [...SECRET_KEYS, 'crm_base_url', 'install_id', 'netgsm_usercode', 'iletimerkezi_key', 'whatsapp_phone_id', 'parasut_client_id', 'parasut_username', 'parasut_company_id'];
 
 export default function settingsRoutes(db) {
   const r = Router();
@@ -34,6 +35,9 @@ export default function settingsRoutes(db) {
     setSettings(db, values);
     res.json({ ok: true });
   }));
+
+  // ---- Yazarkasa ----
+  r.get('/fiscal/status', h(async (req, res) => res.json({ ...(await fiscalStatus(db)), drivers: FISCAL_DRIVERS })));
 
   // ---- Kullanıcılar / personel ----
   r.get('/users', h((req, res) => {

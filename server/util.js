@@ -35,6 +35,14 @@ export const bool = (v) => (v === true || v === 1 || v === '1' || v === 'true' ?
 /** KDV dahil tutardan KDV payını hesaplar (kuruş). */
 export const vatOf = (gross, rate) => Math.round(gross - gross / (1 + rate / 100));
 
+/** Türkiye cep telefonu → "905xxxxxxxxx". Geçersizse null. */
+export function phoneTR(v) {
+  let d = String(v ?? '').replace(/\D/g, '');
+  if (d.startsWith('90')) d = d.slice(2);
+  if (d.startsWith('0')) d = d.slice(1);
+  return /^5\d{9}$/.test(d) ? `90${d}` : null;
+}
+
 export function pick(obj, keys) {
   const out = {};
   for (const k of keys) if (obj[k] !== undefined) out[k] = obj[k];

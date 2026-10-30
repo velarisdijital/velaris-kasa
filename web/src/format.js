@@ -31,5 +31,6 @@ export const nowSql = () => new Date().toLocaleString('sv-SE').slice(0, 19);
 export const dt = (s) => (s ? new Date(s.replace(' ', 'T')).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' }) : '');
 export const d = (s) => (s ? new Date(`${s.slice(0, 10)}T00:00`).toLocaleDateString('tr-TR') : '');
 
-export const METHOD_LABELS = { cash: 'Nakit', card: 'Kart', credit: 'Veresiye', transfer: 'Havale/EFT' };
+export const METHOD_LABELS = { cash: 'Nakit', card: 'Kart', credit: 'Veresiye', transfer: 'Havale/EFT', points: 'Puan' };
+export const FISCAL_LABELS = { none: ['Bilgi fişi', ''], pending: ['Yazarkasada', 'yellow'], done: ['Mali fiş', 'green'], failed: ['Mali fiş basılamadı', 'red'] };
 export const ROLE_LABELS = { admin: 'Yönetici', manager: 'Müdür', cashier: 'Kasiyer', staff: 'Personel' };

@@ -3,7 +3,8 @@ import { get, post, registerName } from '../api.js';
 import { useSession } from '../App.jsx';
 import { printReceipt } from '../components/Receipt.jsx';
 import { Icon, Modal, useLoad, useToast } from '../components/ui.jsx';
-import { dt, METHOD_LABELS, money, parseQty, plain, qty, today } from '../format.js';
+import { dt, FISCAL_LABELS, METHOD_LABELS, money, parseQty, plain, qty, today } from '../format.js';
+import { FiscalLine } from './Pos.jsx';
 
 const STATUS = { completed: ['Tamamlandı', 'green'], partial_refund: ['Kısmi iade', 'yellow'], refunded: ['İade edildi', 'red'] };
 
@@ -28,7 +29,7 @@ export default function Sales() {
       </div>
       <div className="card table-wrap">
         <table className="table">
-          <thead><tr><th>Fiş No</th><th>Tarih</th><th>Müşteri</th><th>Kasiyer</th><th>Ödeme</th><th>Durum</th><th className="right">Tutar</th></tr></thead>
+          <thead><tr><th>Fiş No</th><th>Tarih</th><th>Müşteri</th><th>Kasiyer</th><th>Ödeme</th><th>Durum</th><th>Fiş</th><th className="right">Tutar</th></tr></thead>
           <tbody>
             {rows.map((s) => (
               <tr key={s.id} className="clickable" onClick={() => setOpen(s.id)}>
@@ -38,6 +39,7 @@ export default function Sales() {
                 <td>{s.user_name}</td>
                 <td>{(s.methods || '').split(',').filter(Boolean).map((m) => METHOD_LABELS[m]).join(' + ')}</td>
                 <td><span className={`badge ${STATUS[s.status][1]}`}>{STATUS[s.status][0]}</span></td>
+                <td>{s.fiscal_status && s.fiscal_status !== 'none' ? <span className={`badge ${FISCAL_LABELS[s.fiscal_status][1]}`}>{s.fiscal_status === 'done' ? `No ${s.fiscal_no}` : FISCAL_LABELS[s.fiscal_status][0]}</span> : <span className="muted small-text">Bilgi fişi</span>}</td>
                 <td className="right num"><strong>{money(s.total)}</strong>{s.refunded_total > 0 && <div className="danger-text small-text">−{money(s.refunded_total)}</div>}</td>
               </tr>
             ))}
@@ -68,6 +70,8 @@ function SaleDetail({ id, onClose }) {
           <span>{dt(s.created_at)}</span>·<span>{s.register_name}</span>·<span>Kasiyer: {s.user_name}</span>
           {s.customer_name && <><span>·</span><span>Müşteri: <b>{s.customer_name}</b></span></>}
         </div>
+        <FiscalLine sale={s} onUpdate={() => sale.reload()} />
+        {s.points_earned > 0 && <div className="small-text success-text">Bu satıştan {money(s.points_earned)} puan kazanıldı</div>}
         <div className="table-wrap">
           <table className="table">
             <thead><tr><th>Ürün</th><th className="right">Miktar</th><th className="right">Fiyat</th><th className="right">KDV</th><th className="right">Tutar</th></tr></thead>
@@ -112,11 +116,11 @@ function RefundModal({ sale, onClose, onDone }) {
   const [note, setNote] = useState('');
   const run = async () => {
     try {
-      await post(`/sales/${sale.id}/refund`, {
+      const res = await post(`/sales/${sale.id}/refund`, {
         items: items.map((i) => ({ sale_item_id: i.id, qty: parseQty(q[i.id]) })).filter((x) => x.qty > 0),
         method, note, register_name: registerName(),
       });
-      toast.ok('İade yapıldı, stok geri eklendi');
+      if (res.fiscal_warning) toast.err(res.fiscal_warning); else toast.ok('İade yapıldı, stok geri eklendi');
       onDone();
     } catch (err) { toast.err(err); }
   };
@@ -130,8 +134,8 @@ function RefundModal({ sale, onClose, onDone }) {
           </div>
         ))}
         <div className="tabs">
-          {['cash', 'card', 'transfer', ...(sale.customer_id ? ['credit'] : [])].map((m) =>
-            <button key={m} className={`tab ${method === m ? 'active' : ''}`} onClick={() => setMethod(m)}>{m === 'credit' ? 'Veresiyeden düş' : METHOD_LABELS[m]}</button>)}
+          {['cash', 'card', 'transfer', ...(sale.customer_id ? ['credit', 'points'] : [])].map((m) =>
+            <button key={m} className={`tab ${method === m ? 'active' : ''}`} onClick={() => setMethod(m)}>{m === 'credit' ? 'Veresiyeden düş' : m === 'points' ? 'Puan olarak' : METHOD_LABELS[m]}</button>)}
         </div>
         <input className="input" placeholder="İade nedeni" value={note} onChange={(e) => setNote(e.target.value)} />
       </div>

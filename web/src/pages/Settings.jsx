@@ -4,7 +4,7 @@ import { useSession } from '../App.jsx';
 import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, ROLE_LABELS } from '../format.js';
 
-const TABS = [['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
+const TABS = [['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
 
 export default function Settings() {
   const [tab, setTab] = useState('business');
@@ -18,6 +18,8 @@ export default function Settings() {
         {tab === 'business' && <Business />}
         {tab === 'device' && <Device />}
         {tab === 'users' && <Users />}
+        {tab === 'fiscal' && <Fiscal />}
+        {tab === 'loyalty' && <Loyalty />}
         {tab === 'crm' && <Crm />}
         {tab === 'backup' && <Backup />}
       </div>
@@ -60,6 +62,64 @@ function Business() {
       </div>
       <label className="check"><input type="checkbox" checked={f.allow_negative_stock === '1'} onChange={set('allow_negative_stock')} /> Stok yetersizken de satışa izin ver (eksi stok)</label>
       <label className="check"><input type="checkbox" checked={f.modules_appointments === '1'} onChange={set('modules_appointments')} /> Randevu modülünü aç (berber, kuaför, güzellik vb.)</label>
+      <div><button className="btn primary">Kaydet</button></div>
+    </form>
+  );
+}
+
+function Fiscal() {
+  const toast = useToast();
+  const { f, set, save } = useSettingsForm(['fiscal_driver', 'fiscal_auto', 'fiscal_bridge_url']);
+  const [status, setStatus] = useState(null);
+  const test = async () => {
+    await save();
+    const s = await get('/fiscal/status').catch((e) => ({ ok: false, message: e.message }));
+    setStatus(s);
+    if (s.ok) toast.ok(`Yazarkasa hazır${s.device ? `: ${s.device}` : ''}`); else toast.err(s.message);
+  };
+  return (
+    <form className="card card-pad stack" onSubmit={save}>
+      <h2>Yazarkasa (yeni nesil ÖKC)</h2>
+      <p className="muted">Gerçek usulde vergilendirilen işletmeler satışları yazarkasadan mali fişle kaydetmek zorundadır. Velaris Kasa satışı yazarkasaya gönderir, kart ödemesi yazarkasaya bağlı POS'tan alınır ve mali fiş numarası satışa işlenir. Basit usul ve esnaf muaflığındaki işletmeler "Yazarkasa yok" seçeneğiyle bilgi fişi kullanabilir.</p>
+      <Field label="Bağlantı">
+        <select className="input" value={f.fiscal_driver} onChange={set('fiscal_driver')}>
+          <option value="none">Yazarkasa yok (bilgi fişi)</option>
+          <option value="bridge">Yazarkasa köprüsü (Beko/Token, Hugin, Ingenico, Pavo …)</option>
+          <option value="simulator">Simülatör (cihazsız deneme)</option>
+        </select>
+      </Field>
+      {f.fiscal_driver === 'bridge' && (
+        <Field label="Köprü adresi" hint="Kasa bilgisayarında çalışan Velaris yazarkasa köprüsünün adresi">
+          <input className="input" value={f.fiscal_bridge_url} onChange={set('fiscal_bridge_url')} placeholder="http://127.0.0.1:4850" />
+        </Field>
+      )}
+      {f.fiscal_driver !== 'none' && (
+        <label className="check"><input type="checkbox" checked={f.fiscal_auto === '1'} onChange={set('fiscal_auto')} /> Her satışta mali fişi otomatik bas</label>
+      )}
+      {status && <div className={status.ok ? 'success-text' : 'danger-text'}>{status.ok ? '✓ ' : '✗ '}{status.device ? `${status.device} — ` : ''}{status.message}</div>}
+      <div className="row wrap">
+        <button className="btn primary">Kaydet</button>
+        {f.fiscal_driver !== 'none' && <button type="button" className="btn" onClick={test}>Bağlantıyı test et</button>}
+      </div>
+      <div className="muted small-text">
+        Gün sonunda (Z raporu) yazarkasanın Z raporu da otomatik alınır. Cihaz yanıt vermezse satış kaydedilir ve Satışlar ekranında "Yazarkasaya tekrar gönder" çıkar.
+      </div>
+    </form>
+  );
+}
+
+function Loyalty() {
+  const { f, set, save } = useSettingsForm(['loyalty_enabled', 'loyalty_rate']);
+  const example = Math.floor((10000 * Number(f.loyalty_rate || 0)) / 100);
+  return (
+    <form className="card card-pad stack" onSubmit={save}>
+      <h2>Puan (para puan)</h2>
+      <p className="muted">Kayıtlı müşteriler her alışverişte ödedikleri tutarın belirli bir yüzdesini puan olarak kazanır; puanlarını sonraki alışverişlerde kasada ödeme olarak kullanabilir. 1 puan = 1 kuruş.</p>
+      <label className="check"><input type="checkbox" checked={f.loyalty_enabled === '1'} onChange={set('loyalty_enabled')} /> <b>Puan sistemini aç</b></label>
+      <Field label="Kazanma oranı (%)" hint={`Örnek: 100 TL'lik alışverişte ${(example / 100).toFixed(2).replace('.', ',')} TL puan`}>
+        <input className="input" inputMode="decimal" style={{ maxWidth: 160 }} value={f.loyalty_rate} onChange={set('loyalty_rate')} />
+      </Field>
+      <div className="muted small-text">Veresiye ve puanla ödenen kısımdan puan kazanılmaz. İade edilen satışta kazanılan puan geri alınır.</div>
       <div><button className="btn primary">Kaydet</button></div>
     </form>
   );

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { allow, MANAGERS } from '../auth.js';
 import { emitEvent } from '../db.js';
+import { fiscalEnabled, fiscalZReport } from '../fiscal.js';
 import { bad, h, int, notFound, str } from '../util.js';
 
 const regName = (v) => str(v) || 'Kasa 1';
@@ -87,7 +88,7 @@ export default function shiftRoutes(db) {
   }));
 
   /** Gün sonu (Z raporu). body: { counted_cash, note } */
-  r.post('/shifts/:id/close', allow(...MANAGERS, 'cashier'), h((req, res) => {
+  r.post('/shifts/:id/close', allow(...MANAGERS, 'cashier'), h(async (req, res) => {
     const shift = get(req.params.id);
     if (!shift || shift.closed_at) throw bad('Açık kasa bulunamadı');
     const counted = int(req.body.counted_cash, NaN);
@@ -104,7 +105,16 @@ export default function shiftRoutes(db) {
       });
       return summary;
     })();
-    res.json(summary);
+    // Yazarkasada da gün sonu (Z raporu) alınsın
+    let fiscal_z = null;
+    if (req.body.fiscal_z !== false && fiscalEnabled(db)) {
+      try {
+        fiscal_z = { ok: true, ...(await fiscalZReport(db)) };
+      } catch (e) {
+        fiscal_z = { ok: false, message: `Yazarkasa Z raporu alınamadı: ${e.message}. Cihazdan elle alın.` };
+      }
+    }
+    res.json({ ...summary, fiscal_z });
   }));
 
   return r;

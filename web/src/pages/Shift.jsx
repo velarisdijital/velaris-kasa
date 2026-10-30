@@ -121,7 +121,12 @@ function CloseModal({ s, onClose, onDone }) {
   const save = async (e) => {
     e.preventDefault();
     if (!(await ask('Gün kapatılsın mı? Bu işlem geri alınamaz.', { ok: 'Günü kapat', danger: false }))) return;
-    try { onDone(await post(`/shifts/${s.shift.id}/close`, { counted_cash: toKurus(counted), note })); toast.ok('Gün kapatıldı'); } catch (err) { toast.err(err); }
+    try {
+      const z = await post(`/shifts/${s.shift.id}/close`, { counted_cash: toKurus(counted), note });
+      onDone(z);
+      if (z.fiscal_z && !z.fiscal_z.ok) toast.err(z.fiscal_z.message);
+      else toast.ok(z.fiscal_z ? 'Gün kapatıldı, yazarkasa Z raporu alındı' : 'Gün kapatıldı');
+    } catch (err) { toast.err(err); }
   };
   return (
     <Modal title="Günü kapat" onClose={onClose} footer={<button className="btn primary" form="zc">Kapat ve Z raporu al</button>}>

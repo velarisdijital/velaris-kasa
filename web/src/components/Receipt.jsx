@@ -42,6 +42,9 @@ export function Receipt({ sale, settings, change = 0 }) {
       ))}
       {change > 0 && <div className="r"><span>Para Üstü</span><span>{plain(change)}</span></div>}
       {sale.customer_balance > 0 && <div className="r"><span>Güncel Borç</span><span>{plain(sale.customer_balance)}</span></div>}
+      {sale.points_earned > 0 && <div className="r"><span>Kazanılan puan</span><span>{plain(sale.points_earned)}</span></div>}
+      {sale.customer_points > 0 && <div className="r"><span>Toplam puan</span><span>{plain(sale.customer_points)}</span></div>}
+      {sale.fiscal_status === 'done' && <div className="r"><span>Mali fiş no</span><span>{sale.fiscal_no}</span></div>}
       <hr />
       {settings.receipt_footer && <div className="c">{settings.receipt_footer}</div>}
       <div className="c" style={{ fontSize: 10, marginTop: 6 }}>Bilgi fişidir. Mali değeri yoktur.</div>

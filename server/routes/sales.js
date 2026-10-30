@@ -1,16 +1,17 @@
 import { Router } from 'express';
 import { allow, MANAGERS } from '../auth.js';
 import { emitEvent, getSetting, nextReceiptNo } from '../db.js';
+import { fiscalEnabled, fiscalRefund, printFiscal } from '../fiscal.js';
 import { changeStock, round3 } from '../stock.js';
 import { bad, dateRange, h, int, notFound, num, str, vatOf } from '../util.js';
-import { addCustomerTx, customerPayload } from './customers.js';
+import { addCustomerTx, addPointsTx, customerPayload } from './customers.js';
 import { openShiftFor } from './shifts.js';
 
-const METHODS = ['cash', 'card', 'credit', 'transfer'];
+const METHODS = ['cash', 'card', 'credit', 'transfer', 'points'];
 
 export function loadSale(db, id) {
   const sale = db.prepare(`SELECT s.*, u.name AS user_name, c.name AS customer_name, c.phone AS customer_phone,
-      c.crm_id AS customer_crm_id, c.balance AS customer_balance
+      c.crm_id AS customer_crm_id, c.balance AS customer_balance, c.points AS customer_points, c.tax_number AS customer_tax_number
     FROM sales s LEFT JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id WHERE s.id = ?`).get(id);
   if (!sale) return null;
   sale.items = db.prepare(`SELECT i.*, u.name AS staff_name, p.barcode, p.crm_id AS product_crm_id FROM sale_items i
@@ -52,6 +53,8 @@ const salePayload = (sale) => ({
     line_total: i.line_total, staff: i.staff_id ? { id: i.staff_id, name: i.staff_name } : null,
   })),
   payments: sale.payments,
+  points_earned: sale.points_earned,
+  fiscal: { status: sale.fiscal_status, fiscal_no: sale.fiscal_no, z_no: sale.fiscal_z_no },
 });
 
 export default function saleRoutes(db) {
@@ -64,7 +67,7 @@ export default function saleRoutes(db) {
    *         payments: [{ method, amount }] }
    * Tutarlar kuruş. Nakitte fazla ödeme para üstü olarak düşülür.
    */
-  r.post('/sales', h((req, res) => {
+  r.post('/sales', h(async (req, res) => {
     const b = req.body || {};
     if (b.client_uuid) {
       const dup = db.prepare('SELECT id FROM sales WHERE client_uuid = ?').get(String(b.client_uuid));
@@ -118,6 +121,16 @@ export default function saleRoutes(db) {
       if ((pays.cash || 0) < change) throw bad('Fazla ödeme yalnızca nakitte olabilir');
       pays.cash -= change;
     }
+    const loyaltyOn = getSetting(db, 'loyalty_enabled') === '1';
+    if (pays.points) {
+      if (!loyaltyOn) throw bad('Puan sistemi kapalı');
+      if (!customer) throw bad('Puanla ödeme için müşteri seçmelisiniz');
+      if (customer.points < pays.points) throw bad(`Yetersiz puan (mevcut ${(customer.points / 100).toFixed(2)} ₺)`);
+    }
+    // Puan, nakit/kart/havale ile ödenen kısımdan kazanılır (veresiye ve puanla ödenen kısım hariç)
+    const pointsEarned = loyaltyOn && customer
+      ? Math.floor(((total - (pays.credit || 0) - (pays.points || 0)) * Number(getSetting(db, 'loyalty_rate') || 0)) / 100)
+      : 0;
     if (pays.credit) {
       if (!customer) throw bad('Veresiye için müşteri seçmelisiniz');
       if (customer.credit_limit > 0 && customer.balance + pays.credit > customer.credit_limit) {
@@ -156,6 +169,11 @@ export default function saleRoutes(db) {
       if (pays.credit) {
         addCustomerTx(db, customer.id, 'debt', pays.credit, { saleId, userId: req.user.id, note: 'Veresiye satış' });
       }
+      if (pays.points) addPointsTx(db, customer.id, 'redeem', -pays.points, { saleId, userId: req.user.id, note: 'Puanla ödeme' });
+      if (pointsEarned > 0) {
+        addPointsTx(db, customer.id, 'earn', pointsEarned, { saleId, userId: req.user.id });
+        db.prepare('UPDATE sales SET points_earned = ? WHERE id = ?').run(pointsEarned, saleId);
+      }
       if (b.appointment_id) {
         db.prepare("UPDATE appointments SET status = 'done', sale_id = ? WHERE id = ?").run(saleId, int(b.appointment_id));
       }
@@ -165,7 +183,17 @@ export default function saleRoutes(db) {
       return saleId;
     })();
 
+    if (fiscalEnabled(db) && getSetting(db, 'fiscal_auto') === '1') await printFiscal(db, saleId, loadSale);
     res.status(201).json({ ...loadSale(db, saleId), change });
+  }));
+
+  /** Mali fişi (yeniden) yazarkasaya gönderir. */
+  r.post('/sales/:id/fiscal', h(async (req, res) => {
+    const sale = loadSale(db, req.params.id);
+    if (!sale) throw notFound();
+    if (!fiscalEnabled(db)) throw bad('Yazarkasa bağlı değil (Ayarlar → Yazarkasa)');
+    if (sale.fiscal_status === 'done') throw bad(`Bu satışın mali fişi zaten basıldı (No ${sale.fiscal_no})`);
+    res.json(await printFiscal(db, sale.id, loadSale));
   }));
 
   r.get('/sales', h((req, res) => {
@@ -193,7 +221,7 @@ export default function saleRoutes(db) {
    * İade. body: { items: [{ sale_item_id, qty }], method?, note?, register_name? }
    * items verilmezse tüm kalan ürünler iade edilir. Stok geri eklenir.
    */
-  r.post('/sales/:id/refund', allow(...MANAGERS, 'cashier'), h((req, res) => {
+  r.post('/sales/:id/refund', allow(...MANAGERS, 'cashier'), h(async (req, res) => {
     const sale = loadSale(db, req.params.id);
     if (!sale) throw notFound();
     if (sale.status === 'refunded') throw bad('Bu satış zaten tamamen iade edilmiş');
@@ -220,7 +248,7 @@ export default function saleRoutes(db) {
 
     const mainMethod = [...sale.payments].sort((a, b) => b.amount - a.amount)[0]?.method || 'cash';
     const method = METHODS.includes(req.body.method) ? req.body.method : mainMethod;
-    if (method === 'credit' && !sale.customer_id) throw bad('Veresiye iadesi için satışta müşteri olmalı');
+    if ((method === 'credit' || method === 'points') && !sale.customer_id) throw bad('Bu iade yöntemi için satışta müşteri olmalı');
 
     db.transaction(() => {
       const shift = openShiftFor(db, req.body.register_name || sale.register_name);
@@ -238,12 +266,28 @@ export default function saleRoutes(db) {
       if (method === 'credit') {
         addCustomerTx(db, sale.customer_id, 'adjust', -amount, { saleId: sale.id, userId: req.user.id, note: `İade ${sale.receipt_no}` });
       }
+      if (method === 'points') addPointsTx(db, sale.customer_id, 'refund', amount, { saleId: sale.id, userId: req.user.id, note: `İade ${sale.receipt_no}` });
+      // İade edilen kısım için kazanılmış puan geri alınır
+      if (sale.points_earned && sale.customer_id && sale.total) {
+        const back = Math.round((sale.points_earned * amount) / sale.total);
+        if (back) addPointsTx(db, sale.customer_id, 'refund', -back, { saleId: sale.id, userId: req.user.id, note: `İade ${sale.receipt_no} (kazanılan puan)` });
+      }
       emitEvent(db, 'sale.refunded', {
         sale: salePayload(loadSale(db, sale.id)), amount, method,
         items: lines.map((l) => ({ name: l.item.name, product_id: l.item.product_id, qty: l.qty, amount: l.amount })),
       });
     })();
-    res.json(loadSale(db, sale.id));
+    // Mali fişi basılmış satışta yazarkasaya iade bildirimi (köprü destekliyorsa)
+    let fiscal_warning = null;
+    if (sale.fiscal_status === 'done' && fiscalEnabled(db)) {
+      try {
+        await fiscalRefund(db, { sale_id: sale.id, receipt_no: sale.receipt_no, fiscal_no: sale.fiscal_no, amount, method,
+          items: lines.map((l) => ({ name: l.item.name, qty: l.qty, amount: l.amount, vat_rate: l.item.vat_rate })) });
+      } catch (e) {
+        fiscal_warning = `Yazarkasaya iade bildirilemedi: ${e.message}. İade için gider pusulası / iade faturası düzenleyin.`;
+      }
+    }
+    res.json({ ...loadSale(db, sale.id), fiscal_warning });
   }));
 
   return r;

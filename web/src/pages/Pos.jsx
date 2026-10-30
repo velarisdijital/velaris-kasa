@@ -147,6 +147,7 @@ export default function Pos() {
         : sale;
       setLastSale({ sale: printable, change });
       if (sale.offline) toast('Çevrimdışı: satış kaydedildi, bağlantı gelince gönderilecek');
+      else if (sale.fiscal_status === 'failed') toast.err(`Satış kaydedildi ama mali fiş basılamadı: ${sale.fiscal_error}`);
       else toast.ok(change > 0 ? `Satış tamam — Para üstü ${money(change)}` : 'Satış tamamlandı');
       if (storage.get('vk_autoprint', false)) printReceipt(printable, settings, change);
       clearCart();
@@ -243,7 +244,9 @@ export default function Pos() {
         <div className="cart-head">
           <button className="btn small" onClick={() => setModal({ type: 'customer' })} title="F8" style={{ flex: 1, justifyContent: 'flex-start' }}>
             <Icon name="user" />
-            {customer ? <span>{customer.name}{customer.balance > 0 && <span className="badge red" style={{ marginLeft: 6 }}>Borç {money(customer.balance)}</span>}</span> : <span className="muted">Müşteri seç <span className="kbd">F8</span></span>}
+            {customer ? <span>{customer.name}{customer.balance > 0 && <span className="badge red" style={{ marginLeft: 6 }}>Borç {money(customer.balance)}</span>}
+              {settings.loyalty_enabled === '1' && customer.points > 0 && <span className="badge green" style={{ marginLeft: 6 }}>Puan {money(customer.points)}</span>}</span>
+              : <span className="muted">Müşteri seç <span className="kbd">F8</span></span>}
           </button>
           {customer && <button className="btn small ghost" onClick={() => setCustomer(null)} aria-label="Müşteriyi kaldır"><Icon name="x" /></button>}
           <button className="btn small" onClick={holdCart} disabled={!cart.length} title="Sepeti beklet"><Icon name="pause" /></button>
@@ -283,6 +286,8 @@ export default function Pos() {
               {lastSale && (
                 <div className="card card-pad stack" style={{ textAlign: 'left', marginTop: 12 }}>
                   <div className="row"><strong style={{ flex: 1 }}>Son satış {lastSale.sale.receipt_no}</strong><strong>{money(lastSale.sale.total)}</strong></div>
+                  <FiscalLine sale={lastSale.sale} onUpdate={(s) => setLastSale({ ...lastSale, sale: s })} />
+                  {lastSale.sale.points_earned > 0 && <div className="success-text small-text">Müşteri {money(lastSale.sale.points_earned)} puan kazandı</div>}
                   {lastSale.change > 0 && <div className="change-box">Para üstü: {money(lastSale.change)}</div>}
                   <button className="btn" onClick={() => printReceipt(lastSale.sale, settings, lastSale.change)}><Icon name="print" /> Fiş yazdır</button>
                 </div>
@@ -348,6 +353,28 @@ export default function Pos() {
 }
 
 // ---------------------------------------------------------------------------
+
+/** Satışın mali fiş durumu; basılamadıysa "Tekrar gönder" düğmesi. */
+export function FiscalLine({ sale, onUpdate }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  if (!sale.fiscal_status || sale.fiscal_status === 'none') return null;
+  const retry = async () => {
+    setBusy(true);
+    try {
+      const s = await post(`/sales/${sale.id}/fiscal`);
+      onUpdate?.(s);
+      if (s.fiscal_status === 'done') toast.ok(`Mali fiş basıldı (No ${s.fiscal_no})`); else toast.err(s.fiscal_error);
+    } catch (e) { toast.err(e); } finally { setBusy(false); }
+  };
+  if (sale.fiscal_status === 'done') return <div className="small-text success-text">✓ Mali fiş No {sale.fiscal_no}{sale.fiscal_z_no ? ` · Z ${sale.fiscal_z_no}` : ''}</div>;
+  return (
+    <div className="row wrap small-text danger-text">
+      <span style={{ flex: 1 }}>{sale.fiscal_status === 'pending' ? 'Yazarkasaya gönderiliyor…' : `Mali fiş basılamadı: ${sale.fiscal_error || ''}`}</span>
+      <button className="btn small" disabled={busy} onClick={retry}>{busy ? 'Gönderiliyor…' : 'Yazarkasaya tekrar gönder'}</button>
+    </div>
+  );
+}
 
 function ScanBox({ inputRef, products, onScan, onPick }) {
   const [text, setText] = useState('');
@@ -448,7 +475,8 @@ function SplitModal({ total, customer, onPay, onClose, busy }) {
   const paid = Object.values(amounts).reduce((a, b) => a + b, 0);
   const remaining = total - paid;
   const fill = (k) => setVals({ ...vals, [k]: toInput(Math.max(0, amounts[k] + remaining)) });
-  const methods = ['cash', 'card', 'transfer', ...(customer ? ['credit'] : [])];
+  const { settings } = useSession();
+  const methods = ['cash', 'card', 'transfer', ...(customer ? ['credit'] : []), ...(customer && settings.loyalty_enabled === '1' && customer.points > 0 ? ['points'] : [])];
   return (
     <Modal title="Parçalı ödeme" onClose={onClose}
       footer={<><button className="btn" onClick={onClose}>Vazgeç</button>
