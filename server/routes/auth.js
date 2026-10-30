@@ -37,7 +37,7 @@ export function publicRoutes(db) {
         modules_appointments: BUSINESS_TYPES[business_type].appointments ? '1' : '0',
         setup_done: '1',
       });
-      const userId = db.prepare("INSERT INTO users (name, pin_hash, role, color) VALUES (?, ?, 'admin', '#2563eb')")
+      const userId = db.prepare("INSERT INTO users (name, pin_hash, role, color) VALUES (?, ?, 'admin', '#7B5CFF')")
         .run(str(admin_name), hashSecret(admin_pin)).lastInsertRowid;
       if (seed_samples) seedPreset(db, business_type);
       return userId;

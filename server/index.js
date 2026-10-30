@@ -10,7 +10,7 @@ const dataDir = process.env.VELARIS_DATA_DIR || path.join(__dirname, '..', 'data
 
 const { app, close } = createApp({ dataDir });
 const server = app.listen(port, host, () => {
-  console.log(`Velaris Kasa çalışıyor → http://localhost:${port}`);
+  console.log(`VelarisKasa çalışıyor → http://localhost:${port}`);
   for (const addrs of Object.values(os.networkInterfaces())) {
     for (const a of addrs || []) {
       if (a.family === 'IPv4' && !a.internal) console.log(`  Ağdaki diğer kasalar için → http://${a.address}:${port}`);

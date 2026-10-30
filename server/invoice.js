@@ -91,7 +91,7 @@ async function parasutCreate(db, sale, customer) {
   const invoice = await parasut(db, 'POST', '/sales_invoices', {
     data: {
       type: 'sales_invoices',
-      attributes: { item_type: 'invoice', description: `Velaris Kasa fiş ${sale.receipt_no}`, issue_date: date, due_date: date, currency: 'TRL' },
+      attributes: { item_type: 'invoice', description: `VelarisKasa fiş ${sale.receipt_no}`, issue_date: date, due_date: date, currency: 'TRL' },
       relationships: {
         contact: { data: { id: contact.data.id, type: 'contacts' } },
         details: {

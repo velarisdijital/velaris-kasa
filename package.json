@@ -1,13 +1,14 @@
 {
   "name": "velaris-kasa",
   "version": "1.0.0",
-  "description": "Velaris Kasa - Stok takip ve kasa (POS) programı. Tek başına ya da Velaris CRM ile entegre çalışır.",
+  "description": "VelarisKasa - Stok takip ve kasa (POS) programı. Tek başına ya da Velaris CRM ile entegre çalışır.",
   "type": "module",
   "main": "electron/main.cjs",
   "author": "Velaris Dijital",
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@fontsource/archivo": "^5.3.0",
     "better-sqlite3": "^13.0.3",
     "express": "^5.3.0"
   },
@@ -18,6 +19,7 @@
     "concurrently": "^10.0.6",
     "electron": "^45.2.0",
     "electron-builder": "^26.18.0",
+    "opentype.js": "^1.3.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.5",
@@ -36,8 +38,8 @@
     "demo:build": "node scripts/build-demo.mjs"
   },
   "build": {
-    "appId": "com.velarisdijital.kasa",
-    "productName": "Velaris Kasa",
+    "appId": "com.velarisdijital.velariskasa",
+    "productName": "VelarisKasa",
     "copyright": "Velaris Dijital",
     "directories": {
       "output": "release"
@@ -67,7 +69,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Velaris Kasa",
+      "shortcutName": "VelarisKasa",
       "language": "1055"
     },
     "linux": {

@@ -1,4 +1,4 @@
-# Velaris Kasa — bulut / sunucu kurulumu
+# VelarisKasa — bulut / sunucu kurulumu
 # docker build -t velaris-kasa .   ·   docker run -p 4848:4848 -v velaris-data:/data velaris-kasa
 
 FROM node:22-bookworm-slim AS build

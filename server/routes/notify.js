@@ -21,7 +21,7 @@ export default function notifyRoutes(db) {
 
   r.post('/notify/test', allow(), h(async (req, res) => {
     requireProvider();
-    const msg = await sendMessage(db, { phone: req.body.phone, kind: 'test', body: str(req.body.message) || `${getSettings(db).business_name}: Velaris Kasa deneme mesajı.` });
+    const msg = await sendMessage(db, { phone: req.body.phone, kind: 'test', body: str(req.body.message) || `${getSettings(db).business_name}: VelarisKasa deneme mesajı.` });
     if (msg.status !== 'sent') throw bad(msg.error || 'Gönderilemedi');
     res.json(msg);
   }));

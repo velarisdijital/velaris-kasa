@@ -19,5 +19,5 @@ export default defineConfig({
       { find: /^node:(fs|path|os|url)$/, replacement: shim('node.js') },
     ],
   },
-  build: { outDir: '../dist-demo', emptyOutDir: true, chunkSizeWarningLimit: 4000, rollupOptions: { output: { codeSplitting: false } } },
+  build: { outDir: '../dist-demo', emptyOutDir: true, chunkSizeWarningLimit: 4000, assetsInlineLimit: 400_000, rollupOptions: { output: { codeSplitting: false } } },
 });

@@ -8,7 +8,7 @@ const dir = 'dist-demo/assets';
 const read = (ext) => fs.readFileSync(path.join(dir, fs.readdirSync(dir).find((f) => f.endsWith(ext))), 'utf8');
 const js = read('.js').replace(/<\/script/g, '<\\/script');
 const html = `<meta charset="utf-8">
-<title>Velaris Kasa</title>
+<title>VelarisKasa</title>
 <meta name="theme-color" content="#1d4ed8">
 <style>
 ${read('.css')}

@@ -15,7 +15,7 @@ function Shell({ business, children }) {
         {business && <div className="muted small-text">{[business.address, business.phone].filter(Boolean).join(' · ')}</div>}
       </header>
       <main className="booking-body">{children}</main>
-      <footer className="muted small-text booking-foot">Velaris Kasa ile online randevu</footer>
+      <footer className="muted small-text booking-foot">VelarisKasa ile online randevu</footer>
     </div>
   );
 }

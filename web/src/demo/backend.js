@@ -143,7 +143,7 @@ async function seedData(type) {
     staff.push(await call('POST', '/users', { name: 'Emre', role: 'staff', pin: '2222', commission_rate: 40, color: '#db2777' }, T));
     staff.push(await call('POST', '/users', { name: 'Kerem', role: 'staff', pin: '3333', commission_rate: 35, color: '#16a34a' }, T));
   } else {
-    await call('POST', '/users', { name: 'Ayşe', role: 'cashier', pin: '0000', color: '#9333ea' }, T);
+    await call('POST', '/users', { name: 'Ayşe', role: 'cashier', pin: '0000', color: '#FF4D1A' }, T);
     const cats = await call('GET', '/categories', null, T);
     const cat = (n) => cats.find((c) => c.name === n)?.id;
     for (const p of [

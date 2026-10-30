@@ -83,7 +83,7 @@ function Fiscal() {
   return (
     <form className="card card-pad stack" onSubmit={save}>
       <h2>Yazarkasa (yeni nesil ÖKC)</h2>
-      <p className="muted">Gerçek usulde vergilendirilen işletmeler satışları yazarkasadan mali fişle kaydetmek zorundadır. Velaris Kasa satışı yazarkasaya gönderir, kart ödemesi yazarkasaya bağlı POS'tan alınır ve mali fiş numarası satışa işlenir. Basit usul ve esnaf muaflığındaki işletmeler "Yazarkasa yok" seçeneğiyle bilgi fişi kullanabilir.</p>
+      <p className="muted">Gerçek usulde vergilendirilen işletmeler satışları yazarkasadan mali fişle kaydetmek zorundadır. VelarisKasa satışı yazarkasaya gönderir, kart ödemesi yazarkasaya bağlı POS'tan alınır ve mali fiş numarası satışa işlenir. Basit usul ve esnaf muaflığındaki işletmeler "Yazarkasa yok" seçeneğiyle bilgi fişi kullanabilir.</p>
       <Field label="Bağlantı">
         <select className="input" value={f.fiscal_driver} onChange={set('fiscal_driver')}>
           <option value="none">Yazarkasa yok (bilgi fişi)</option>
@@ -367,7 +367,7 @@ function Users() {
 function UserForm({ user, onClose, onSaved }) {
   const toast = useToast();
   const u = user || {};
-  const [f, setF] = useState({ name: u.name || '', role: u.role || 'cashier', pin: '', commission_rate: u.commission_rate ?? 0, color: u.color || '#2563eb', active: u.active ?? 1 });
+  const [f, setF] = useState({ name: u.name || '', role: u.role || 'cashier', pin: '', commission_rate: u.commission_rate ?? 0, color: u.color || '#7B5CFF', active: u.active ?? 1 });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? (e.target.checked ? 1 : 0) : e.target.value });
   const save = async (e) => {
     e.preventDefault();

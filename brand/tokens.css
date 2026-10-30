@@ -1,0 +1,34 @@
+/* VelarisKasa marka tokenları — Velaris Dijital marka sistemine bağlı alt marka.
+   Kaynak: brand/tokens.json · Kılavuz: docs/MARKA_KITI.md */
+:root {
+  /* Zeminler */
+  --vk-ink: #121212;        /* Mürekkep: koyu zemin, ana metin */
+  --vk-ink-2: #1E1D1B;      /* Koyu yüzey (kart) */
+  --vk-line-dark: #3A3936;  /* Koyu zeminde çizgi */
+  --vk-paper: #F2EFEA;      /* Kâğıt: açık zemin */
+  --vk-paper-2: #FFFFFF;    /* Açık yüzey (kart) */
+  --vk-line: #DCD8D1;       /* Açık zeminde çizgi */
+  --vk-muted: #6B6862;      /* İkincil metin (açık zemin) */
+  --vk-muted-dark: #BDB8B0; /* İkincil metin (koyu zemin) */
+
+  /* Marka renkleri (logodaki dört kol) */
+  --vk-orange: #FF4D1A;     /* Vurgu, harekete geçirici */
+  --vk-violet: #7B5CFF;     /* Birincil eylem, veri çubukları */
+  --vk-sun: #FFC21A;        /* İkincil vurgu (yalnızca koyu zeminde metin altı / ikon) */
+  --vk-mint: #1FC59B;       /* Olumlu durum vurgusu */
+
+  /* Anlamsal (arayüz) */
+  --vk-success: #13855F;
+  --vk-danger: #D6361A;
+  --vk-warning: #A86A00;
+
+  /* Tipografi */
+  --vk-font: 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --vk-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Biçim */
+  --vk-radius-sm: 8px;
+  --vk-radius-md: 12px;
+  --vk-radius-lg: 20px;
+  --vk-radius-pill: 999px;
+}

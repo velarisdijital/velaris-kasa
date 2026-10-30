@@ -1,6 +1,6 @@
 # Bulutta Kurulum ve Şubeler
 
-Velaris Kasa üç şekilde çalışabilir:
+VelarisKasa üç şekilde çalışabilir:
 
 | Kurulum | Ne zaman | İnternet kesilirse |
 |---|---|---|

@@ -9,7 +9,7 @@ alınmalıdır. Basit usul ve esnaf muaflığındaki işletmeler bilgi fişiyle 
 ## Mimari
 
 ```
-Velaris Kasa sunucusu ──HTTP/JSON──► Yazarkasa köprüsü ──GMP-3 (üretici kütüphanesi)──► YN ÖKC ──► banka POS
+VelarisKasa sunucusu ──HTTP/JSON──► Yazarkasa köprüsü ──GMP-3 (üretici kütüphanesi)──► YN ÖKC ──► banka POS
  (server/fiscal.js)                  (bridge/okc-bridge.js)
 ```
 

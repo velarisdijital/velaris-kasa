@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Velaris Kasa — Yazarkasa (YN ÖKC) köprüsü
+// VelarisKasa — Yazarkasa (YN ÖKC) köprüsü
 //
-// Velaris Kasa sunucusu ile yazarkasa arasında durur. Kasa, mali fiş için bu servise JSON gönderir;
+// VelarisKasa sunucusu ile yazarkasa arasında durur. Kasa, mali fiş için bu servise JSON gönderir;
 // köprü, cihaz üreticisinin GMP-3 kütüphanesiyle fişi bastırır ve fiş/Z numarasını döner.
 //
 // Çalıştırma:

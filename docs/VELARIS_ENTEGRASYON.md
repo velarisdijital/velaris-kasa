@@ -1,6 +1,6 @@
-# Velaris Kasa ↔ Velaris CRM Entegrasyon Sözleşmesi
+# VelarisKasa ↔ Velaris CRM Entegrasyon Sözleşmesi
 
-Velaris Kasa **tek başına** çalışır. Entegrasyon, Ayarlar → Velaris CRM ekranından açılıp kapatılır.
+VelarisKasa **tek başına** çalışır. Entegrasyon, Ayarlar → Velaris CRM ekranından açılıp kapatılır.
 Kapalıyken hiçbir veri dışarı gönderilmez.
 
 Bağlantı iki yönlüdür:

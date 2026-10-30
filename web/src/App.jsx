@@ -107,7 +107,7 @@ function Root() {
     <SessionCtx.Provider value={{ user, settings, reloadSettings, logout }}>
       <div className="app">
         <nav className="sidebar">
-          <div className="logo"><img src={logo} alt="Velaris Kasa" /></div>
+          <div className="logo"><img src={logo} alt="VelarisKasa" /></div>
           <NavItem to="/kasa" icon="pos" label="Kasa" />
           {appointmentsOn && <NavItem to="/randevu" icon="calendar" label="Randevu" />}
           <NavItem to="/urunler" icon="box" label="Stok" />

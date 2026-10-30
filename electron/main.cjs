@@ -1,4 +1,4 @@
-// Velaris Kasa masaüstü uygulaması.
+// VelarisKasa masaüstü uygulaması.
 // Sunucuyu aynı süreçte başlatır ve yerel ağa açar; böylece bu bilgisayar "ana kasa" olur,
 // dükkândaki diğer tablet/telefon/bilgisayarlar tarayıcıdan http://<bu-pc-ip>:4848 adresine bağlanabilir.
 const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
@@ -42,8 +42,8 @@ function createWindow() {
     height: 860,
     minWidth: 900,
     minHeight: 600,
-    title: 'Velaris Kasa',
-    backgroundColor: '#f4f6fb',
+    title: 'VelarisKasa',
+    backgroundColor: '#F2EFEA',
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true },
   });
@@ -52,7 +52,7 @@ function createWindow() {
 
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     {
-      label: 'Velaris Kasa',
+      label: 'VelarisKasa',
       submenu: [
         { label: 'Ağ adresleri (diğer kasalar için)', click: () => dialog.showMessageBox(win, {
           type: 'info',
@@ -83,7 +83,7 @@ app.whenReady().then(async () => {
   try {
     await startServer();
   } catch (e) {
-    dialog.showErrorBox('Velaris Kasa başlatılamadı', String(e?.stack || e));
+    dialog.showErrorBox('VelarisKasa başlatılamadı', String(e?.stack || e));
     app.quit();
     return;
   }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import logo from '../assets/logo.svg';
 import { post } from '../api.js';
+import { Wordmark } from '../components/Brand.jsx';
 import { Field, useToast } from '../components/ui.jsx';
 
 const TYPES = [
@@ -32,10 +32,10 @@ export default function Setup({ onDone }) {
   return (
     <div className="center-screen">
       <form className="card card-pad stack" style={{ width: '100%', maxWidth: 620 }} onSubmit={submit}>
-        <div className="row">
-          <img src={logo} width="44" height="44" alt="" />
+        <div className="stack" style={{ gap: 10 }}>
+          <Wordmark height={28} />
           <div>
-            <h1>Velaris Kasa'ya hoş geldiniz</h1>
+            <h1>Hoş geldiniz</h1>
             <div className="muted">İşletmenizi birkaç adımda kuralım.</div>
           </div>
         </div>

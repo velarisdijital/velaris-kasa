@@ -1,6 +1,6 @@
-// Velaris Kasa service worker: uygulama kabuğunu önbelleğe alır, böylece internet/sunucu
+// VelarisKasa service worker: uygulama kabuğunu önbelleğe alır, böylece internet/sunucu
 // kesildiğinde de arayüz açılır. /api istekleri asla önbelleğe alınmaz.
-const CACHE = 'velaris-kasa-v1';
+const CACHE = 'velaris-kasa-v2';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest', './icon.svg'])));

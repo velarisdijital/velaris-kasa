@@ -1,4 +1,4 @@
-# Velaris Kasa
+# VelarisKasa
 
 Bakkal, market, berber/kuaför, kafe/büfe ve her türlü küçük işletme için **stok takip ve kasa (POS) programı**.
 Tek başına çalışır; istenirse **Velaris CRM** ile entegre olur.
@@ -31,7 +31,7 @@ Tek başına çalışır; istenirse **Velaris CRM** ile entegre olur.
 ```
 ┌──────────────────────────┐        yerel ağ (Wi-Fi/kablo)        ┌──────────────────┐
 │  Ana kasa (PC)           │  ◄────────────────────────────────── │ Tablet / telefon │
-│  Velaris Kasa masaüstü   │      http://192.168.1.20:4848        │ (tarayıcı / PWA) │
+│  VelarisKasa masaüstü   │      http://192.168.1.20:4848        │ (tarayıcı / PWA) │
 │  ├─ sunucu + veritabanı  │                                      └──────────────────┘
 │  └─ kasa ekranı          │  ──── internet ────►  Velaris CRM (isteğe bağlı)
 └──────────────────────────┘
@@ -44,7 +44,7 @@ Program bir bulut sunucusuna da kurulabilir; o zaman her şube internetten bağl
 ## Kurulum
 
 ### Masaüstü (Windows)
-`npm run dist:win` ile üretilen `release/Velaris Kasa Setup x.y.z.exe` dosyasını çalıştırın.
+`npm run dist:win` ile üretilen `release/VelarisKasa Setup x.y.z.exe` dosyasını çalıştırın.
 GitHub'a `v1.0.0` gibi bir etiket gönderildiğinde Actions bu dosyayı otomatik üretir.
 
 ### Sunucu / geliştirme
