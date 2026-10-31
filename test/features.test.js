@@ -801,3 +801,28 @@ test('QR menü: kapalıyken erişilmez, menü, garson çağır, sipariş isteği
   await call('POST', `/api/tables/${masa.id}/qr-reset`);
   assert.equal((await pub('GET', `/api/public/menu?t=${token}`)).body.table, null);
 });
+
+test('garson: hesap bildirimi, ödeme sonrası istek kapanır, masa/garson raporu', async () => {
+  await call('PUT', '/api/settings', { modules_tables: '1' });
+  const [masa] = (await call('POST', '/api/tables', { name: 'Rapor Masa' })).body;
+  const cay = (await call('POST', '/api/products', { name: 'Rapor Çay', sell_price: 1500, track_stock: 0 })).body;
+  let t = (await call('POST', `/api/tables/${masa.id}/ticket`, { guest_count: 2, items: [{ product_id: cay.id, qty: 4 }] })).body;
+  await call('POST', `/api/tickets/${t.id}/kitchen`);
+  t = (await call('POST', `/api/tickets/${t.id}/items/${t.items[0].id}/void`, { qty: 1, reason: 'İkram' })).body;
+  await call('POST', `/api/tickets/${t.id}/bill-request`);
+  await call('POST', `/api/tickets/${t.id}/bill-request`); // tekrar basılırsa çoğalmaz
+  let reqs = (await call('GET', '/api/table-requests')).body.filter((q) => q.table_id === masa.id);
+  assert.equal(reqs.length, 1);
+  assert.equal(reqs[0].type, 'bill');
+  const live = t.items.find((i) => !i.void_at);
+  await call('POST', '/api/sales', { register_name: 'Kasa 1', ticket_id: t.id, items: [{ product_id: cay.id, qty: 3, ticket_item_id: live.id }],
+    payments: [{ method: 'cash', amount: 4500 }] });
+  reqs = (await call('GET', '/api/table-requests')).body.filter((q) => q.table_id === masa.id);
+  assert.equal(reqs.length, 0);
+  const rep = (await call('GET', '/api/reports/tables')).body;
+  const me = rep.waiters.find((w) => w.name === 'Ali');
+  assert.ok(me.order_total >= 4500);
+  assert.ok(me.void_total >= 1500);
+  assert.ok(rep.tickets.count >= 1);
+  assert.ok(rep.voids.some((v) => v.void_reason === 'İkram' && v.table_name === 'Rapor Masa'));
+});

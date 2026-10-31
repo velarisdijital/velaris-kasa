@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { get } from '../api.js';
-import { useCan } from '../App.jsx';
+import { useCan, useSession } from '../App.jsx';
 import { useLoad } from '../components/ui.jsx';
 import { METHOD_LABELS, money, qty, today } from '../format.js';
 
@@ -23,6 +23,8 @@ export default function Reports() {
   const branchList = useLoad(() => (can('branches') ? get('/branches').then((b) => b.branches.filter((x) => x.active)) : Promise.resolve([])), []);
   const stock = useLoad(() => get(`/reports/stock${stockBranch ? `?branch_id=${stockBranch}` : ''}`), [stockBranch]);
   const x = r.data;
+  const { settings } = useSession();
+  const tablesOn = settings.modules_tables === '1' && can('tables');
 
   return (
     <div className="page">
@@ -92,6 +94,7 @@ export default function Reports() {
               {!x.staff.length && <div className="empty">Veri yok</div>}
             </div>
           </div>
+          {tablesOn && <TablesReport from={from} to={to} />}
         </div>
       )}
 
@@ -122,6 +125,43 @@ export default function Reports() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Masa / garson raporu ve iptal-ikram listesi */
+function TablesReport({ from, to }) {
+  const t = useLoad(() => get(`/reports/tables?from=${from}&to=${to}`), [from, to]);
+  if (!t.data) return null;
+  const x = t.data;
+  const voidTotal = x.voids.reduce((a, v) => a + Math.round(v.qty * v.unit_price), 0);
+  return (
+    <>
+      <h2 style={{ marginTop: 12 }}>Masalar ve garsonlar</h2>
+      <div className="stats">
+        <Stat label="Kapanan adisyon" value={x.tickets.count} sub={x.tickets.guests ? `${x.tickets.guests} misafir` : ''} />
+        <Stat label="Ortalama adisyon" value={money(x.tickets.avg_total)} />
+        <Stat label="Ortalama masa süresi" value={`${x.tickets.avg_minutes} dk`} />
+        <Stat label="İptal / ikram" value={money(voidTotal)} sub={`${x.voids.length} kalem`} />
+      </div>
+      <div className="grid-2">
+        <div className="card table-wrap">
+          <table className="table">
+            <thead><tr><th>Garson</th><th className="right">Masa</th><th className="right">Sipariş</th><th className="right">İptal/ikram</th></tr></thead>
+            <tbody>{x.waiters.map((w) => <tr key={w.id}><td>{w.name}</td><td className="right num">{w.ticket_count}</td><td className="right num">{money(w.order_total)}</td>
+              <td className={`right num ${w.void_total ? 'danger-text' : ''}`}>{money(w.void_total)}</td></tr>)}</tbody>
+          </table>
+          {!x.waiters.length && <div className="empty">Masa siparişi yok</div>}
+        </div>
+        <div className="card table-wrap" style={{ maxHeight: 360 }}>
+          <table className="table">
+            <thead><tr><th>İptal / ikram</th><th>Masa</th><th>Sebep</th><th className="right">Tutar</th></tr></thead>
+            <tbody>{x.voids.map((v) => <tr key={v.id}><td>{qty(v.qty)} × {v.name}<div className="muted small-text">{v.void_at.slice(11, 16)} · {v.void_user_name}{v.sent_at ? ' · mutfağa gitmişti' : ''}</div></td>
+              <td>{v.table_name}</td><td>{v.void_reason}</td><td className="right num">{money(Math.round(v.qty * v.unit_price))}</td></tr>)}</tbody>
+          </table>
+          {!x.voids.length && <div className="empty">İptal / ikram yok</div>}
+        </div>
+      </div>
+    </>
   );
 }
 

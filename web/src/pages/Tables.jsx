@@ -19,7 +19,7 @@ export default function Tables() {
   const [qr, setQr] = useState(false);
   const { user, settings } = useSession();
   const tables = useLoad(() => get('/tables'));
-  const requests = useLoad(() => (settings.qrmenu_enabled === '1' ? get('/table-requests') : Promise.resolve([])), [settings.qrmenu_enabled]);
+  const requests = useLoad(() => get('/table-requests'));
 
   // Diğer cihazlardaki değişiklikler ve QR istekleri için ara ara yenile
   useEffect(() => {
@@ -156,7 +156,7 @@ function TicketScreen({ table, tables, onBack, onSwitch }) {
   const toast = useToast();
   const ask = useConfirm();
   const navigate = useNavigate();
-  const { settings } = useSession();
+  const { settings, waiter } = useSession();
   const [ticket, setTicket] = useState(null);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -301,16 +301,24 @@ function TicketScreen({ table, tables, onBack, onSwitch }) {
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <button className="btn small ghost" disabled={!live.length} onClick={() => printElement(<Bill ticket={ticket} settings={settings} />)}><Icon name="print" /> Adisyon</button>
               {selected.length > 0 && <button className="btn small ghost" onClick={() => setModal({ type: 'transfer' })}>Seçileni aktar</button>}
-              <button className="btn small ghost danger-text" onClick={cancelTicket}>İptal</button>
+              {!waiter && <button className="btn small ghost danger-text" onClick={cancelTicket}>İptal</button>}
             </div>
             <div className="total"><span>KALAN</span><span>{money(ticket.remaining_total)}</span></div>
           </div>
         )}
-        <div className="pay-buttons">
-          <button className="btn" disabled={!ticket?.unsent_count || busy} onClick={kitchen}>Mutfağa<small>{ticket?.unsent_count || 0} yeni</small></button>
-          <button className="btn" disabled={!selected.length} onClick={() => checkout(selected.map((i) => [i, sel[i.id]]), true)}>Seçileni öde<small>{money(selTotal)}</small></button>
-          <button className="btn success" disabled={!payable.length} onClick={() => checkout(payable.map((i) => [i, i.remaining_qty]), false)}>Hesabı al<small>{money(ticket?.remaining_total || 0)}</small></button>
-        </div>
+        {waiter ? (
+          <div className="pay-buttons" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <button className="btn" disabled={!ticket?.unsent_count || busy} onClick={kitchen}>Mutfağa<small>{ticket?.unsent_count || 0} yeni</small></button>
+            <button className="btn success" disabled={!payable.length || busy} onClick={() => run(async () => { await post(`/tickets/${ticket.id}/bill-request`, {}); toast.ok('Kasaya hesap bildirildi'); })}>
+              Hesap iste<small>kasaya bildir</small></button>
+          </div>
+        ) : (
+          <div className="pay-buttons">
+            <button className="btn" disabled={!ticket?.unsent_count || busy} onClick={kitchen}>Mutfağa<small>{ticket?.unsent_count || 0} yeni</small></button>
+            <button className="btn" disabled={!selected.length} onClick={() => checkout(selected.map((i) => [i, sel[i.id]]), true)}>Seçileni öde<small>{money(selTotal)}</small></button>
+            <button className="btn success" disabled={!payable.length} onClick={() => checkout(payable.map((i) => [i, i.remaining_qty]), false)}>Hesabı al<small>{money(ticket?.remaining_total || 0)}</small></button>
+          </div>
+        )}
       </div>
 
       {modal?.type === 'note' && <NoteModal item={modal.item} onClose={() => setModal(null)}

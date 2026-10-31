@@ -44,7 +44,11 @@ export function applyTicketPayment(db, ticketId, lines, saleId, saleTotal) {
   db.prepare('UPDATE sales SET ticket_id = ? WHERE id = ?').run(t.id, saleId);
   db.prepare('UPDATE tickets SET paid_total = paid_total + ? WHERE id = ?').run(saleTotal, t.id);
   const left = db.prepare('SELECT COUNT(*) AS n FROM ticket_items WHERE ticket_id = ? AND void_at IS NULL AND qty - paid_qty > 0.0005').get(t.id).n;
-  if (!left) db.prepare("UPDATE tickets SET status = 'closed', closed_at = datetime('now','localtime') WHERE id = ?").run(t.id);
+  if (!left) {
+    db.prepare("UPDATE tickets SET status = 'closed', closed_at = datetime('now','localtime') WHERE id = ?").run(t.id);
+    // Masa kapandı: bekleyen "hesap istiyor / garson çağırıyor" istekleri de kapanır
+    db.prepare("UPDATE table_requests SET status = 'done', handled_at = datetime('now','localtime') WHERE table_id = ? AND status = 'new' AND type IN ('bill','waiter')").run(t.table_id);
+  }
 }
 
 export default function tableRoutes(db) {
@@ -339,10 +343,44 @@ export default function tableRoutes(db) {
     res.json(loadRequest(q.id));
   }));
 
+  /** Garson modu: hesabı kasaya bildir (Masalar ekranında "Hesap istiyor" olarak görünür). */
+  r.post('/tickets/:id/bill-request', h((req, res) => {
+    const t = openTicket(req.params.id);
+    if (!db.prepare("SELECT 1 FROM table_requests WHERE table_id = ? AND type = 'bill' AND status = 'new'").get(t.table_id)) {
+      db.prepare("INSERT INTO table_requests (table_id, type, note) VALUES (?, 'bill', ?)").run(t.table_id, `${req.user.name} bildirdi`);
+    }
+    res.json({ ok: true });
+  }));
+
   /** Masanın QR anahtarını yenile (eski QR geçersiz olur). */
   r.post('/tables/:id/qr-reset', allow(...MANAGERS), h((req, res) => {
     db.prepare('UPDATE dining_tables SET qr_token = lower(hex(randomblob(8))) WHERE id = ?').run(req.params.id);
     res.json(db.prepare('SELECT * FROM dining_tables WHERE id = ?').get(req.params.id));
+  }));
+
+  /** Masa / garson raporu: garson bazında sipariş, iptal-ikram; adisyon süresi ve ortalaması. */
+  r.get('/reports/tables', allow(...MANAGERS), feature, h((req, res) => {
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : new Date().toLocaleDateString('sv-SE');
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || '') ? req.query.to : from;
+    const p = { from: `${from} 00:00:00`, to: `${to} 23:59:59` };
+    const waiters = db.prepare(`SELECT u.id, u.name,
+        COUNT(DISTINCT i.ticket_id) AS ticket_count,
+        COALESCE(SUM(CASE WHEN i.void_at IS NULL THEN ROUND(i.qty * i.unit_price) END), 0) AS order_total,
+        COALESCE(SUM(CASE WHEN i.void_at IS NULL THEN i.qty END), 0) AS item_qty,
+        COALESCE(SUM(CASE WHEN i.void_at IS NOT NULL THEN ROUND(i.qty * i.unit_price) END), 0) AS void_total
+      FROM ticket_items i JOIN users u ON u.id = i.user_id
+      WHERE i.created_at BETWEEN @from AND @to GROUP BY u.id ORDER BY order_total DESC`).all(p);
+    const tickets = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(paid_total), 0) AS total, COALESCE(SUM(guest_count), 0) AS guests,
+        COALESCE(AVG((julianday(closed_at) - julianday(opened_at)) * 1440), 0) AS avg_minutes
+      FROM tickets WHERE status = 'closed' AND closed_at BETWEEN @from AND @to`).get(p);
+    tickets.avg_minutes = Math.round(tickets.avg_minutes);
+    tickets.avg_total = tickets.count ? Math.round(tickets.total / tickets.count) : 0;
+    const voids = db.prepare(`SELECT i.id, i.name, i.qty, i.unit_price, i.void_reason, i.void_at, i.sent_at, d.name AS table_name,
+        u.name AS void_user_name, w.name AS waiter_name
+      FROM ticket_items i JOIN tickets t ON t.id = i.ticket_id JOIN dining_tables d ON d.id = t.table_id
+      LEFT JOIN users u ON u.id = i.void_user_id LEFT JOIN users w ON w.id = i.user_id
+      WHERE i.void_at BETWEEN @from AND @to ORDER BY i.void_at DESC`).all(p);
+    res.json({ from, to, waiters, tickets, voids });
   }));
 
   /** İptal / ikram raporu */

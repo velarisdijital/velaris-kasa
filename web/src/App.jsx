@@ -115,8 +115,33 @@ function Root() {
 
   const appointmentsOn = settings.modules_appointments === '1' && !!license?.features?.includes('appointments');
   const tablesOn = settings.modules_tables === '1' && !!license?.features?.includes('tables');
+  // Garson modu: masa modülü açıkken "Personel" rolü yalnızca masaları (ve varsa randevuları) görür, ödeme kasada alınır
+  const waiter = tablesOn && user.role === 'staff';
+  if (waiter) {
+    return (
+      <SessionCtx.Provider value={{ user, settings, license, reloadSettings, logout, waiter }}>
+        <div className="app waiter-mode">
+          <nav className="sidebar">
+            <div className="logo"><img src={logo} alt="VelarisKasa" /></div>
+            <NavItem to="/masalar" icon="table" label="Masalar" />
+            {appointmentsOn && <NavItem to="/randevu" icon="calendar" label="Randevu" />}
+            <div className="spacer" />
+            <button className="nav-link btn ghost" onClick={logout} title={`${user.name} — çıkış`}><Icon name="logout" /><span>Çıkış</span></button>
+          </nav>
+          <div className="main">
+            <OfflineBanner />
+            <Routes>
+              <Route path="/masalar" element={<Tables />} />
+              {appointmentsOn && <Route path="/randevu" element={<Appointments />} />}
+              <Route path="*" element={<Navigate to="/masalar" replace />} />
+            </Routes>
+          </div>
+        </div>
+      </SessionCtx.Provider>
+    );
+  }
   return (
-    <SessionCtx.Provider value={{ user, settings, license, reloadSettings, logout }}>
+    <SessionCtx.Provider value={{ user, settings, license, reloadSettings, logout, waiter: false }}>
       <div className="app">
         <nav className="sidebar">
           <div className="logo"><img src={logo} alt="VelarisKasa" /></div>

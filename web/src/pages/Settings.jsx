@@ -562,7 +562,8 @@ function UserForm({ user, onClose, onSaved }) {
       <form id="uf" className="stack" onSubmit={save}>
         <div className="grid-2">
           <Field label="Ad"><input className="input" autoFocus required value={f.name} onChange={set('name')} /></Field>
-          <Field label="Rol"><select className="input" value={f.role} onChange={set('role')}>{Object.entries(ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
+          <Field label="Rol" hint={f.role === 'staff' ? 'Masa modülü açıksa Personel garson modunda açılır: yalnızca masalar, ödeme kasada.' : null}>
+            <select className="input" value={f.role} onChange={set('role')}>{Object.entries(ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{k === 'staff' ? 'Personel / Garson' : l}</option>)}</select></Field>
           <Field label={user ? 'Yeni PIN (boş = değişmez)' : 'PIN (4-8 rakam)'}><input className="input" type="password" inputMode="numeric" pattern="\d{4,8}" required={!user} value={f.pin} onChange={set('pin')} /></Field>
           <Field label="Hizmet primi %"><input className="input" inputMode="decimal" value={f.commission_rate} onChange={set('commission_rate')} /></Field>
         </div>
