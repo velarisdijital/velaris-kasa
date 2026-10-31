@@ -35,6 +35,11 @@ jobs:
           cp brand/logo/velariskasa-light.png site/og-image.png
           cp dist-demo/velaris-kasa-demo.html site/uygulama/index.html
           touch site/.nojekyll
+      - name: Pages'i aç (kapalıysa)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+        continue-on-error: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
