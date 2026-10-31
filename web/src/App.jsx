@@ -8,6 +8,7 @@ import Appointments from './pages/Appointments.jsx';
 import { BookingPage, ManageBooking } from './pages/Booking.jsx';
 import Customers from './pages/Customers.jsx';
 import Login from './pages/Login.jsx';
+import MenuPage from './pages/Menu.jsx';
 import Pos from './pages/Pos.jsx';
 import Purchases from './pages/Purchases.jsx';
 import Tables from './pages/Tables.jsx';
@@ -41,6 +42,7 @@ export default function App() {
 function Gate() {
   const { pathname } = useLocation();
   if (pathname.startsWith('/randevu-al')) return <BookingPage />;
+  if (pathname.startsWith('/menu')) return <MenuPage />;
   if (pathname.startsWith('/r/')) {
     return <Routes><Route path="/r/:token" element={<ManageBooking />} /></Routes>;
   }

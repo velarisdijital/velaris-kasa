@@ -30,6 +30,8 @@ function normalizeProduct(body, existing = {}) {
     favorite: bool(b.favorite),
     active: b.active === undefined ? 1 : bool(b.active),
     crm_id: str(b.crm_id),
+    menu_description: str(b.menu_description),
+    menu_hidden: bool(b.menu_hidden),
   };
   if (!p.name) throw bad('Ürün adı gerekli');
   if (p.sell_price < 0 || p.buy_price < 0) throw bad('Fiyat negatif olamaz');
@@ -246,9 +248,9 @@ export default function productRoutes(db) {
     const id = db.transaction(() => {
       const initial = p.stock;
       const id = db.prepare(`INSERT INTO products (name, barcode, sku, category_id, type, unit, buy_price, sell_price, vat_rate,
-          stock, min_stock, track_stock, duration_min, favorite, active, crm_id)
+          stock, min_stock, track_stock, duration_min, favorite, active, crm_id, menu_description, menu_hidden)
         VALUES (@name, @barcode, @sku, @category_id, @type, @unit, @buy_price, @sell_price, @vat_rate,
-          0, @min_stock, @track_stock, @duration_min, @favorite, @active, @crm_id)`).run(p).lastInsertRowid;
+          0, @min_stock, @track_stock, @duration_min, @favorite, @active, @crm_id, @menu_description, @menu_hidden)`).run(p).lastInsertRowid;
       if (initial) changeStock(db, id, initial, 'in', { unitCost: p.buy_price, note: 'Açılış stoku', userId: req.user.id, branchId: resolveBranch(db, req) });
       emitEvent(db, 'product.upserted', getProduct(id));
       return id;
@@ -266,7 +268,7 @@ export default function productRoutes(db) {
       db.prepare(`UPDATE products SET name=@name, barcode=@barcode, sku=@sku, category_id=@category_id, type=@type, unit=@unit,
           buy_price=@buy_price, sell_price=@sell_price, vat_rate=@vat_rate, min_stock=@min_stock, track_stock=@track_stock,
           duration_min=@duration_min, favorite=@favorite, active=@active, crm_id=@crm_id,
-          updated_at=datetime('now','localtime') WHERE id=@id`).run({ ...p, id: existing.id });
+          menu_description=@menu_description, menu_hidden=@menu_hidden, updated_at=datetime('now','localtime') WHERE id=@id`).run({ ...p, id: existing.id });
       // Reçeteli ürünün maliyeti reçeteden gelir; bileşenin maliyeti değiştiyse onu kullanan ürünler güncellenir
       refreshRecipeCosts(db, existing.id);
       if (recipeOf(db, existing.id).length) refreshRecipeCosts(db);

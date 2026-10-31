@@ -9,18 +9,30 @@ import { dt, money, plain, qty as fmtQty } from '../format.js';
 const minutesSince = (s) => (s ? Math.max(0, Math.round((Date.now() - new Date(s.replace(' ', 'T')).getTime()) / 60000)) : 0);
 const since = (s) => { const m = minutesSince(s); return m < 60 ? `${m} dk` : `${Math.floor(m / 60)} sa ${m % 60} dk`; };
 
+const REQ_LABELS = { waiter: 'Garson çağırıyor', bill: 'Hesap istiyor', order: 'QR sipariş' };
+
 export default function Tables() {
   const location = useLocation();
+  const toast = useToast();
   const [openTable, setOpenTable] = useState(null);
   const [edit, setEdit] = useState(false);
-  const { user } = useSession();
+  const [qr, setQr] = useState(false);
+  const { user, settings } = useSession();
   const tables = useLoad(() => get('/tables'));
+  const requests = useLoad(() => (settings.qrmenu_enabled === '1' ? get('/table-requests') : Promise.resolve([])), [settings.qrmenu_enabled]);
 
-  // Diğer cihazlardaki değişiklikler için ara ara yenile
+  // Diğer cihazlardaki değişiklikler ve QR istekleri için ara ara yenile
   useEffect(() => {
-    const t = setInterval(() => { if (!openTable) tables.reload(); }, 15000);
+    const t = setInterval(() => { if (!openTable) { tables.reload(); requests.reload(); } }, 10000);
     return () => clearInterval(t);
   });
+  const handle = async (q, ok) => {
+    try {
+      await post(`/table-requests/${q.id}/${ok ? 'accept' : 'reject'}`, {});
+      toast.ok(ok ? (q.type === 'order' ? `${q.table_name}: sipariş adisyona eklendi, mutfağa göndermeyi unutmayın` : 'Tamamlandı') : 'İstek reddedildi');
+      requests.reload(); tables.reload();
+    } catch (e) { toast.err(e); }
+  };
   useEffect(() => { if (location.state?.paid) tables.reload(); }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = tables.data || [];
@@ -42,8 +54,24 @@ export default function Tables() {
         <h1>Masalar</h1>
         <div className="grow" />
         <div className="muted">{open.length}/{list.length} masa dolu · açık hesap <strong>{money(open.reduce((a, t) => a + t.remaining_total, 0))}</strong></div>
+        {isManager(user) && <button className="btn" onClick={() => setQr(true)}>QR menü</button>}
         {isManager(user) && <button className="btn" onClick={() => setEdit(true)}><Icon name="edit" /> Masaları düzenle</button>}
       </div>
+      {(requests.data || []).length > 0 && (
+        <div className="req-list">
+          {requests.data.map((q) => (
+            <div key={q.id} className="req-card">
+              <div><strong>{q.table_name}</strong> · {REQ_LABELS[q.type]} <span className="muted small-text">{since(q.created_at)} önce</span></div>
+              {q.type === 'order' && <div className="req-items">{q.items.map((i) => `${i.qty}× ${i.name}${i.note ? ` (${i.note})` : ''}`).join(', ')}</div>}
+              {q.note && <div className="req-items">Not: {q.note}</div>}
+              <div className="row">
+                <button className="btn small success" onClick={() => handle(q, true)}>{q.type === 'order' ? 'Onayla, adisyona ekle' : 'Tamam'}</button>
+                {q.type === 'order' && <button className="btn small ghost danger-text" onClick={() => handle(q, false)}>Reddet</button>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {zones.map(([zone, ts]) => (
         <section key={zone} style={{ marginBottom: 20 }}>
           <h3 className="muted" style={{ margin: '0 0 10px' }}>{zone}</h3>
@@ -51,6 +79,7 @@ export default function Tables() {
             {ts.map((t) => (
               <button key={t.id} className={`table-card ${t.ticket_id ? 'busy' : ''} ${t.unsent_count ? 'unsent' : ''}`} onClick={() => setOpenTable(t)}>
                 <div className="tc-name">{t.name}</div>
+                {t.requests && [...new Set(t.requests.split(','))].map((r) => <span key={r} className="badge red">{REQ_LABELS[r]}</span>)}
                 {t.ticket_id ? (
                   <>
                     <div className="tc-total">{money(t.remaining_total)}</div>
@@ -66,7 +95,59 @@ export default function Tables() {
       ))}
       {!list.length && <div className="card empty">{tables.loading ? 'Yükleniyor…' : 'Henüz masa yok. "Masaları düzenle" ile ekleyin.'}</div>}
       {edit && <TableEditor tables={list} onClose={() => { setEdit(false); tables.reload(); }} />}
+      {qr && <QrMenuModal tables={list} onClose={() => { setQr(false); tables.reload(); requests.reload(); }} />}
     </div>
+  );
+}
+
+/** QR menü ayarları ve masa QR kodlarının yazdırılması. */
+function QrMenuModal({ tables, onClose }) {
+  const toast = useToast();
+  const { settings, reloadSettings } = useSession();
+  const [f, setF] = useState({ qrmenu_enabled: settings.qrmenu_enabled === '1', qrmenu_orders: settings.qrmenu_orders === '1',
+    qrmenu_note: settings.qrmenu_note || '', public_base_url: settings.public_base_url || '' });
+  const base = (f.public_base_url || `${location.origin}${location.pathname}`).replace(/#.*$/, '');
+  const urlFor = (t) => `${base}#/menu?t=${t.qr_token}`;
+  const save = async () => {
+    try {
+      await put('/settings', { qrmenu_enabled: f.qrmenu_enabled ? '1' : '0', qrmenu_orders: f.qrmenu_orders ? '1' : '0',
+        qrmenu_note: f.qrmenu_note, public_base_url: f.public_base_url });
+      await reloadSettings();
+      toast.ok('Kaydedildi');
+    } catch (e) { toast.err(e); }
+  };
+  const print = async () => {
+    const QR = (await import('qrcode')).default;
+    const cards = await Promise.all(tables.map(async (t) => ({ t, src: await QR.toDataURL(urlFor(t), { margin: 1, width: 400 }) })));
+    printElement(
+      <div className="qr-sheet">
+        {cards.map(({ t, src }) => (
+          <div key={t.id} className="qr-card">
+            <div className="qr-name">{t.name}</div>
+            <img src={src} alt="" />
+            <div className="qr-sub">{settings.business_name}<br />Menü, garson çağırma ve sipariş için okutun</div>
+          </div>
+        ))}
+      </div>, 'size: A4; margin: 8mm;');
+  };
+  return (
+    <Modal title="QR menü" onClose={onClose} wide
+      footer={<><button className="btn" disabled={!tables.length || !f.qrmenu_enabled} onClick={print}><Icon name="print" /> Masa QR kodlarını yazdır</button>
+        <div style={{ flex: 1 }} /><button className="btn primary" onClick={save}>Kaydet</button></>}>
+      <div className="stack">
+        <p className="muted">Her masaya özel QR kod basılır. Müşteri telefonuyla okutunca menüyü görür, garson çağırır, hesap ister; isterseniz sipariş isteği de gönderir. İstekler bu ekranda belirir, garson onaylayınca adisyona eklenir.</p>
+        <label className="check"><input type="checkbox" checked={f.qrmenu_enabled} onChange={(e) => setF({ ...f, qrmenu_enabled: e.target.checked })} /> QR menüyü aç</label>
+        <label className="check"><input type="checkbox" checked={f.qrmenu_orders} onChange={(e) => setF({ ...f, qrmenu_orders: e.target.checked })} /> Müşteri QR menüden sipariş isteği gönderebilsin (garson onaylar)</label>
+        <Field label="Menü notu" hint="Menünün üstünde görünür (Wi-Fi şifresi, kampanya vb.)">
+          <input className="input" value={f.qrmenu_note} onChange={(e) => setF({ ...f, qrmenu_note: e.target.value })} />
+        </Field>
+        <Field label="Herkese açık adres" hint="Müşterinin telefonu bu adrese gider. Bulut kurulumunda alan adınızı yazın (ör. https://kafem.velariskasa.com). Boşsa bu cihazın adresi kullanılır.">
+          <input className="input" placeholder={`${location.origin}${location.pathname}`} value={f.public_base_url} onChange={(e) => setF({ ...f, public_base_url: e.target.value })} />
+        </Field>
+        {tables[0] && f.qrmenu_enabled && <div className="small-text">Örnek: <a href={urlFor(tables[0])} target="_blank" rel="noreferrer">{tables[0].name} menüsü</a></div>}
+        <small className="muted">Menüde fiyatı olan aktif ürünler görünür. Bir ürünü gizlemek ya da açıklama eklemek için Stok → ürün → "QR menü" alanları.</small>
+      </div>
+    </Modal>
   );
 }
 

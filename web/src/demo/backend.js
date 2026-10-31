@@ -28,11 +28,12 @@ async function boot(bytes) {
   globalThis.__VK_DEMO__ = true; // demoda tüm paket özellikleri açık
   const SQL = await initSqlJs();
   useSqlJs(SQL, bytes);
-  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR, purchaseR, tableR] = await Promise.all([
+  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR, purchaseR, tableR, qrR] = await Promise.all([
     import('../../../server/db.js'), import('../../../server/auth.js'), import('../../../server/routes/auth.js'),
     import('../../../server/routes/products.js'), import('../../../server/routes/customers.js'), import('../../../server/routes/shifts.js'),
     import('../../../server/routes/sales.js'), import('../../../server/routes/appointments.js'), import('../../../server/routes/reports.js'),
     import('../../../server/routes/settings.js'), import('../../../server/routes/notify.js'), import('../../../server/routes/booking.js'), import('../../../server/routes/branches.js'), import('../../../server/routes/purchases.js'), import('../../../server/routes/tables.js'),
+    import('../../../server/routes/qrmenu.js'),
   ]);
   db = openDatabase('/demo');
   if (!getSetting(db, 'install_id')) setSettings(db, { install_id: crypto.randomUUID() });
@@ -42,6 +43,7 @@ async function boot(bytes) {
   api.use(authR.publicRoutes(db));
   api.use(settingsR.inboundWebhook(db));
   api.use(bookingR.default(db));
+  api.use(qrR.default(db));
   api.use(authenticate(db));
   api.use(authR.sessionRoutes(db));
   for (const m of [productR, branchR, purchaseR, tableR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));

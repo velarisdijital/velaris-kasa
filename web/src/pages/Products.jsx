@@ -199,6 +199,7 @@ function ProductForm({ product, categories, onClose, onSaved }) {
     name: p.name || '', barcode: p.barcode || '', category_id: p.category_id || '', type: p.type || 'product', unit: p.unit || 'adet',
     buy_price: toInput(p.buy_price), sell_price: toInput(p.sell_price), vat_rate: p.vat_rate ?? Number(settings.default_vat || 20),
     stock: '', min_stock: p.min_stock ?? '', track_stock: p.track_stock ?? 1, duration_min: p.duration_min || '', favorite: p.favorite || 0,
+    menu_description: p.menu_description || '', menu_hidden: p.menu_hidden || 0,
   });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? (e.target.checked ? 1 : 0) : e.target.value });
   const [camera, setCamera] = useState(false);
@@ -283,6 +284,12 @@ function ProductForm({ product, categories, onClose, onSaved }) {
           </>
         )}
         <label className="check"><input type="checkbox" checked={!!f.favorite} onChange={set('favorite')} /> Kasada hızlı tuş olarak göster (★)</label>
+        {settings.qrmenu_enabled === '1' && !service && (
+          <div className="grid-2">
+            <Field label="QR menü açıklaması" hint="Ör. Çift shot espresso, süt seçenekli"><input className="input" value={f.menu_description} onChange={set('menu_description')} /></Field>
+            <label className="check" style={{ alignSelf: 'end', paddingBottom: 10 }}><input type="checkbox" checked={!!f.menu_hidden} onChange={set('menu_hidden')} /> QR menüde gösterme</label>
+          </div>
+        )}
       </form>
     </Modal>
   );

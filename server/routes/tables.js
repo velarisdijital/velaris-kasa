@@ -59,7 +59,10 @@ export default function tableRoutes(db) {
 
   // ---- Masalar ----
   r.get('/tables', feature, h((req, res) => {
+    // QR menü için her masaya tahmin edilemez bir anahtar
+    db.prepare('UPDATE dining_tables SET qr_token = lower(hex(randomblob(8))) WHERE qr_token IS NULL').run();
     const tables = db.prepare(`SELECT d.*, t.id AS ticket_id, t.opened_at, t.guest_count, t.paid_total, u.name AS user_name,
+        (SELECT GROUP_CONCAT(q.type) FROM table_requests q WHERE q.table_id = d.id AND q.status = 'new') AS requests,
         (SELECT COALESCE(SUM(ROUND((i.qty - i.paid_qty) * i.unit_price)),0) FROM ticket_items i WHERE i.ticket_id = t.id AND i.void_at IS NULL) AS remaining_total,
         (SELECT COUNT(*) FROM ticket_items i WHERE i.ticket_id = t.id AND i.void_at IS NULL AND i.sent_at IS NULL) AS unsent_count,
         (SELECT COUNT(*) FROM ticket_items i WHERE i.ticket_id = t.id AND i.void_at IS NULL) AS item_count
@@ -294,6 +297,52 @@ export default function tableRoutes(db) {
       db.prepare("UPDATE tickets SET status = 'cancelled', closed_at = datetime('now','localtime'), cancel_reason = ? WHERE id = ?").run(reason, t.id);
     })();
     res.json(loadTicket(db, t.id));
+  }));
+
+  // ---- QR menüden gelen istekler (garson çağır / hesap / sipariş) ----
+  const loadRequest = (id) => {
+    const q = db.prepare(`SELECT q.*, d.name AS table_name FROM table_requests q JOIN dining_tables d ON d.id = q.table_id WHERE q.id = ?`).get(id);
+    if (q) q.items = q.items_json ? JSON.parse(q.items_json) : [];
+    return q;
+  };
+  r.get('/table-requests', feature, h((req, res) => {
+    const rows = db.prepare(`SELECT q.*, d.name AS table_name FROM table_requests q JOIN dining_tables d ON d.id = q.table_id
+      WHERE q.status = 'new' ORDER BY q.id`).all();
+    res.json(rows.map((q) => ({ ...q, items: q.items_json ? JSON.parse(q.items_json) : [] })));
+  }));
+
+  /** Kabul: sipariş isteğiyse kalemler masanın adisyonuna eklenir (masa kapalıysa açılır); diğerleri "tamam" olur. */
+  r.post('/table-requests/:id/accept', feature, h((req, res) => {
+    const q = loadRequest(req.params.id);
+    if (!q) throw notFound();
+    if (q.status !== 'new') throw bad('Bu istek zaten işlendi');
+    const ticketId = db.transaction(() => {
+      let ticketId = null;
+      if (q.type === 'order') {
+        const cur = db.prepare("SELECT id FROM tickets WHERE table_id = ? AND status = 'open'").get(q.table_id);
+        ticketId = cur?.id ?? db.prepare('INSERT INTO tickets (table_id, user_id) VALUES (?, ?)').run(q.table_id, req.user.id).lastInsertRowid;
+        addItems(ticketId, q.items.map((i) => ({ product_id: i.product_id, qty: i.qty, note: [i.note, 'QR'].filter(Boolean).join(' · ') })), req.user.id);
+      }
+      db.prepare("UPDATE table_requests SET status = 'done', handled_by = ?, handled_at = datetime('now','localtime'), ticket_id = ? WHERE id = ?")
+        .run(req.user.id, ticketId, q.id);
+      return ticketId;
+    })();
+    res.json({ request: loadRequest(q.id), ticket: ticketId ? loadTicket(db, ticketId) : null });
+  }));
+
+  r.post('/table-requests/:id/reject', feature, h((req, res) => {
+    const q = loadRequest(req.params.id);
+    if (!q) throw notFound();
+    if (q.status !== 'new') throw bad('Bu istek zaten işlendi');
+    db.prepare("UPDATE table_requests SET status = 'rejected', handled_by = ?, handled_at = datetime('now','localtime'), note = trim(COALESCE(note,'') || ' ' || ?) WHERE id = ?")
+      .run(req.user.id, str(req.body?.reason) || '', q.id);
+    res.json(loadRequest(q.id));
+  }));
+
+  /** Masanın QR anahtarını yenile (eski QR geçersiz olur). */
+  r.post('/tables/:id/qr-reset', allow(...MANAGERS), h((req, res) => {
+    db.prepare('UPDATE dining_tables SET qr_token = lower(hex(randomblob(8))) WHERE id = ?').run(req.params.id);
+    res.json(db.prepare('SELECT * FROM dining_tables WHERE id = ?').get(req.params.id));
   }));
 
   /** İptal / ikram raporu */

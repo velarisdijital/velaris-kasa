@@ -748,3 +748,56 @@ test('reçete: satışta bileşen stoğu düşer, maliyet reçeteden, iade geri 
   r = await call('PUT', `/api/products/${tost.id}/recipe`, { items: [] });
   assert.equal(r.body.product.recipe_count, 0);
 });
+
+test('QR menü: kapalıyken erişilmez, menü, garson çağır, sipariş isteği onayı adisyona düşer', async () => {
+  const pub = async (method, url, body) => {
+    const res = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  await call('PUT', '/api/settings', { modules_tables: '1' });
+  const [masa] = (await call('POST', '/api/tables', { name: 'QR Masa' })).body;
+  const list = (await call('GET', '/api/tables')).body;
+  const token = list.find((x) => x.id === masa.id).qr_token;
+  assert.match(token, /^[0-9a-f]{16}$/);
+  assert.equal((await pub('GET', `/api/public/menu?t=${token}`)).status, 403);
+
+  await call('PUT', '/api/settings', { qrmenu_enabled: '1', qrmenu_note: 'Wi-Fi: kafe123' });
+  const kahve = (await call('POST', '/api/products', { name: 'QR Latte', sell_price: 9500, track_stock: 0, menu_description: 'Çift shot' })).body;
+  const gizli = (await call('POST', '/api/products', { name: 'Gizli Ürün', sell_price: 100, menu_hidden: 1 })).body;
+  let m = await pub('GET', `/api/public/menu?t=${token}`);
+  assert.equal(m.status, 200);
+  assert.equal(m.body.table.name, 'QR Masa');
+  assert.equal(m.body.note, 'Wi-Fi: kafe123');
+  assert.equal(m.body.orders_enabled, false);
+  assert.ok(m.body.products.some((p) => p.id === kahve.id && p.description === 'Çift shot'));
+  assert.ok(!m.body.products.some((p) => p.id === gizli.id));
+  // Masasız da menü görülür ama sipariş/istek olmaz
+  assert.equal((await pub('GET', '/api/public/menu')).body.table, null);
+  assert.equal((await pub('POST', '/api/public/menu/request', { t: 'deadbeefdeadbeef', type: 'waiter' })).status, 400);
+
+  // Garson çağır (tekrar basılırsa çoğalmaz)
+  assert.equal((await pub('POST', '/api/public/menu/request', { t: token, type: 'waiter' })).status, 201);
+  assert.equal((await pub('POST', '/api/public/menu/request', { t: token, type: 'waiter' })).status, 200);
+  // Sipariş kapalıyken reddedilir, açınca gelir
+  assert.equal((await pub('POST', '/api/public/menu/request', { t: token, type: 'order', items: [{ product_id: kahve.id, qty: 2 }] })).status, 400);
+  await call('PUT', '/api/settings', { qrmenu_orders: '1' });
+  assert.equal((await pub('POST', '/api/public/menu/request', { t: token, type: 'order', items: [{ product_id: gizli.id, qty: 1 }] })).status, 400);
+  assert.equal((await pub('POST', '/api/public/menu/request', { t: token, type: 'order', items: [{ product_id: kahve.id, qty: 2, note: 'yulaf sütü' }] })).status, 201);
+
+  const tables = (await call('GET', '/api/tables')).body;
+  assert.equal(tables.find((x) => x.id === masa.id).requests.split(',').sort().join(','), 'order,waiter');
+  const reqs = (await call('GET', '/api/table-requests')).body.filter((q) => q.table_id === masa.id);
+  const order = reqs.find((q) => q.type === 'order');
+  assert.equal(order.items[0].name, 'QR Latte');
+  const acc = (await call('POST', `/api/table-requests/${order.id}/accept`)).body;
+  assert.equal(acc.ticket.table_id, masa.id);
+  assert.equal(acc.ticket.items[0].qty, 2);
+  assert.equal(acc.ticket.items[0].note, 'yulaf sütü · QR');
+  assert.equal((await call('POST', `/api/table-requests/${order.id}/accept`)).status, 400);
+  const waiter = reqs.find((q) => q.type === 'waiter');
+  assert.equal((await call('POST', `/api/table-requests/${waiter.id}/accept`)).body.request.status, 'done');
+  assert.equal((await call('GET', '/api/tables')).body.find((x) => x.id === masa.id).requests, null);
+  // QR yenilenince eski kod geçersiz
+  await call('POST', `/api/tables/${masa.id}/qr-reset`);
+  assert.equal((await pub('GET', `/api/public/menu?t=${token}`)).body.table, null);
+});

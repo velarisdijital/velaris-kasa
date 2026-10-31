@@ -10,6 +10,7 @@ import { startNotifyWorker } from './notify.js';
 import appointmentRoutes from './routes/appointments.js';
 import { publicRoutes, sessionRoutes } from './routes/auth.js';
 import bookingRoutes from './routes/booking.js';
+import qrMenuRoutes from './routes/qrmenu.js';
 import branchRoutes from './routes/branches.js';
 import customerRoutes from './routes/customers.js';
 import notifyRoutes from './routes/notify.js';
@@ -42,6 +43,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
   api.use(publicRoutes(db));
   api.use(inboundWebhook(db));
   api.use(bookingRoutes(db));
+  api.use(qrMenuRoutes(db));
   api.use(authenticate(db));
   api.use(sessionRoutes(db));
   api.use(productRoutes(db));

@@ -19,6 +19,9 @@ export const DEFAULT_SETTINGS = {
   scale_barcode_prefixes: '27,28,29', // terazi barkodu (EAN-13, gram cinsinden)
   modules_appointments: '0',
   modules_tables: '0',
+  qrmenu_enabled: '0',             // masadaki QR ile herkese açık menü
+  qrmenu_orders: '0',              // QR menüden sipariş isteği (garson onaylar)
+  qrmenu_note: '',                 // menü üstünde gösterilen not (Wi-Fi şifresi vb.)
   setup_done: '0',
   crm_enabled: '0',
   crm_base_url: '',

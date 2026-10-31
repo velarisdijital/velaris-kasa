@@ -235,6 +235,26 @@ const MIGRATIONS = [
   );
   CREATE INDEX idx_recipe_component ON recipe_items(component_id);
   `,
+  // 10: QR menü — masa QR anahtarı ve masadan gelen istekler (garson çağır, hesap, sipariş)
+  `
+  ALTER TABLE dining_tables ADD COLUMN qr_token TEXT;
+  CREATE UNIQUE INDEX idx_tables_qr ON dining_tables(qr_token);
+  ALTER TABLE products ADD COLUMN menu_description TEXT;
+  ALTER TABLE products ADD COLUMN menu_hidden INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE table_requests (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    table_id    INTEGER NOT NULL REFERENCES dining_tables(id),
+    type        TEXT NOT NULL CHECK (type IN ('waiter','bill','order')),
+    items_json  TEXT,
+    note        TEXT,
+    status      TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','done','rejected')),
+    ticket_id   INTEGER,
+    handled_by  INTEGER,
+    handled_at  TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX idx_table_requests_status ON table_requests(status);
+  `,
 ];
 
 export function migrate(db) {
