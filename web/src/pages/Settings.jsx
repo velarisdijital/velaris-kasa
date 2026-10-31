@@ -123,7 +123,7 @@ function Plan() {
 
 function Business() {
   const { f, set, save } = useSettingsForm(['business_name', 'business_type', 'business_phone', 'business_address', 'tax_number', 'receipt_footer',
-    'default_vat', 'allow_negative_stock', 'modules_appointments', 'scale_barcode_prefixes']);
+    'default_vat', 'allow_negative_stock', 'modules_appointments', 'modules_tables', 'scale_barcode_prefixes']);
   return (
     <form className="card card-pad stack" onSubmit={save}>
       <div className="grid-2">
@@ -144,6 +144,7 @@ function Business() {
       </div>
       <label className="check"><input type="checkbox" checked={f.allow_negative_stock === '1'} onChange={set('allow_negative_stock')} /> Stok yetersizken de satışa izin ver (eksi stok)</label>
       <label className="check"><input type="checkbox" checked={f.modules_appointments === '1'} onChange={set('modules_appointments')} /> Randevu modülünü aç (berber, kuaför, güzellik vb.)</label>
+      <label className="check"><input type="checkbox" checked={f.modules_tables === '1'} onChange={set('modules_tables')} /> Masa / adisyon modülünü aç (kafe, restoran, çay ocağı)</label>
       <div><button className="btn primary">Kaydet</button></div>
     </form>
   );

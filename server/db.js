@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   allow_negative_stock: '1',
   scale_barcode_prefixes: '27,28,29', // terazi barkodu (EAN-13, gram cinsinden)
   modules_appointments: '0',
+  modules_tables: '0',
   setup_done: '0',
   crm_enabled: '0',
   crm_base_url: '',

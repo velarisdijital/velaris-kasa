@@ -14,6 +14,7 @@ import branchRoutes from './routes/branches.js';
 import customerRoutes from './routes/customers.js';
 import notifyRoutes from './routes/notify.js';
 import productRoutes from './routes/products.js';
+import tableRoutes from './routes/tables.js';
 import purchaseRoutes from './routes/purchases.js';
 import reportRoutes from './routes/reports.js';
 import saleRoutes from './routes/sales.js';
@@ -46,6 +47,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
   api.use(productRoutes(db));
   api.use(branchRoutes(db));
   api.use(purchaseRoutes(db));
+  api.use(tableRoutes(db));
   api.use(customerRoutes(db));
   api.use(shiftRoutes(db));
   api.use(saleRoutes(db));

@@ -4,6 +4,7 @@ import { useConfirm } from '../components/ui.jsx';
 const OPTIONS = [
   ['market', 'Market örneği'],
   ['berber', 'Berber örneği'],
+  ['kafe', 'Kafe örneği'],
   [null, 'Boş kurulum (sihirbaz)'],
 ];
 

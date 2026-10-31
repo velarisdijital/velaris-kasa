@@ -11,6 +11,9 @@ Tek başına çalışır; istenirse **Velaris CRM** ile entegre olur.
   kritik stok uyarısı, stok hareket geçmişi, CSV/Excel içe-dışa aktarma
 - **Alış & tedarikçiler:** alış faturası / irsaliye girişi (barkodla), KDV hariç/dahil fiyat, stok ve alış fiyatı
   otomatik güncellenir, maliyet satış fiyatını geçerse uyarı, tedarikçi borç takibi, vadeli / nakit ödeme (nakit gün sonuna işlenir), belge iptali
+- **Masa / adisyon (kafe):** masa planı ve bölümler, dokunmatik sipariş, ürün notu (şekersiz, az pişmiş…),
+  mutfak/bar fişi, sebepli iptal/ikram kaydı, masa taşıma-birleştirme, kalem aktarma, hesap bölme (seçili kalemleri öde),
+  adisyon yazdırma; ödeme kasada normal satış olarak alınır (yazarkasa, e-Arşiv, puan aynen çalışır)
 - **Müşteri & veresiye:** müşteri kartı, veresiye defteri, limit, tahsilat, bakiye düzeltme
 - **Randevu (berber/kuaför):** personel bazlı günlük takvim, çakışma kontrolü, randevudan tek tıkla kasaya aktarma, personel primi
 - **Gün sonu:** kasa açılışı, kasaya para giriş/çıkış (masraf), beklenen/sayılan nakit farkı, Z raporu
@@ -113,7 +116,7 @@ Ortam değişkenleri: `PORT` (varsayılan 4848), `HOST` (varsayılan 0.0.0.0), `
 server/            Express API + SQLite (better-sqlite3)
   schema.sql       Veritabanı şeması (tutarlar kuruş); migrations.js sonraki sürümler
   fiscal.js        Yazarkasa sürücüleri · invoice.js e-Arşiv · notify.js SMS/WhatsApp
-  routes/          products, sales, customers, purchases, shifts, appointments, reports, settings
+  routes/          products, sales, customers, purchases, tables, shifts, appointments, reports, settings
   integrations/    velaris.js — CRM olay kuyruğu, müşteri çekme
 web/               React arayüz (Vite) + PWA
 electron/          Masaüstü kabuğu (sunucuyu içinde çalıştırır)

@@ -28,11 +28,11 @@ async function boot(bytes) {
   globalThis.__VK_DEMO__ = true; // demoda tüm paket özellikleri açık
   const SQL = await initSqlJs();
   useSqlJs(SQL, bytes);
-  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR, purchaseR] = await Promise.all([
+  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR, purchaseR, tableR] = await Promise.all([
     import('../../../server/db.js'), import('../../../server/auth.js'), import('../../../server/routes/auth.js'),
     import('../../../server/routes/products.js'), import('../../../server/routes/customers.js'), import('../../../server/routes/shifts.js'),
     import('../../../server/routes/sales.js'), import('../../../server/routes/appointments.js'), import('../../../server/routes/reports.js'),
-    import('../../../server/routes/settings.js'), import('../../../server/routes/notify.js'), import('../../../server/routes/booking.js'), import('../../../server/routes/branches.js'), import('../../../server/routes/purchases.js'),
+    import('../../../server/routes/settings.js'), import('../../../server/routes/notify.js'), import('../../../server/routes/booking.js'), import('../../../server/routes/branches.js'), import('../../../server/routes/purchases.js'), import('../../../server/routes/tables.js'),
   ]);
   db = openDatabase('/demo');
   if (!getSetting(db, 'install_id')) setSettings(db, { install_id: crypto.randomUUID() });
@@ -44,7 +44,7 @@ async function boot(bytes) {
   api.use(bookingR.default(db));
   api.use(authenticate(db));
   api.use(authR.sessionRoutes(db));
-  for (const m of [productR, branchR, purchaseR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));
+  for (const m of [productR, branchR, purchaseR, tableR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));
   handler = api;
 }
 
@@ -127,9 +127,10 @@ async function seed(type) {
 async function seedData(type) {
   seedN = 7;
   const berber = type === 'berber';
+  const kafe = type === 'kafe';
   const { token } = await call('POST', '/setup', {
-    business_name: berber ? 'Makas Erkek Kuaförü' : 'Yıldız Market', business_type: type,
-    admin_name: berber ? 'Hasan Usta' : 'Ali Yıldız', admin_pin: '1234', seed_samples: true,
+    business_name: berber ? 'Makas Erkek Kuaförü' : kafe ? 'Köşe Kahve' : 'Yıldız Market', business_type: type,
+    admin_name: berber ? 'Hasan Usta' : kafe ? 'Selin Aydın' : 'Ali Yıldız', admin_pin: '1234', seed_samples: true,
     business_phone: '0212 555 00 00',
   });
   const T = token;
@@ -145,6 +146,8 @@ async function seedData(type) {
     staff.push(await call('POST', '/users', { name: 'Kerem', role: 'staff', pin: '3333', commission_rate: 35, color: '#16a34a' }, T));
   } else {
     await call('POST', '/users', { name: 'Ayşe', role: 'cashier', pin: '0000', color: '#FF4D1A' }, T);
+  }
+  if (type === 'market') {
     const cats = await call('GET', '/categories', null, T);
     const cat = (n) => cats.find((c) => c.name === n)?.id;
     for (const p of [
@@ -217,6 +220,31 @@ async function seedData(type) {
   for (let i = 0; i < (berber ? 4 : 9); i++) await makeSale(stamp(today, 8 + Math.floor(rnd() * Math.max(1, nowH - 8)), Math.floor(rnd() * 60)));
   if (!berber) {
     await makeSale(stamp(today, nowH, 5), { credit: true });
+  }
+  if (kafe) {
+    // Açık masalar: biri mutfağa gönderilmiş, biri yeni sipariş bekliyor, biri kısmen ödenmiş
+    const tables = await call('GET', '/tables', null, T);
+    const byName = (n) => products.find((x) => x.name === n);
+    const orders = [
+      [0, 2, [['Çay', 4], ['Tost', 2], ['Simit', 2]], true],
+      [2, 3, [['Türk Kahvesi', 3], ['Cheesecake', 2]], true],
+      [3, 2, [['Filtre Kahve', 2]], false],
+      [6, 4, [['Çay', 6], ['Ayran', 2], ['Tost', 4]], true],
+    ];
+    for (const [ti, guests, lines, sent] of orders) {
+      const t = await call('POST', `/tables/${tables[ti].id}/ticket`, { guest_count: guests,
+        items: lines.filter(([n]) => byName(n)).map(([n, q]) => ({ product_id: byName(n).id, qty: q })) }, T);
+      if (sent) await call('POST', `/tickets/${t.id}/kitchen`, {}, T);
+    }
+    db.exec(`UPDATE tickets SET opened_at = datetime('now','localtime', '-' || (id * 17) || ' minutes');
+             UPDATE ticket_items SET created_at = (SELECT opened_at FROM tickets WHERE tickets.id = ticket_id),
+               sent_at = CASE WHEN sent_at IS NULL THEN NULL ELSE datetime((SELECT opened_at FROM tickets WHERE tickets.id = ticket_id), '+4 minutes') END;`);
+    const t7 = await call('GET', `/tickets/${(await call('GET', '/tables', null, T))[6].ticket_id}`, null, T);
+    const tost = t7.items.find((i) => i.name === 'Tost');
+    if (tost) await call('POST', '/sales', { register_name: 'Kasa 1', ticket_id: t7.id, items: [{ product_id: tost.product_id, qty: 2, ticket_item_id: tost.id }],
+      payments: [{ method: 'card', amount: tost.unit_price * 2 }] }, T);
+  }
+  if (type === 'market') {
     const debtor = (await call('GET', '/customers?debt=1', null, T))[0];
     if (debtor) await call('POST', `/customers/${debtor.id}/payment`, { amount: Math.min(debtor.balance, 10000), method: 'cash', register_name: 'Kasa 1' }, T);
     const milk = products.find((p) => p.name.startsWith('Süt'));
@@ -238,7 +266,8 @@ async function seedData(type) {
       const prod = products.find((x) => x.name === name);
       if (prod) await call('POST', '/stock/transfer', { product_id: prod.id, from_branch_id: 1, to_branch_id: moda.id, qty: 4 + Math.floor(rnd() * 6), note: 'Haftalık sevk' }, T).catch(() => {});
     }
-  } else {
+  }
+  if (berber) {
     const day = today.toLocaleDateString('sv-SE');
     const slots = ['10:00', '11:00', '13:30', '15:00', '16:30', '18:00'];
     for (let i = 0; i < slots.length; i++) {

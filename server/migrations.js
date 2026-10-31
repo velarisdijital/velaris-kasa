@@ -180,6 +180,51 @@ const MIGRATIONS = [
     created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
   );
   `,
+  // 8: Kafe / restoran — masalar ve adisyonlar
+  `
+  CREATE TABLE dining_tables (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    zone       TEXT,                                -- Salon, Bahçe, Teras…
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active     INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  CREATE TABLE tickets (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    table_id      INTEGER NOT NULL REFERENCES dining_tables(id),
+    status        TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','cancelled')),
+    guest_count   INTEGER,
+    customer_id   INTEGER REFERENCES customers(id),
+    note          TEXT,
+    user_id       INTEGER,                          -- masayı açan garson
+    paid_total    INTEGER NOT NULL DEFAULT 0,
+    cancel_reason TEXT,
+    opened_at     TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    closed_at     TEXT
+  );
+  CREATE UNIQUE INDEX idx_tickets_open_table ON tickets(table_id) WHERE status = 'open';
+  CREATE TABLE ticket_items (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id   INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    product_id  INTEGER REFERENCES products(id),
+    name        TEXT NOT NULL,
+    qty         REAL NOT NULL,
+    paid_qty    REAL NOT NULL DEFAULT 0,
+    unit        TEXT,
+    unit_price  INTEGER NOT NULL,
+    vat_rate    REAL NOT NULL,
+    note        TEXT,                               -- "şekersiz", "az pişmiş"…
+    user_id     INTEGER,
+    sent_at     TEXT,                               -- mutfağa/bara gönderildi
+    void_at     TEXT,                               -- iptal / ikram
+    void_reason TEXT,
+    void_user_id INTEGER,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX idx_ticket_items_ticket ON ticket_items(ticket_id);
+  ALTER TABLE sales ADD COLUMN ticket_id INTEGER;
+  `,
 ];
 
 export function migrate(db) {

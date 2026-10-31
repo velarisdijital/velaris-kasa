@@ -10,6 +10,7 @@ import Customers from './pages/Customers.jsx';
 import Login from './pages/Login.jsx';
 import Pos from './pages/Pos.jsx';
 import Purchases from './pages/Purchases.jsx';
+import Tables from './pages/Tables.jsx';
 import Products from './pages/Products.jsx';
 import Reports from './pages/Reports.jsx';
 import Sales from './pages/Sales.jsx';
@@ -111,12 +112,14 @@ function Root() {
   if (!user) return <Login status={status} onLogin={login} />;
 
   const appointmentsOn = settings.modules_appointments === '1' && !!license?.features?.includes('appointments');
+  const tablesOn = settings.modules_tables === '1' && !!license?.features?.includes('tables');
   return (
     <SessionCtx.Provider value={{ user, settings, license, reloadSettings, logout }}>
       <div className="app">
         <nav className="sidebar">
           <div className="logo"><img src={logo} alt="VelarisKasa" /></div>
           <NavItem to="/kasa" icon="pos" label="Kasa" />
+          {tablesOn && <NavItem to="/masalar" icon="table" label="Masalar" />}
           {appointmentsOn && <NavItem to="/randevu" icon="calendar" label="Randevu" />}
           <NavItem to="/urunler" icon="box" label="Stok" />
           {isManager(user) && <NavItem to="/alis" icon="truck" label="Alış" />}
@@ -135,6 +138,7 @@ function Root() {
           <LicenseBanner license={license} admin={user.role === 'admin'} />
           <Routes>
             <Route path="/kasa" element={<Pos />} />
+            {tablesOn && <Route path="/masalar" element={<Tables />} />}
             {appointmentsOn && <Route path="/randevu" element={<Appointments />} />}
             <Route path="/urunler" element={<Products />} />
             {isManager(user) && <Route path="/alis" element={<Purchases />} />}

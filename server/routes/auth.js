@@ -35,11 +35,16 @@ export function publicRoutes(db) {
         business_phone: str(req.body.business_phone) || '',
         business_address: str(req.body.business_address) || '',
         modules_appointments: BUSINESS_TYPES[business_type].appointments ? '1' : '0',
+        modules_tables: BUSINESS_TYPES[business_type].tables ? '1' : '0',
         setup_done: '1',
       });
       const userId = db.prepare("INSERT INTO users (name, pin_hash, role, color) VALUES (?, ?, 'admin', '#7B5CFF')")
         .run(str(admin_name), hashSecret(admin_pin)).lastInsertRowid;
       if (seed_samples) seedPreset(db, business_type);
+      if (BUSINESS_TYPES[business_type].tables) {
+        const ins = db.prepare('INSERT INTO dining_tables (name, zone, sort_order) VALUES (?, ?, ?)');
+        for (let i = 1; i <= 8; i++) ins.run(`Masa ${i}`, i <= 6 ? 'Salon' : 'Bahçe', i);
+      }
       return userId;
     })();
 

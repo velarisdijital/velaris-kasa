@@ -28,6 +28,7 @@ export default function Pos() {
   const [customer, setCustomer] = useState(null);
   const [discount, setDiscount] = useState(0);
   const [appointmentId, setAppointmentId] = useState(null);
+  const [ticket, setTicket] = useState(null); // masadan gelen adisyon { id, table_name }
   const [modal, setModal] = useState(null);
   const [lastSale, setLastSale] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -64,6 +65,18 @@ export default function Pos() {
     navigate('.', { replace: true, state: null });
   }, [location.state, products, navigate]);
 
+  // Masadan kasaya: adisyonun (seçilen) kalemleri ile sepeti doldur
+  useEffect(() => {
+    const t = location.state?.ticket;
+    if (!t) return;
+    setCart(t.items.map((i) => ({ key: uuid(), product_id: i.product_id, name: i.name, unit: i.unit, type: 'product', qty: i.qty,
+      unit_price: i.unit_price, discount: 0, vat_rate: i.vat_rate, staff_id: null, ticket_item_id: i.ticket_item_id })));
+    setTicket({ id: t.id, table_name: t.table_name, partial: t.partial });
+    setDiscount(0);
+    if (t.customer_id) get(`/customers/${t.customer_id}`).then(setCustomer).catch(() => {});
+    navigate('.', { replace: true, state: null });
+  }, [location.state, navigate]);
+
   const focusScan = () => setTimeout(() => scanRef.current?.focus(), 0);
 
   const addProduct = useCallback((p, q = null) => {
@@ -88,7 +101,7 @@ export default function Pos() {
 
   const updateLine = (key, patch) => setCart((c) => c.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const removeLine = (key) => { setCart((c) => c.filter((l) => l.key !== key)); setSel(null); };
-  const clearCart = () => { setCart([]); setSel(null); setCustomer(null); setDiscount(0); setAppointmentId(null); };
+  const clearCart = () => { setCart([]); setSel(null); setCustomer(null); setDiscount(0); setAppointmentId(null); setTicket(null); };
 
   /** Barkod okutma / arama kutusunda Enter */
   const onScan = async (text) => {
@@ -132,8 +145,9 @@ export default function Pos() {
       register_name: register,
       customer_id: cust?.id ?? null,
       appointment_id: appointmentId,
+      ticket_id: ticket?.id ?? null,
       discount,
-      items: cart.map((l) => ({ product_id: l.product_id, name: l.name, qty: l.qty, unit_price: l.unit_price, discount: l.discount, vat_rate: l.vat_rate, staff_id: l.staff_id })),
+      items: cart.map((l) => ({ product_id: l.product_id, name: l.name, qty: l.qty, unit_price: l.unit_price, discount: l.discount, vat_rate: l.vat_rate, staff_id: l.staff_id, ticket_item_id: l.ticket_item_id })),
       payments,
       offline_created_at: nowSql(),
     };
@@ -151,8 +165,10 @@ export default function Pos() {
       else if (sale.fiscal_status === 'failed') toast.err(`Satış kaydedildi ama mali fiş basılamadı: ${sale.fiscal_error}`);
       else toast.ok(change > 0 ? `Satış tamam — Para üstü ${money(change)}` : 'Satış tamamlandı');
       if (storage.get('vk_autoprint', false)) printReceipt(printable, settings, change);
+      const fromTable = ticket;
       clearCart();
       setModal(null);
+      if (fromTable) setTimeout(() => navigate('/masalar', { state: { paid: fromTable.id } }), change > 0 ? 2500 : 600);
       // Stokları güncelle (arka planda)
       if (!sale.offline) loadProducts().then(setProducts).catch(() => {});
       else setProducts((ps) => ps.map((p) => {
@@ -199,13 +215,13 @@ export default function Pos() {
   const held = storage.get(HELD_KEY, []);
   const holdCart = () => {
     if (!cart.length) return;
-    storage.set(HELD_KEY, [...held, { id: uuid(), at: new Date().toLocaleTimeString('tr-TR', { timeStyle: 'short' }), cart, customer, discount, total }]);
+    storage.set(HELD_KEY, [...held, { id: uuid(), at: new Date().toLocaleTimeString('tr-TR', { timeStyle: 'short' }), cart, customer, discount, total, ticket }]);
     clearCart();
     toast('Sepet bekletildi');
   };
   const restoreCart = (h) => {
     if (cart.length) holdCart();
-    setCart(h.cart); setCustomer(h.customer); setDiscount(h.discount);
+    setCart(h.cart); setCustomer(h.customer); setDiscount(h.discount); setTicket(h.ticket || null);
     storage.set(HELD_KEY, storage.get(HELD_KEY, []).filter((x) => x.id !== h.id));
     setModal(null);
   };
@@ -254,6 +270,13 @@ export default function Pos() {
           {held.length > 0 && <button className="btn small" onClick={() => setModal({ type: 'held' })}>Bekleyen ({held.length})</button>}
         </div>
 
+        {ticket && (
+          <div className="ticket-bar">
+            <Icon name="table" /><span><b>{ticket.table_name}</b> adisyonu{ticket.partial ? ' · bölünmüş hesap' : ''}</span>
+            <div style={{ flex: 1 }} />
+            <button className="btn small ghost" onClick={() => { clearCart(); navigate('/masalar'); }}>Masaya dön</button>
+          </div>
+        )}
         <div className="cart-items">
           {cart.map((l) => (
             <div key={l.key} className={`cart-line ${sel === l.key ? 'sel' : ''}`} onClick={() => setSel(l.key)} onDoubleClick={() => setModal({ type: 'line', key: l.key })}>

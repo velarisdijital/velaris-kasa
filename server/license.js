@@ -22,22 +22,22 @@ export const PLANS = {
   esnaf: {
     name: 'Esnaf', price: 599,
     limits: { registers: 3, users: Infinity },
-    features: ['fiscal', 'invoice', 'loyalty', 'sms'],
+    features: ['fiscal', 'invoice', 'loyalty', 'sms', 'tables'],
   },
   salon: {
     name: 'Salon', price: 799,
     limits: { registers: 3, users: Infinity },
-    features: ['fiscal', 'invoice', 'loyalty', 'sms', 'appointments', 'booking', 'reminders'],
+    features: ['fiscal', 'invoice', 'loyalty', 'sms', 'tables', 'appointments', 'booking', 'reminders'],
   },
   pro: {
     name: 'Pro', price: 1290,
     limits: { registers: Infinity, users: Infinity },
-    features: ['fiscal', 'invoice', 'loyalty', 'sms', 'appointments', 'booking', 'reminders', 'campaign', 'crm', 'branches', 'api'],
+    features: ['fiscal', 'invoice', 'loyalty', 'sms', 'tables', 'appointments', 'booking', 'reminders', 'campaign', 'crm', 'branches', 'api'],
   },
 };
 
 export const FEATURE_LABELS = {
-  fiscal: 'Yazarkasa bağlantısı', invoice: 'e-Arşiv / e-Fatura', loyalty: 'Puan sistemi', sms: 'SMS / WhatsApp bildirimleri',
+  fiscal: 'Yazarkasa bağlantısı', invoice: 'e-Arşiv / e-Fatura', loyalty: 'Puan sistemi', sms: 'SMS / WhatsApp bildirimleri', tables: 'Masa / adisyon (kafe)',
   appointments: 'Randevu takvimi ve prim', booking: 'Online randevu sayfası', reminders: 'Otomatik randevu hatırlatma',
   campaign: 'Toplu kampanya mesajı', crm: 'Velaris CRM entegrasyonu', branches: 'Şube bazlı stok', api: 'API anahtarları',
 };

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { applyTicketPayment } from './tables.js';
 import { allow, MANAGERS } from '../auth.js';
 import { emitEvent, getSetting, nextReceiptNo } from '../db.js';
 import { fiscalEnabled, fiscalRefund, printFiscal } from '../fiscal.js';
@@ -96,7 +97,7 @@ export default function saleRoutes(db) {
       return {
         product, product_id: product?.id ?? null, name, type: product?.type || 'product', qty, unit: product?.unit || 'adet',
         unit_price, unit_cost: product?.buy_price ?? 0, discount, vat_rate: product ? product.vat_rate : num(it.vat_rate, defaultVat),
-        line_total, staff_id: it.staff_id ? int(it.staff_id) : null,
+        line_total, staff_id: it.staff_id ? int(it.staff_id) : null, ticket_item_id: it.ticket_item_id ? int(it.ticket_item_id) : null,
       };
     });
 
@@ -162,7 +163,7 @@ export default function saleRoutes(db) {
           vat_rate, line_total, staff_id) VALUES (@sale_id, @product_id, @name, @type, @qty, @unit, @unit_price, @unit_cost, @discount,
           @vat_rate, @line_total, @staff_id)`);
       for (const it of items) {
-        const { product, ...row } = it;
+        const { product, ticket_item_id, ...row } = it;
         insItem.run({ ...row, sale_id: saleId });
         if (product) changeStock(db, product.id, -it.qty, 'sale', { saleId, userId: req.user.id, branchId });
       }
@@ -176,6 +177,9 @@ export default function saleRoutes(db) {
       if (pointsEarned > 0) {
         addPointsTx(db, customer.id, 'earn', pointsEarned, { saleId, userId: req.user.id });
         db.prepare('UPDATE sales SET points_earned = ? WHERE id = ?').run(pointsEarned, saleId);
+      }
+      if (b.ticket_id) {
+        applyTicketPayment(db, int(b.ticket_id), items.filter((i) => i.ticket_item_id).map((i) => ({ ticket_item_id: i.ticket_item_id, qty: i.qty })), saleId, total);
       }
       if (b.appointment_id) {
         db.prepare("UPDATE appointments SET status = 'done', sale_id = ? WHERE id = ?").run(saleId, int(b.appointment_id));

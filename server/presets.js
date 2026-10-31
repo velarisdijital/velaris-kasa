@@ -4,7 +4,7 @@
 export const BUSINESS_TYPES = {
   market: { label: 'Market / Bakkal', appointments: false },
   berber: { label: 'Berber / Kuaför / Güzellik', appointments: true },
-  kafe: { label: 'Kafe / Büfe', appointments: false },
+  kafe: { label: 'Kafe / Büfe', appointments: false, tables: true },
   genel: { label: 'Genel Perakende', appointments: false },
 };
 

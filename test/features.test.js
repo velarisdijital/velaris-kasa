@@ -623,3 +623,86 @@ test('tedarikçi ve alış faturası: stok girişi, alış fiyatı, borç, nakit
   r = await call('POST', '/api/purchases', { supplier_id: s.id, doc_no: 'A-001', items: [{ product_id: p.id, qty: 1, unit_price: 1000 }] });
   assert.equal(r.status, 201);
 });
+
+test('kafe: masa aç, sipariş, mutfak, iptal, taşıma/birleştirme, hesap bölme ve kapanış', async () => {
+  const tables = (await call('POST', '/api/tables', { count: 3, prefix: 'Masa', zone: 'Salon' })).body;
+  assert.equal(tables.length, 3);
+  const [m1, m2, m3] = tables;
+  const cay = (await call('POST', '/api/products', { name: 'Çay', sell_price: 1500, vat_rate: 10, track_stock: 0 })).body;
+  const tost = (await call('POST', '/api/products', { name: 'Tost', sell_price: 9000, vat_rate: 10, stock: 10, track_stock: 1 })).body;
+
+  let t = (await call('POST', `/api/tables/${m1.id}/ticket`, { guest_count: 2, items: [{ product_id: cay.id, qty: 2 }] })).body;
+  assert.equal(t.status, 'open');
+  // Aynı masayı tekrar açmak mevcut adisyonu döndürür
+  assert.equal((await call('POST', `/api/tables/${m1.id}/ticket`)).body.id, t.id);
+  t = (await call('POST', `/api/tickets/${t.id}/items`, { items: [{ product_id: cay.id, qty: 1 }, { product_id: tost.id, qty: 2, note: 'kaşarlı' }] })).body;
+  assert.equal(t.items.length, 2); // çaylar birleşti
+  assert.equal(t.items[0].qty, 3);
+  assert.equal(t.total, 3 * 1500 + 2 * 9000);
+  assert.equal(t.unsent_count, 2);
+
+  // Mutfak fişi
+  let k = await call('POST', `/api/tickets/${t.id}/kitchen`);
+  assert.equal(k.body.kitchen.items.length, 2);
+  assert.equal(k.body.kitchen.items[1].note, 'kaşarlı');
+  assert.equal((await call('POST', `/api/tickets/${t.id}/kitchen`)).status, 400);
+  // Gönderilmiş kalem azaltılamaz; sebepli kısmi iptal
+  const tostLine = t.items.find((i) => i.product_id === tost.id);
+  assert.equal((await call('PUT', `/api/tickets/${t.id}/items/${tostLine.id}`, { qty: 1 })).status, 400);
+  assert.equal((await call('POST', `/api/tickets/${t.id}/items/${tostLine.id}/void`, { qty: 1 })).status, 400); // sebep yok
+  t = (await call('POST', `/api/tickets/${t.id}/items/${tostLine.id}/void`, { qty: 1, reason: 'İkram' })).body;
+  assert.equal(t.total, 3 * 1500 + 9000);
+  assert.equal(t.items.filter((i) => i.void_at).length, 1);
+
+  // Masa listesi: açık masa tutarı
+  let list = (await call('GET', '/api/tables')).body;
+  assert.equal(list.find((x) => x.id === m1.id).remaining_total, 13500);
+  assert.equal(list.find((x) => x.id === m2.id).ticket_id, null);
+
+  // Taşıma: boş masaya
+  t = (await call('POST', `/api/tickets/${t.id}/move`, { table_id: m2.id })).body;
+  assert.equal(t.table_id, m2.id);
+  // Birleştirme: Masa 3'te açık adisyon → Masa 2'ye birleşir
+  const t3 = (await call('POST', `/api/tables/${m3.id}/ticket`, { guest_count: 1, items: [{ product_id: cay.id, qty: 1 }] })).body;
+  t = (await call('POST', `/api/tickets/${t3.id}/move`, { table_id: m2.id })).body;
+  assert.equal(t.id, (await call('GET', '/api/tables')).body.find((x) => x.id === m2.id).ticket_id);
+  assert.equal(t.guest_count, 3);
+  assert.equal(t.remaining_total, 15000);
+  assert.equal((await call('GET', `/api/tickets/${t3.id}`)).body.status, 'cancelled');
+
+  // Hesap bölme: önce tost ödenir
+  const live = t.items.filter((i) => !i.void_at);
+  const tl = live.find((i) => i.product_id === tost.id);
+  let r = await call('POST', '/api/sales', { register_name: 'Kasa 1', ticket_id: t.id,
+    items: [{ product_id: tost.id, qty: 1, ticket_item_id: tl.id }], payments: [{ method: 'card', amount: 9000 }] });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  t = (await call('GET', `/api/tickets/${t.id}`)).body;
+  assert.equal(t.status, 'open');
+  assert.equal(t.remaining_total, 6000);
+  assert.equal(t.sales.length, 1);
+  assert.equal((await call('GET', `/api/products/${tost.id}`)).body.stock, 9); // stok satışta düşer
+  // Fazla miktar reddedilir
+  r = await call('POST', '/api/sales', { register_name: 'Kasa 1', ticket_id: t.id,
+    items: [{ product_id: tost.id, qty: 1, ticket_item_id: tl.id }], payments: [{ method: 'cash', amount: 9000 }] });
+  assert.equal(r.status, 400);
+  // Kalan çaylar (iki ayrı satır) → adisyon kapanır
+  const rest = t.items.filter((i) => i.remaining_qty > 0);
+  r = await call('POST', '/api/sales', { register_name: 'Kasa 1', ticket_id: t.id,
+    items: rest.map((i) => ({ product_id: i.product_id, qty: i.remaining_qty, ticket_item_id: i.id })), payments: [{ method: 'cash', amount: 10000 }] });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.change, 4000);
+  t = (await call('GET', `/api/tickets/${t.id}`)).body;
+  assert.equal(t.status, 'closed');
+  assert.equal(t.paid_total, 15000);
+  list = (await call('GET', '/api/tables')).body;
+  assert.equal(list.find((x) => x.id === m2.id).ticket_id, null);
+
+  // Kalem aktarma ve adisyon iptali
+  const a = (await call('POST', `/api/tables/${m1.id}/ticket`, { items: [{ product_id: cay.id, qty: 4 }] })).body;
+  const moved = (await call('POST', `/api/tickets/${a.id}/transfer`, { table_id: m3.id, items: [{ id: a.items[0].id, qty: 1 }] })).body;
+  assert.equal(moved.from.remaining_total, 4500);
+  assert.equal(moved.to.remaining_total, 1500);
+  assert.equal((await call('POST', `/api/tickets/${a.id}/cancel`)).body.status, 'cancelled'); // mutfağa gitmemiş → sebepsiz
+  const voids = (await call('GET', '/api/tickets-voids')).body;
+  assert.ok(voids.some((v) => v.void_reason === 'İkram'));
+});
