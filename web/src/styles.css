@@ -323,3 +323,24 @@ a.btn.primary { color: var(--bg); }
 .wordmark { display: inline-flex; align-items: center; color: var(--text); }
 .wordmark svg { height: 100%; width: auto; display: block; }
 .login-brand { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+
+/* ---------- Etiketler (yazdırma ve önizleme) ---------- */
+.labels { display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 2mm; color: #000; background: #fff; font-family: 'Archivo', Arial, sans-serif; }
+.labels.roll { grid-template-columns: 1fr; gap: 0; }
+.lbl { border: 0.3mm dashed #999; padding: 2mm 2.5mm; overflow: hidden; break-inside: avoid; display: flex; flex-direction: column; justify-content: space-between; background: #fff; }
+.labels.roll .lbl { border: 0; break-after: page; }
+.lbl.shelf { height: 33mm; }
+.labels.roll .lbl.shelf { width: 60mm; height: 40mm; }
+.lbl.sticker { height: 25mm; align-items: center; text-align: center; }
+.labels.roll .lbl.sticker { width: 40mm; height: 30mm; }
+.lbl-name { font-weight: 700; font-size: 10.5pt; line-height: 1.15; max-height: 2.4em; overflow: hidden; }
+.lbl.sticker .lbl-name { font-size: 8pt; font-weight: 600; }
+.lbl-price { font-weight: 800; font-size: 24pt; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.lbl-price small { font-size: 12pt; margin-left: 1mm; }
+.lbl-price.small { font-size: 11pt; }
+.lbl-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 2mm; font-size: 7pt; }
+.lbl-row.bottom { align-items: flex-end; }
+.lbl-biz { font-size: 6.5pt; color: #444; text-align: right; }
+.lbl .bc { max-width: 100%; height: auto; }
+.label-preview { max-height: 50vh; overflow: auto; background: #e9e6e1; padding: 12px; border-radius: 12px; }
+.label-preview .labels { width: 194mm; transform-origin: top left; }

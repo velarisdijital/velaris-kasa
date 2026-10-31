@@ -62,6 +62,78 @@ export default function productRoutes(db) {
   const r = Router();
   const multiBranch = () => hasFeature(db, 'branches') && db.prepare('SELECT COUNT(*) AS n FROM branches WHERE active = 1').get().n > 1;
   const getProduct = (id) => db.prepare(`${PRODUCT_SELECT} WHERE p.id = ?`).get(id);
+  const recordPrice = (productId, oldPrice, newPrice, reason, userId) => {
+    db.prepare('INSERT INTO price_changes (product_id, old_price, new_price, reason, user_id) VALUES (?, ?, ?, ?, ?)')
+      .run(productId, oldPrice, newPrice, reason, userId);
+    db.prepare("UPDATE products SET price_changed_at = datetime('now','localtime') WHERE id = ?").run(productId);
+  };
+
+  /**
+   * Toplu fiyat güncelleme. body: {
+   *   scope: { ids?: number[], category_id?: number, all?: true },
+   *   mode: 'percent' (satış fiyatına % ekle/çıkar) | 'amount' (kuruş ekle/çıkar) | 'margin' (alış fiyatı + %kâr),
+   *   value: number, round: kuruş adımı (0, 25, 50, 100, 500), dry: true → yalnızca önizleme }
+   */
+  r.post('/products/bulk-price', allow(...MANAGERS), h((req, res) => {
+    const { scope = {}, mode, round: step = 0, dry } = req.body || {};
+    const value = num(req.body?.value, NaN);
+    if (!['percent', 'amount', 'margin'].includes(mode)) throw bad('Geçersiz yöntem');
+    if (!Number.isFinite(value)) throw bad('Değer gerekli');
+    if (mode === 'percent' && value <= -100) throw bad('Yüzde -100 veya altı olamaz');
+    if (![0, 1, 10, 25, 50, 100, 500, 1000].includes(int(step))) throw bad('Geçersiz yuvarlama');
+    const where = ['p.active = 1'];
+    const params = {};
+    if (Array.isArray(scope.ids) && scope.ids.length) {
+      where.push(`p.id IN (${scope.ids.map((_, i) => `@id${i}`).join(',')})`);
+      scope.ids.forEach((id, i) => { params[`id${i}`] = int(id); });
+    } else if (scope.category_id) {
+      where.push('p.category_id = @cat'); params.cat = int(scope.category_id);
+    } else if (!scope.all) {
+      throw bad('Ürün, kategori ya da "tüm ürünler" seçin');
+    }
+    const rows = db.prepare(`SELECT p.id, p.name, p.barcode, p.unit, p.buy_price, p.sell_price FROM products p
+      WHERE ${where.join(' AND ')} ORDER BY p.name`).all(params);
+    const roundTo = (k) => (int(step) > 0 ? Math.max(int(step), Math.round(k / int(step)) * int(step)) : Math.round(k));
+    const changes = [];
+    const skipped = [];
+    for (const p of rows) {
+      let next;
+      if (mode === 'percent') next = p.sell_price * (1 + value / 100);
+      else if (mode === 'amount') next = p.sell_price + Math.round(value);
+      else {
+        if (!p.buy_price) { skipped.push({ id: p.id, name: p.name, reason: 'Alış fiyatı yok' }); continue; }
+        next = p.buy_price * (1 + value / 100);
+      }
+      next = roundTo(next);
+      if (next < 0) { skipped.push({ id: p.id, name: p.name, reason: 'Fiyat eksiye düşüyor' }); continue; }
+      if (next !== p.sell_price) changes.push({ id: p.id, name: p.name, barcode: p.barcode, unit: p.unit, buy_price: p.buy_price, old_price: p.sell_price, new_price: next });
+    }
+    if (!dry && changes.length) {
+      const reason = { percent: `Toplu %${value}`, amount: `Toplu ${value > 0 ? '+' : ''}${(value / 100).toFixed(2)} TL`, margin: `Alış + %${value} kâr` }[mode];
+      db.transaction(() => {
+        const upd = db.prepare("UPDATE products SET sell_price = ?, updated_at = datetime('now','localtime') WHERE id = ?");
+        for (const c of changes) {
+          upd.run(c.new_price, c.id);
+          recordPrice(c.id, c.old_price, c.new_price, reason, req.user.id);
+          emitEvent(db, 'product.upserted', getProduct(c.id));
+        }
+      })();
+    }
+    res.json({ applied: !dry, count: changes.length, changes, skipped });
+  }));
+
+  /** Etiketi basılan ürünleri işaretler (fiyatı değişenler listesinden düşer). */
+  r.post('/products/labels-printed', h((req, res) => {
+    const ids = (Array.isArray(req.body.ids) ? req.body.ids : []).map((x) => int(x)).filter(Boolean);
+    if (!ids.length) throw bad('Ürün seçin');
+    db.prepare(`UPDATE products SET label_printed_at = datetime('now','localtime') WHERE id IN (${ids.map(() => '?').join(',')})`).run(...ids);
+    res.json({ ok: true, count: ids.length });
+  }));
+
+  r.get('/products/:id/prices', h((req, res) => {
+    res.json(db.prepare(`SELECT c.*, u.name AS user_name FROM price_changes c LEFT JOIN users u ON u.id = c.user_id
+      WHERE c.product_id = ? ORDER BY c.id DESC LIMIT 50`).all(req.params.id));
+  }));
 
   // ---- Kategoriler ----
   r.get('/categories', h((req, res) => {
@@ -105,6 +177,8 @@ export default function productRoutes(db) {
     const stockExpr = branchView ? 'COALESCE(bs.stock, 0)' : 'p.stock';
     if (req.query.low === '1') where.push(`p.track_stock = 1 AND ${stockExpr} <= p.min_stock`);
     if (req.query.favorite === '1') where.push('p.favorite = 1');
+    // Etiketi eskiyenler: fiyatı, son etiket basımından sonra değişmiş ürünler
+    if (req.query.label_due === '1') where.push('p.price_changed_at IS NOT NULL AND (p.label_printed_at IS NULL OR p.label_printed_at < p.price_changed_at)');
     if (req.query.updated_since) { where.push('p.updated_at >= @since'); params.since = req.query.updated_since; }
     const select = branchView
       ? PRODUCT_SELECT.replace('FROM products p', 'FROM products p LEFT JOIN branch_stock bs ON bs.product_id = p.id AND bs.branch_id = @bid')
@@ -187,6 +261,7 @@ export default function productRoutes(db) {
     // Stok bu uçtan değiştirilmez; /stock ucu hareket kaydı tutar.
     const p = normalizeProduct({ ...req.body, stock: existing.stock }, existing);
     db.transaction(() => {
+      if (p.sell_price !== existing.sell_price) recordPrice(existing.id, existing.sell_price, p.sell_price, 'Ürün düzenleme', req.user.id);
       db.prepare(`UPDATE products SET name=@name, barcode=@barcode, sku=@sku, category_id=@category_id, type=@type, unit=@unit,
           buy_price=@buy_price, sell_price=@sell_price, vat_rate=@vat_rate, min_stock=@min_stock, track_stock=@track_stock,
           duration_min=@duration_min, favorite=@favorite, active=@active, crm_id=@crm_id,

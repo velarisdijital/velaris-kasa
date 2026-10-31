@@ -524,3 +524,47 @@ test('İYS: onayların otomatik yüklenmesi (sahte İYS sunucusu)', async () => 
     await call('PUT', '/api/settings', { iys_enabled: '0' });
   }
 });
+
+test('toplu fiyat güncelleme: önizleme, yüzde, yuvarlama, kâr marjı, geçmiş', async () => {
+  const cat = (await call('POST', '/api/categories', { name: 'Zam Test' })).body;
+  const a = (await call('POST', '/api/products', { name: 'Zam A', category_id: cat.id, buy_price: 1000, sell_price: 1490 })).body;
+  const b = (await call('POST', '/api/products', { name: 'Zam B', category_id: cat.id, buy_price: 0, sell_price: 2000 })).body;
+  // Önizleme: değişiklik yapmaz
+  let r = await call('POST', '/api/products/bulk-price', { scope: { category_id: cat.id }, mode: 'percent', value: 10, round: 25, dry: true });
+  assert.equal(r.body.applied, false);
+  assert.deepEqual(r.body.changes.map((c) => [c.name, c.old_price, c.new_price]), [['Zam A', 1490, 1650], ['Zam B', 2000, 2200]]);
+  assert.equal((await call('GET', `/api/products/${a.id}`)).body.sell_price, 1490);
+  // Uygula
+  r = await call('POST', '/api/products/bulk-price', { scope: { category_id: cat.id }, mode: 'percent', value: 10, round: 25 });
+  assert.equal(r.body.count, 2);
+  const pa = (await call('GET', `/api/products/${a.id}`)).body;
+  assert.equal(pa.sell_price, 1650);
+  assert.ok(pa.price_changed_at);
+  // Alış + %50 kâr, 1 TL'ye yuvarla; alışı olmayan atlanır
+  r = await call('POST', '/api/products/bulk-price', { scope: { ids: [a.id, b.id] }, mode: 'margin', value: 50, round: 100 });
+  assert.deepEqual(r.body.changes.map((c) => c.new_price), [1500]);
+  assert.equal(r.body.skipped[0].name, 'Zam B');
+  // TL ekleme
+  r = await call('POST', '/api/products/bulk-price', { scope: { ids: [b.id] }, mode: 'amount', value: -250 });
+  assert.equal(r.body.changes[0].new_price, 1950);
+  // Geçmiş: elle düzenleme de kaydedilir
+  await call('PUT', `/api/products/${a.id}`, { ...pa, sell_price: 1600 });
+  const hist = (await call('GET', `/api/products/${a.id}/prices`)).body;
+  assert.deepEqual(hist.map((x) => [x.old_price, x.new_price]), [[1500, 1600], [1650, 1500], [1490, 1650]]);
+  assert.equal(hist[0].reason, 'Ürün düzenleme');
+  // Kapsam zorunlu
+  r = await call('POST', '/api/products/bulk-price', { scope: {}, mode: 'percent', value: 5 });
+  assert.equal(r.status, 400);
+});
+
+test('etiket: fiyatı değişenler listesi ve basıldı işareti', async () => {
+  const p = (await call('POST', '/api/products', { name: 'Etiket Ürünü', barcode: '8691234567893', sell_price: 1000 })).body;
+  let due = (await call('GET', '/api/products?label_due=1')).body;
+  assert.ok(!due.some((x) => x.id === p.id)); // fiyatı hiç değişmedi
+  await call('POST', '/api/products/bulk-price', { scope: { ids: [p.id] }, mode: 'percent', value: 20 });
+  due = (await call('GET', '/api/products?label_due=1')).body;
+  assert.ok(due.some((x) => x.id === p.id));
+  await call('POST', '/api/products/labels-printed', { ids: [p.id] });
+  due = (await call('GET', '/api/products?label_due=1')).body;
+  assert.ok(!due.some((x) => x.id === p.id));
+});

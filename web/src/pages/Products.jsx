@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { del, get, post, put } from '../api.js';
 import { isManager, useCan, useSession } from '../App.jsx';
 import CameraScanner, { cameraSupported } from '../components/CameraScanner.jsx';
+import { LABEL_LAYOUTS, LabelSheet } from '../components/Labels.jsx';
+import { printElement } from '../components/Receipt.jsx';
 import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, money, parseQty, qty, toInput, toKurus } from '../format.js';
 
@@ -15,6 +17,8 @@ export default function Products() {
   const [filter, setFilter] = useState('all');
   const [cat, setCat] = useState('');
   const [modal, setModal] = useState(null);
+  const [selected, setSelected] = useState(() => new Set());
+  const toggle = (id) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const can = useCan();
   const [branch, setBranch] = useState('');
   const branches = useLoad(() => (can('branches') ? get('/branches').then((b) => b.branches.filter((x) => x.active)) : Promise.resolve([])), []);
@@ -51,6 +55,8 @@ export default function Products() {
       <div className="page-head">
         <h1>Stok & Ürünler</h1>
         <div className="grow" />
+        {manager && <button className="btn" onClick={() => setModal({ type: 'bulk' })}>Toplu fiyat</button>}
+        <button className="btn" onClick={() => setModal({ type: 'labels' })}>Etiket yazdır</button>
         {manager && <button className="btn" onClick={() => setModal({ type: 'categories' })}>Kategoriler</button>}
         {manager && <button className="btn" onClick={() => setModal({ type: 'import' })}><Icon name="upload" /> İçe aktar</button>}
         <button className="btn" onClick={exportCsv}><Icon name="download" /> Dışa aktar</button>
@@ -76,10 +82,14 @@ export default function Products() {
       </div>
       <div className="card table-wrap">
         <table className="table">
-          <thead><tr><th>Ürün</th><th>Barkod</th><th>Kategori</th><th className="right">Alış</th><th className="right">Satış</th><th className="right">Stok</th><th /></tr></thead>
+          <thead><tr>
+            <th style={{ width: 36 }}><input type="checkbox" aria-label="Tümünü seç" checked={list.length > 0 && list.every((p) => selected.has(p.id))}
+              onChange={(e) => setSelected(e.target.checked ? new Set(list.map((p) => p.id)) : new Set())} /></th>
+            <th>Ürün</th><th>Barkod</th><th>Kategori</th><th className="right">Alış</th><th className="right">Satış</th><th className="right">Stok</th><th /></tr></thead>
           <tbody>
             {list.map((p) => (
               <tr key={p.id} className="clickable" onClick={() => manager && setModal({ type: 'edit', product: p })}>
+                <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`${p.name} seç`} checked={selected.has(p.id)} onChange={() => toggle(p.id)} /></td>
                 <td><strong>{p.name}</strong> {p.favorite ? '★' : ''} {p.type === 'service' && <span className="badge blue">Hizmet</span>}</td>
                 <td className="muted">{p.barcode}</td>
                 <td>{p.category_name && <span className="badge" style={{ borderLeft: `4px solid ${p.category_color || '#999'}` }}>{p.category_name}</span>}</td>
@@ -100,6 +110,9 @@ export default function Products() {
 
       {modal?.type === 'edit' && <ProductForm product={modal.product} categories={categories.data || []} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}
       {modal?.type === 'stock' && <StockModal product={modal.product} branches={multi ? branches.data : null} defaultBranch={branch} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); toast.ok('Stok güncellendi'); }} />}
+      {modal?.type === 'bulk' && <BulkPriceModal selected={[...selected]} categories={categories.data || []} defaultCategory={cat}
+        onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
+      {modal?.type === 'labels' && <LabelModal selected={(products.data || []).filter((p) => selected.has(p.id))} onClose={() => setModal(null)} onPrinted={reload} />}
       {modal?.type === 'categories' && <CategoryModal categories={categories.data || []} onClose={() => { setModal(null); reload(); }} reload={categories.reload} />}
       {modal?.type === 'import' && <ImportModal onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
     </div>
@@ -277,6 +290,124 @@ function StockModal({ product, branches, defaultBranch, onClose, onSaved }) {
             </tbody>
           </table>
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+function LabelModal({ selected, onClose, onPrinted }) {
+  const toast = useToast();
+  const { settings } = useSession();
+  const [source, setSource] = useState(selected.length ? 'selected' : 'due');
+  const due = useLoad(() => get('/products?label_due=1'));
+  const [layout, setLayout] = useState('a4-shelf');
+  const [copies, setCopies] = useState(1);
+  const items = source === 'selected' ? selected : due.data || [];
+  const print = async () => {
+    printElement(<LabelSheet products={items} layout={layout} copies={Number(copies) || 1} business={settings.business_name} />, LABEL_LAYOUTS[layout].page);
+    try { await post('/products/labels-printed', { ids: items.map((p) => p.id) }); onPrinted?.(); } catch { /* işaretleme başarısızsa etiket yine basıldı */ }
+  };
+  return (
+    <Modal title="Etiket yazdır" onClose={onClose} wide
+      footer={<><span className="muted small-text" style={{ flex: 1 }}>{items.length} ürün × {copies} kopya</span>
+        <button className="btn primary" disabled={!items.length} onClick={print}>Yazdır</button></>}>
+      <div className="stack">
+        <div className="tabs">
+          <button className={`tab ${source === 'selected' ? 'active' : ''}`} disabled={!selected.length} onClick={() => setSource('selected')}>Seçili ürünler ({selected.length})</button>
+          <button className={`tab ${source === 'due' ? 'active' : ''}`} onClick={() => setSource('due')}>Fiyatı değişenler ({due.data?.length ?? '…'})</button>
+        </div>
+        {!selected.length && <small className="muted">Belirli ürünler için listede onay kutularıyla seçim yapın.</small>}
+        <div className="grid-2">
+          <Field label="Etiket türü ve kâğıt">
+            <select className="input" value={layout} onChange={(e) => setLayout(e.target.value)}>
+              {Object.entries(LABEL_LAYOUTS).map(([k, l]) => <option key={k} value={k}>{l.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Her üründen kopya"><input className="input" inputMode="numeric" value={copies} onChange={(e) => setCopies(e.target.value)} /></Field>
+        </div>
+        {items.length > 0 ? (
+          <div className="label-preview"><LabelSheet products={items.slice(0, 12)} layout={layout} copies={1} business={settings.business_name} /></div>
+        ) : <div className="empty">{source === 'due' ? 'Fiyatı değişmiş, etiketi basılmamış ürün yok.' : 'Ürün seçilmedi.'}</div>}
+        <small className="muted">Raf etiketinde fiyat değişiklik tarihi yer alır (Fiyat Etiketi Yönetmeliği). Önizlemede ilk 12 etiket gösterilir.</small>
+      </div>
+    </Modal>
+  );
+}
+
+function BulkPriceModal({ selected, categories, defaultCategory, onClose, onDone }) {
+  const toast = useToast();
+  const [scope, setScope] = useState(selected.length ? 'selected' : defaultCategory ? 'category' : 'all');
+  const [catId, setCatId] = useState(defaultCategory || categories[0]?.id || '');
+  const [mode, setMode] = useState('percent');
+  const [value, setValue] = useState('');
+  const [step, setStep] = useState(25);
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const body = (dry) => ({
+    scope: scope === 'selected' ? { ids: selected } : scope === 'category' ? { category_id: Number(catId) } : { all: true },
+    mode, value: mode === 'amount' ? toKurus(value) : parseQty(value), round: Number(step), dry,
+  });
+  const run = async (dry) => {
+    setBusy(true);
+    try {
+      const r = await post('/products/bulk-price', body(dry));
+      if (dry) setPreview(r);
+      else { toast.ok(`${r.count} ürünün fiyatı güncellendi`); onDone(); }
+    } catch (err) { toast.err(err); } finally { setBusy(false); }
+  };
+  const changed = () => setPreview(null);
+  return (
+    <Modal title="Toplu fiyat güncelleme" onClose={onClose} wide
+      footer={<>
+        <button className="btn" disabled={busy || value === ''} onClick={() => run(true)}>Önizle</button>
+        <button className="btn primary" disabled={busy || !preview?.count} onClick={() => run(false)}>{preview ? `${preview.count} ürünü güncelle` : 'Önce önizleyin'}</button>
+      </>}>
+      <div className="stack">
+        <div className="tabs">
+          {selected.length > 0 && <button className={`tab ${scope === 'selected' ? 'active' : ''}`} onClick={() => { setScope('selected'); changed(); }}>Seçili {selected.length} ürün</button>}
+          <button className={`tab ${scope === 'category' ? 'active' : ''}`} onClick={() => { setScope('category'); changed(); }}>Kategori</button>
+          <button className={`tab ${scope === 'all' ? 'active' : ''}`} onClick={() => { setScope('all'); changed(); }}>Tüm ürünler</button>
+        </div>
+        {scope === 'category' && (
+          <select className="input" value={catId} onChange={(e) => { setCatId(e.target.value); changed(); }} aria-label="Kategori">
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
+        <div className="grid-3">
+          <Field label="Yöntem">
+            <select className="input" value={mode} onChange={(e) => { setMode(e.target.value); changed(); }}>
+              <option value="percent">Satış fiyatına % zam / indirim</option>
+              <option value="amount">Satış fiyatına TL ekle / çıkar</option>
+              <option value="margin">Alış fiyatı + % kâr</option>
+            </select>
+          </Field>
+          <Field label={mode === 'amount' ? 'Tutar (₺, indirim için eksi)' : mode === 'margin' ? 'Kâr oranı (%)' : 'Oran (%, indirim için eksi)'}>
+            <input className="input" autoFocus inputMode="decimal" value={value} onChange={(e) => { setValue(e.target.value); changed(); }} placeholder={mode === 'margin' ? '30' : '10'} />
+          </Field>
+          <Field label="Yuvarlama">
+            <select className="input" value={step} onChange={(e) => { setStep(e.target.value); changed(); }}>
+              <option value={0}>Yok</option><option value={25}>0,25 ₺</option><option value={50}>0,50 ₺</option>
+              <option value={100}>1 ₺</option><option value={500}>5 ₺</option>
+            </select>
+          </Field>
+        </div>
+        {preview && (
+          <>
+            <div className="muted small-text">{preview.count} ürünün fiyatı değişecek{preview.skipped.length ? `, ${preview.skipped.length} ürün atlanacak (${preview.skipped[0].reason})` : ''}.</div>
+            <div className="table-wrap" style={{ maxHeight: 320 }}>
+              <table className="table">
+                <thead><tr><th>Ürün</th><th className="right">Alış</th><th className="right">Eski</th><th className="right">Yeni</th><th className="right">Fark</th></tr></thead>
+                <tbody>
+                  {preview.changes.map((c) => (
+                    <tr key={c.id}><td>{c.name}</td><td className="right num muted">{money(c.buy_price)}</td><td className="right num">{money(c.old_price)}</td>
+                      <td className="right num"><strong>{money(c.new_price)}</strong></td>
+                      <td className={`right num ${c.new_price > c.old_price ? 'danger-text' : 'success-text'}`}>{c.new_price > c.old_price ? '+' : ''}{money(c.new_price - c.old_price)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   );

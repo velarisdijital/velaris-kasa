@@ -106,6 +106,21 @@ const MIGRATIONS = [
   `,
   // 5: İYS'ye otomatik yüklemede son hata
   `ALTER TABLE customers ADD COLUMN iys_error TEXT;`,
+  // 6: fiyat geçmişi (toplu fiyat güncelleme, etiket yazdırma için "fiyatı değişenler")
+  `
+  CREATE TABLE price_changes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    old_price  INTEGER NOT NULL,
+    new_price  INTEGER NOT NULL,
+    reason     TEXT,
+    user_id    INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX idx_price_changes_product ON price_changes(product_id, created_at);
+  ALTER TABLE products ADD COLUMN price_changed_at TEXT;
+  ALTER TABLE products ADD COLUMN label_printed_at TEXT;
+  `,
 ];
 
 export function migrate(db) {

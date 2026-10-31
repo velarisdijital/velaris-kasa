@@ -54,8 +54,12 @@ export function Receipt({ sale, settings, change = 0 }) {
 
 let root;
 /** Verilen içeriği gizli yazdırma alanına çizip yazdırır (80mm termal yazıcı). */
-export function printElement(element) {
+export function printElement(element, pageCss = null) {
   root ??= createRoot(document.getElementById('print-area'));
+  // Etiket gibi farklı kâğıt boyutları için @page kuralı (fiş varsayılanı: 80 mm rulo)
+  let style = document.getElementById('print-page');
+  if (!style) { style = document.createElement('style'); style.id = 'print-page'; document.head.appendChild(style); }
+  style.textContent = pageCss ? `@media print { @page { ${pageCss} } #print-area { width: auto !important; } }` : '';
   flushSync(() => root.render(element));
   if (import.meta.env.VITE_DEMO) {
     // Demo ortamı yazdırma penceresi açamaz; fişi ekranda önizleme olarak göster
