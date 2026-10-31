@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { allow, MANAGERS } from '../auth.js';
 import { emitEvent, getSetting } from '../db.js';
 import { hasFeature, requireFeature } from '../license.js';
-import { branchForRegister, branchStock, changeStock } from '../stock.js';
+import { branchForRegister, branchStock, changeStock, recipeOf, refreshRecipeCosts } from '../stock.js';
 import { bad, bool, h, int, notFound, num, str } from '../util.js';
 
 const PRODUCT_SELECT = `
-  SELECT p.*, c.name AS category_name, c.color AS category_color
+  SELECT p.*, c.name AS category_name, c.color AS category_color,
+    (SELECT COUNT(*) FROM recipe_items ri WHERE ri.product_id = p.id) AS recipe_count
   FROM products p LEFT JOIN categories c ON c.id = p.category_id`;
 
 function normalizeProduct(body, existing = {}) {
@@ -266,9 +267,56 @@ export default function productRoutes(db) {
           buy_price=@buy_price, sell_price=@sell_price, vat_rate=@vat_rate, min_stock=@min_stock, track_stock=@track_stock,
           duration_min=@duration_min, favorite=@favorite, active=@active, crm_id=@crm_id,
           updated_at=datetime('now','localtime') WHERE id=@id`).run({ ...p, id: existing.id });
+      // Reçeteli ürünün maliyeti reçeteden gelir; bileşenin maliyeti değiştiyse onu kullanan ürünler güncellenir
+      refreshRecipeCosts(db, existing.id);
+      if (recipeOf(db, existing.id).length) refreshRecipeCosts(db);
       emitEvent(db, 'product.upserted', getProduct(existing.id));
     })();
     res.json(getProduct(existing.id));
+  }));
+
+  // ---- Reçete ----
+  r.get('/products/:id/recipe', h((req, res) => {
+    const p = db.prepare('SELECT id, name, buy_price, sell_price FROM products WHERE id = ?').get(req.params.id);
+    if (!p) throw notFound();
+    const items = recipeOf(db, p.id);
+    const cost = Math.round(items.reduce((a, c) => a + c.buy_price * c.qty, 0));
+    const usedIn = db.prepare(`SELECT p.id, p.name, r.qty FROM recipe_items r JOIN products p ON p.id = r.product_id
+      WHERE r.component_id = ? ORDER BY p.name`).all(p.id);
+    res.json({ product_id: p.id, items, cost, used_in: usedIn });
+  }));
+
+  /** Reçeteyi kaydeder. body: { items: [{ component_id, qty }] } — boş liste reçeteyi kaldırır. */
+  r.put('/products/:id/recipe', allow(...MANAGERS), h((req, res) => {
+    const p = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+    if (!p) throw notFound();
+    if (p.type === 'service') throw bad('Hizmetlere reçete eklenemez');
+    const items = (Array.isArray(req.body?.items) ? req.body.items : []).map((i) => ({ component_id: int(i.component_id), qty: num(i.qty, NaN) }));
+    const seen = new Set();
+    for (const i of items) {
+      if (!(i.qty > 0)) throw bad('Bileşen miktarı sıfırdan büyük olmalı');
+      if (i.component_id === p.id) throw bad('Ürün kendi reçetesinde olamaz');
+      if (seen.has(i.component_id)) throw bad('Aynı bileşen iki kez eklenmiş');
+      seen.add(i.component_id);
+      const c = db.prepare('SELECT id, name, type FROM products WHERE id = ?').get(i.component_id);
+      if (!c) throw bad('Bileşen bulunamadı');
+      if (c.type === 'service') throw bad(`${c.name} hizmet; bileşen olamaz`);
+      if (recipeOf(db, c.id).length) throw bad(`${c.name} kendisi reçeteli; iç içe reçete desteklenmiyor`);
+    }
+    if (items.length && db.prepare('SELECT 1 FROM recipe_items WHERE component_id = ?').get(p.id)) {
+      throw bad(`${p.name} başka bir ürünün reçetesinde bileşen; ona reçete eklenemez`);
+    }
+    db.transaction(() => {
+      db.prepare('DELETE FROM recipe_items WHERE product_id = ?').run(p.id);
+      const ins = db.prepare('INSERT INTO recipe_items (product_id, component_id, qty) VALUES (?, ?, ?)');
+      for (const i of items) ins.run(p.id, i.component_id, Math.round(i.qty * 1000) / 1000);
+      // Reçeteli ürünün kendi stoğu tutulmaz; stok bileşenlerden düşer
+      if (items.length) db.prepare("UPDATE products SET track_stock = 0, updated_at = datetime('now','localtime') WHERE id = ?").run(p.id);
+      refreshRecipeCosts(db);
+      emitEvent(db, 'product.upserted', getProduct(p.id));
+    })();
+    const fresh = recipeOf(db, p.id);
+    res.json({ product_id: p.id, items: fresh, cost: Math.round(fresh.reduce((a, c) => a + c.buy_price * c.qty, 0)), product: getProduct(p.id) });
   }));
 
   r.delete('/products/:id', allow(...MANAGERS), h((req, res) => {

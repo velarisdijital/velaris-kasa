@@ -706,3 +706,45 @@ test('kafe: masa aç, sipariş, mutfak, iptal, taşıma/birleştirme, hesap böl
   const voids = (await call('GET', '/api/tickets-voids')).body;
   assert.ok(voids.some((v) => v.void_reason === 'İkram'));
 });
+
+test('reçete: satışta bileşen stoğu düşer, maliyet reçeteden, iade geri ekler, stok kontrolü', async () => {
+  const ekmek = (await call('POST', '/api/products', { name: 'Tost Ekmeği', unit: 'adet', buy_price: 500, sell_price: 0, stock: 10 })).body;
+  const kasar = (await call('POST', '/api/products', { name: 'Kaşar', unit: 'kg', buy_price: 40000, sell_price: 0, stock: 1 })).body;
+  const tost = (await call('POST', '/api/products', { name: 'Kaşarlı Tost R', sell_price: 9000, vat_rate: 10, stock: 0 })).body;
+  // 2 dilim ekmek + 50 g kaşar
+  let r = await call('PUT', `/api/products/${tost.id}/recipe`, { items: [{ component_id: ekmek.id, qty: 2 }, { component_id: kasar.id, qty: 0.05 }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.cost, 3000);
+  assert.equal(r.body.product.buy_price, 3000);
+  assert.equal(r.body.product.track_stock, 0);
+  assert.equal(r.body.product.recipe_count, 2);
+  // Geçersiz: kendisi, iç içe
+  assert.equal((await call('PUT', `/api/products/${tost.id}/recipe`, { items: [{ component_id: tost.id, qty: 1 }] })).status, 400);
+  const menu = (await call('POST', '/api/products', { name: 'Tost Menü', sell_price: 12000 })).body;
+  assert.equal((await call('PUT', `/api/products/${menu.id}/recipe`, { items: [{ component_id: tost.id, qty: 1 }] })).status, 400);
+
+  // Satış: 3 tost → 6 ekmek, 0.15 kg kaşar düşer; maliyet 3 × 30 TL
+  const sale = await call('POST', '/api/sales', { register_name: 'Kasa 1', items: [{ product_id: tost.id, qty: 3 }], payments: [{ method: 'cash', amount: 27000 }] });
+  assert.equal(sale.status, 201, JSON.stringify(sale.body));
+  assert.equal(sale.body.cost_total, 9000);
+  assert.equal((await call('GET', `/api/products/${ekmek.id}`)).body.stock, 4);
+  assert.equal((await call('GET', `/api/products/${kasar.id}`)).body.stock, 0.85);
+  // Bileşen yetmezse satış durur (negatif stok kapalıyken)
+  await call('PUT', '/api/settings', { allow_negative_stock: '0' });
+  r = await call('POST', '/api/sales', { register_name: 'Kasa 1', items: [{ product_id: tost.id, qty: 3 }], payments: [{ method: 'cash', amount: 27000 }] });
+  await call('PUT', '/api/settings', { allow_negative_stock: '1' });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /Tost Ekmeği/);
+  // İade: bileşenler geri gelir
+  await call('POST', `/api/sales/${sale.body.id}/refund`, { method: 'cash' });
+  assert.equal((await call('GET', `/api/products/${ekmek.id}`)).body.stock, 10);
+  // Bileşenin alış fiyatı değişince reçeteli ürünün maliyeti güncellenir
+  const k = (await call('GET', `/api/products/${kasar.id}`)).body;
+  await call('PUT', `/api/products/${kasar.id}`, { ...k, buy_price: 60000 });
+  assert.equal((await call('GET', `/api/products/${tost.id}`)).body.buy_price, 4000);
+  const rec = (await call('GET', `/api/products/${kasar.id}/recipe`)).body;
+  assert.equal(rec.used_in[0].name, 'Kaşarlı Tost R');
+  // Reçeteyi kaldır
+  r = await call('PUT', `/api/products/${tost.id}/recipe`, { items: [] });
+  assert.equal(r.body.product.recipe_count, 0);
+});

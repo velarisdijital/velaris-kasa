@@ -225,6 +225,16 @@ const MIGRATIONS = [
   CREATE INDEX idx_ticket_items_ticket ON ticket_items(ticket_id);
   ALTER TABLE sales ADD COLUMN ticket_id INTEGER;
   `,
+  // 9: Reçeteler — reçeteli ürün satılınca bileşenlerin stoğu düşer
+  `
+  CREATE TABLE recipe_items (
+    product_id   INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    component_id INTEGER NOT NULL REFERENCES products(id),
+    qty          REAL NOT NULL,                     -- 1 birim ürün için bileşen miktarı (bileşenin biriminde)
+    PRIMARY KEY (product_id, component_id)
+  );
+  CREATE INDEX idx_recipe_component ON recipe_items(component_id);
+  `,
 ];
 
 export function migrate(db) {

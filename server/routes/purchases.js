@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { allow, MANAGERS } from '../auth.js';
 import { emitEvent } from '../db.js';
-import { changeStock, round3 } from '../stock.js';
+import { changeStock, refreshRecipeCosts, round3 } from '../stock.js';
 import { bad, bool, dateRange, h, int, notFound, num, str } from '../util.js';
 import { resolveBranch } from './products.js';
 import { openShiftFor } from './shifts.js';
@@ -177,6 +177,7 @@ export default function purchaseRoutes(db) {
         changeStock(db, i.p.id, i.qty, 'in', { unitCost: i.gross, note: label, userId: req.user.id, branchId });
         if (updateBuy && i.gross !== i.p.buy_price) {
           db.prepare("UPDATE products SET buy_price = ?, updated_at = datetime('now','localtime') WHERE id = ?").run(i.gross, i.p.id);
+          refreshRecipeCosts(db, i.p.id);
         }
       }
       if (supplier) {

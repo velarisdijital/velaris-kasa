@@ -90,7 +90,8 @@ export default function Products() {
             {list.map((p) => (
               <tr key={p.id} className="clickable" onClick={() => manager && setModal({ type: 'edit', product: p })}>
                 <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`${p.name} seç`} checked={selected.has(p.id)} onChange={() => toggle(p.id)} /></td>
-                <td><strong>{p.name}</strong> {p.favorite ? '★' : ''} {p.type === 'service' && <span className="badge blue">Hizmet</span>}</td>
+                <td><strong>{p.name}</strong> {p.favorite ? '★' : ''} {p.type === 'service' && <span className="badge blue">Hizmet</span>}
+                  {p.recipe_count > 0 && <span className="badge green" title="Satılınca bileşenlerin stoğu düşer">Reçeteli</span>}</td>
                 <td className="muted">{p.barcode}</td>
                 <td>{p.category_name && <span className="badge" style={{ borderLeft: `4px solid ${p.category_color || '#999'}` }}>{p.category_name}</span>}</td>
                 <td className="right num">{money(p.buy_price)}</td>
@@ -100,6 +101,7 @@ export default function Products() {
                 </td>
                 <td className="right" onClick={(e) => e.stopPropagation()}>
                   {p.track_stock ? <button className="btn small" onClick={() => setModal({ type: 'stock', product: p })}>Stok</button> : null}
+                  {manager && p.type === 'product' && <button className={`btn small ${p.recipe_count ? '' : 'ghost'}`} style={{ marginLeft: 4 }} onClick={() => setModal({ type: 'recipe', product: p })}>Reçete</button>}
                 </td>
               </tr>
             ))}
@@ -115,7 +117,76 @@ export default function Products() {
       {modal?.type === 'labels' && <LabelModal selected={(products.data || []).filter((p) => selected.has(p.id))} onClose={() => setModal(null)} onPrinted={reload} />}
       {modal?.type === 'categories' && <CategoryModal categories={categories.data || []} onClose={() => { setModal(null); reload(); }} reload={categories.reload} />}
       {modal?.type === 'import' && <ImportModal onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
+      {modal?.type === 'recipe' && <RecipeModal product={modal.product} products={products.data || []} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}
     </div>
+  );
+}
+
+/** Reçete: 1 birim ürün için hangi bileşenden ne kadar kullanıldığı. Satışta bileşenlerin stoğu düşer. */
+function RecipeModal({ product, products, onClose, onSaved }) {
+  const toast = useToast();
+  const recipe = useLoad(() => get(`/products/${product.id}/recipe`), [product.id]);
+  const [rows, setRows] = useState(null);
+  const [pick, setPick] = useState('');
+  const items = rows ?? (recipe.data?.items || []).map((i) => ({ component_id: i.component_id, qty: String(i.qty).replace('.', ',') }));
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const candidates = products.filter((p) => p.id !== product.id && p.type === 'product' && !p.recipe_count && !items.some((i) => i.component_id === p.id));
+  const cost = items.reduce((a, i) => a + (byId.get(i.component_id)?.buy_price || 0) * (parseQty(i.qty) || 0), 0);
+  const upd = (n, v) => setRows(items.map((x, j) => (j === n ? { ...x, qty: v } : x)));
+  const save = async () => {
+    try {
+      await put(`/products/${product.id}/recipe`, { items: items.map((i) => ({ component_id: i.component_id, qty: parseQty(i.qty) })) });
+      toast.ok(items.length ? 'Reçete kaydedildi' : 'Reçete kaldırıldı');
+      onSaved();
+    } catch (e) { toast.err(e); }
+  };
+  const usedIn = recipe.data?.used_in || [];
+  return (
+    <Modal title={`Reçete · ${product.name}`} onClose={onClose} wide
+      footer={<><div className="muted small-text" style={{ flex: 1 }}>1 {product.unit} {product.name} için gereken malzemeler</div>
+        <button className="btn" onClick={onClose}>Vazgeç</button><button className="btn primary" disabled={recipe.loading} onClick={save}>Kaydet</button></>}>
+      <div className="stack">
+        {usedIn.length > 0 ? (
+          <div className="banner warn" style={{ borderRadius: 10 }}>Bu ürün başka ürünlerin reçetesinde bileşen ({usedIn.map((u) => u.name).join(', ')}); kendisine reçete eklenemez.</div>
+        ) : (
+          <>
+            <p className="muted small-text">Satıldığında ürünün kendi stoğu değil, aşağıdaki malzemelerin stoğu düşer. Maliyeti malzemelerin alış fiyatından hesaplanır ve alış fiyatları değiştikçe güncellenir.</p>
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Malzeme</th><th style={{ width: 140 }}>Miktar</th><th className="right">Maliyet</th><th className="right">Stok</th><th /></tr></thead>
+                <tbody>
+                  {items.map((i, n) => {
+                    const c = byId.get(i.component_id) || {};
+                    return (
+                      <tr key={i.component_id}>
+                        <td><strong>{c.name}</strong></td>
+                        <td><div className="row"><input className="input" inputMode="decimal" value={i.qty} onChange={(e) => upd(n, e.target.value)} /><span className="muted">{c.unit}</span></div></td>
+                        <td className="right num">{money(Math.round((c.buy_price || 0) * (parseQty(i.qty) || 0)))}</td>
+                        <td className="right num">{c.track_stock ? `${qty(c.stock)} ${c.unit}` : '—'}</td>
+                        <td className="right"><button className="btn small ghost" onClick={() => setRows(items.filter((_, j) => j !== n))}><Icon name="trash" /></button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {!items.length && <div className="empty">Henüz malzeme yok. Örnek: Kaşarlı tost → 2 adet tost ekmeği + 0,05 kg kaşar.</div>}
+            </div>
+            <div className="row">
+              <select className="input" value={pick} onChange={(e) => setPick(e.target.value)}>
+                <option value="">Malzeme seçin…</option>
+                {candidates.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
+              </select>
+              <button className="btn" disabled={!pick} onClick={() => { setRows([...items, { component_id: Number(pick), qty: '1' }]); setPick(''); }}><Icon name="plus" /> Ekle</button>
+            </div>
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 16 }}>
+              <span>Maliyet: <strong>{money(Math.round(cost))}</strong></span>
+              <span>Satış: <strong>{money(product.sell_price)}</strong></span>
+              {cost > 0 && product.sell_price > 0 && <span className={product.sell_price > cost ? 'success-text' : 'danger-text'}>Kâr %{Math.round(((product.sell_price - cost) / cost) * 100)}</span>}
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -193,11 +264,14 @@ function ProductForm({ product, categories, onClose, onSaved }) {
           <Field label="KDV %"><select className="input" value={f.vat_rate} onChange={set('vat_rate')}>{[0, 1, 10, 20].map((v) => <option key={v} value={v}>%{v}</option>)}</select></Field>
         </div>
         <div className="grid-3">
-          {!service && <Field label="Alış fiyatı (₺)"><input className="input" inputMode="decimal" value={f.buy_price} onChange={set('buy_price')} /></Field>}
+          {!service && (p.recipe_count > 0
+            ? <Field label="Maliyet (₺)" hint="Reçeteden hesaplanır"><input className="input" value={f.buy_price} readOnly /></Field>
+            : <Field label="Alış fiyatı (₺)"><input className="input" inputMode="decimal" value={f.buy_price} onChange={set('buy_price')} /></Field>)}
           <Field label="Satış fiyatı (₺, KDV dahil)" hint={margin != null ? `Kâr marjı: %${margin}` : null}><input className="input" inputMode="decimal" value={f.sell_price} onChange={set('sell_price')} /></Field>
           {service && <Field label="Süre (dk, randevu için)"><input className="input" inputMode="numeric" value={f.duration_min} onChange={set('duration_min')} /></Field>}
         </div>
-        {!service && (
+        {!service && p.recipe_count > 0 && <div className="muted small-text">Reçeteli ürün: satıldığında malzemelerin stoğu düşer (Stok listesinde "Reçete").</div>}
+        {!service && !p.recipe_count && (
           <>
             <label className="check"><input type="checkbox" checked={!!f.track_stock} onChange={set('track_stock')} /> Stok takibi yap</label>
             {!!f.track_stock && (

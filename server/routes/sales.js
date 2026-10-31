@@ -5,7 +5,7 @@ import { emitEvent, getSetting, nextReceiptNo } from '../db.js';
 import { fiscalEnabled, fiscalRefund, printFiscal } from '../fiscal.js';
 import { createInvoice, refreshInvoice } from '../invoice.js';
 import { hasFeature } from '../license.js';
-import { branchForRegister, branchStock, changeStock, round3 } from '../stock.js';
+import { branchForRegister, branchStock, moveProductStock, round3, stockNeeds } from '../stock.js';
 import { bad, dateRange, h, int, notFound, num, str, vatOf } from '../util.js';
 import { addCustomerTx, addPointsTx, customerPayload } from './customers.js';
 import { openShiftFor } from './shifts.js';
@@ -144,10 +144,13 @@ export default function saleRoutes(db) {
     const saleId = db.transaction(() => {
       const branchId = branchForRegister(db, b.register_name);
       if (!allowNegative) {
-        for (const it of items) {
-          if (it.product?.track_stock && it.type === 'product') {
-            const cur = branchStock(db, it.product_id, branchId);
-            if (cur < it.qty) throw bad(`${it.name}: yetersiz stok (${cur})`);
+        // Reçeteli ürünlerde bileşenlerin stoğu kontrol edilir
+        const getP = db.prepare('SELECT name, type, track_stock FROM products WHERE id = ?');
+        for (const [pid, need] of stockNeeds(db, items.filter((i) => i.product))) {
+          const p = getP.get(pid);
+          if (p?.track_stock && p.type === 'product') {
+            const cur = branchStock(db, pid, branchId);
+            if (cur < need) throw bad(`${p.name}: yetersiz stok (${cur})`);
           }
         }
       }
@@ -165,7 +168,7 @@ export default function saleRoutes(db) {
       for (const it of items) {
         const { product, ticket_item_id, ...row } = it;
         insItem.run({ ...row, sale_id: saleId });
-        if (product) changeStock(db, product.id, -it.qty, 'sale', { saleId, userId: req.user.id, branchId });
+        if (product) moveProductStock(db, product.id, -it.qty, 'sale', { saleId, userId: req.user.id, branchId });
       }
       const insPay = db.prepare('INSERT INTO sale_payments (sale_id, method, amount) VALUES (?, ?, ?)');
       for (const [m, a] of Object.entries(pays)) insPay.run(saleId, m, a);
@@ -273,7 +276,7 @@ export default function saleRoutes(db) {
       const shift = openShiftFor(db, req.body.register_name || sale.register_name);
       for (const l of lines) {
         db.prepare('UPDATE sale_items SET refunded_qty = refunded_qty + ? WHERE id = ?').run(l.qty, l.item.id);
-        if (l.item.product_id) changeStock(db, l.item.product_id, l.qty, 'refund', { saleId: sale.id, userId: req.user.id, note: `İade ${sale.receipt_no}`, branchId: sale.branch_id || 1 });
+        if (l.item.product_id) moveProductStock(db, l.item.product_id, l.qty, 'refund', { saleId: sale.id, userId: req.user.id, note: `İade ${sale.receipt_no}`, branchId: sale.branch_id || 1 });
       }
       db.prepare('INSERT INTO refunds (sale_id, shift_id, amount, method, items_json, note, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .run(sale.id, shift?.id ?? null, amount, method,
