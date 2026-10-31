@@ -54,6 +54,8 @@ export default function Reports() {
             <Stat label="Ortalama sepet" value={money(x.totals.avg_basket)} />
             <Stat label="KDV" value={money(x.totals.vat_total)} sub={`İndirim ${money(x.totals.discount)}`} />
             <Stat label="Veresiye" value={money(x.new_debt)} sub={`Tahsilat ${money(x.collections)}`} />
+            {x.purchases && (x.purchases.count > 0 || x.purchases.payable > 0) &&
+              <Stat label="Alışlar" value={money(x.purchases.total)} sub={`${x.purchases.count} belge · tedarikçilere borç ${money(x.purchases.payable)}`} />}
           </div>
 
           <div className="grid-2">

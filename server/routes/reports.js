@@ -55,9 +55,14 @@ export default function reportRoutes(db) {
     const newDebt = db.prepare(`SELECT COALESCE(SUM(amount),0) AS total FROM customer_transactions
       WHERE type = 'debt' AND created_at BETWEEN @from AND @to`).get(p).total;
 
+    // Alışlar: belge tarihine göre (KDV dahil), tedarikçilere toplam borç
+    const purchases = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(total),0) AS total, COALESCE(SUM(vat_total),0) AS vat_total
+      FROM purchases WHERE status = 'posted' AND doc_date BETWEEN @f AND @t`).get({ f: from.slice(0, 10), t: to.slice(0, 10) });
+    purchases.payable = db.prepare('SELECT COALESCE(SUM(balance),0) AS v FROM suppliers WHERE balance > 0').get().v;
+
     const registers = db.prepare(`SELECT COALESCE(register_name, 'Kasa 1') AS name, COUNT(*) AS count, SUM(total - refunded_total) AS net
       FROM sales WHERE created_at BETWEEN @from AND @to GROUP BY name ORDER BY net DESC`).all({ from, to });
-    res.json({ from, to, register: reg || null, registers, totals, payments, daily, hourly, top_products: topProducts, categories, staff, collections, new_debt: newDebt });
+    res.json({ from, to, register: reg || null, registers, totals, payments, daily, hourly, top_products: topProducts, categories, staff, collections, new_debt: newDebt, purchases });
   }));
 
   r.get('/reports/stock', allow(...MANAGERS), h((req, res) => {

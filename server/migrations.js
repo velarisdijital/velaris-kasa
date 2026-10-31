@@ -121,6 +121,65 @@ const MIGRATIONS = [
   ALTER TABLE products ADD COLUMN price_changed_at TEXT;
   ALTER TABLE products ADD COLUMN label_printed_at TEXT;
   `,
+  // 7: tedarikçiler, alış faturaları, tedarikçi cari hareketleri
+  `
+  CREATE TABLE suppliers (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    phone      TEXT,
+    email      TEXT,
+    tax_number TEXT,
+    tax_office TEXT,
+    address    TEXT,
+    note       TEXT,
+    balance    INTEGER NOT NULL DEFAULT 0,          -- + tedarikçiye borcumuz
+    active     INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  CREATE TABLE purchases (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id INTEGER REFERENCES suppliers(id),
+    doc_type    TEXT NOT NULL DEFAULT 'fatura' CHECK (doc_type IN ('fatura','irsaliye','fis')),
+    doc_no      TEXT,
+    doc_date    TEXT NOT NULL,
+    branch_id   INTEGER NOT NULL DEFAULT 1,
+    net_total   INTEGER NOT NULL,                   -- KDV hariç
+    vat_total   INTEGER NOT NULL,
+    total       INTEGER NOT NULL,                   -- KDV dahil
+    paid        INTEGER NOT NULL DEFAULT 0,
+    status      TEXT NOT NULL DEFAULT 'posted' CHECK (status IN ('posted','cancelled')),
+    note        TEXT,
+    user_id     INTEGER,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX idx_purchases_date ON purchases(doc_date);
+  CREATE TABLE purchase_items (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    purchase_id    INTEGER NOT NULL REFERENCES purchases(id) ON DELETE CASCADE,
+    product_id     INTEGER REFERENCES products(id),
+    name           TEXT NOT NULL,
+    qty            REAL NOT NULL,
+    unit           TEXT,
+    unit_cost_net  INTEGER NOT NULL,                -- KDV hariç birim
+    vat_rate       REAL NOT NULL,
+    unit_cost      INTEGER NOT NULL,                -- KDV dahil birim (ürünün alış fiyatı olur)
+    line_net       INTEGER NOT NULL,
+    line_total     INTEGER NOT NULL
+  );
+  CREATE TABLE supplier_transactions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id   INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+    type          TEXT NOT NULL CHECK (type IN ('purchase','payment','adjust')),
+    amount        INTEGER NOT NULL,                 -- + borç artar, - borç azalır
+    balance_after INTEGER NOT NULL,
+    purchase_id   INTEGER,
+    method        TEXT,
+    note          TEXT,
+    user_id       INTEGER,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  `,
 ];
 
 export function migrate(db) {

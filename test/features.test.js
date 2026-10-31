@@ -568,3 +568,58 @@ test('etiket: fiyatı değişenler listesi ve basıldı işareti', async () => {
   due = (await call('GET', '/api/products?label_due=1')).body;
   assert.ok(!due.some((x) => x.id === p.id));
 });
+
+test('tedarikçi ve alış faturası: stok girişi, alış fiyatı, borç, nakit ödeme, iptal', async () => {
+  const p = (await call('POST', '/api/products', { name: 'Alış Ürünü', buy_price: 500, sell_price: 1500, vat_rate: 20, stock: 2 })).body;
+  let r = await call('POST', '/api/suppliers', { name: 'Toptancı A', tax_number: '123' });
+  assert.equal(r.status, 400); // VKN hatalı
+  const s = (await call('POST', '/api/suppliers', { name: 'Toptancı A', tax_number: '1234567890' })).body;
+
+  const shiftBefore = (await call('GET', '/api/shifts/current?register=Kasa%201')).body;
+  // KDV hariç 10,00 TL × 12 → brüt 12,00 TL; 50 TL nakit ödendi
+  r = await call('POST', '/api/purchases', {
+    supplier_id: s.id, doc_type: 'fatura', doc_no: 'A-001', doc_date: '2026-10-30',
+    items: [{ product_id: p.id, qty: 12, unit_price: 1000 }],
+    payment: { amount: 5000, method: 'cash', register_name: 'Kasa 1' },
+  });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.net_total, 12000);
+  assert.equal(r.body.total, 14400);
+  assert.equal(r.body.paid, 5000);
+  const prod = (await call('GET', `/api/products/${p.id}`)).body;
+  assert.equal(prod.stock, 14);
+  assert.equal(prod.buy_price, 1200);
+  let sup = (await call('GET', `/api/suppliers/${s.id}`)).body;
+  assert.equal(sup.balance, 9400);
+  assert.deepEqual(sup.transactions.map((t) => t.type), ['payment', 'purchase']);
+  assert.equal(sup.stats.purchase_count, 1);
+  const shiftAfter = (await call('GET', '/api/shifts/current?register=Kasa%201')).body;
+  const outs = (x) => (x.movements || []).filter((m) => m.type === 'out').length;
+  assert.equal(outs(shiftAfter), outs(shiftBefore) + 1);
+
+  // Aynı belge no ikinci kez girilemez
+  r = await call('POST', '/api/purchases', { supplier_id: s.id, doc_no: 'A-001', items: [{ product_id: p.id, qty: 1, unit_price: 1000 }] });
+  assert.equal(r.status, 400);
+
+  // KDV dahil fiyatla, alış fiyatı güncellenmeden
+  r = await call('POST', '/api/purchases', { supplier_id: s.id, doc_no: 'A-002', prices_include_vat: true, update_buy_price: false,
+    items: [{ product_id: p.id, qty: 1, unit_price: 1200 }] });
+  assert.equal(r.body.net_total, 1000);
+  assert.equal((await call('GET', `/api/products/${p.id}`)).body.buy_price, 1200);
+
+  // Tedarikçiye havale
+  r = await call('POST', `/api/suppliers/${s.id}/payment`, { amount: 1200, method: 'transfer' });
+  assert.equal(r.body.balance, 9400);
+
+  // İptal: stok düşer, fatura tutarı borçtan çıkar (ödenen kısım alacak olarak kalır)
+  const first = (await call('GET', `/api/purchases?supplier_id=${s.id}`)).body.find((x) => x.doc_no === 'A-001');
+  r = await call('POST', `/api/purchases/${first.id}/cancel`);
+  assert.equal(r.body.status, 'cancelled');
+  assert.equal((await call('GET', `/api/products/${p.id}`)).body.stock, 3);
+  sup = (await call('GET', `/api/suppliers/${s.id}`)).body;
+  assert.equal(sup.balance, -5000);
+  assert.equal((await call('POST', `/api/purchases/${first.id}/cancel`)).status, 400);
+  // İptal edilen belge numarası yeniden girilebilir
+  r = await call('POST', '/api/purchases', { supplier_id: s.id, doc_no: 'A-001', items: [{ product_id: p.id, qty: 1, unit_price: 1000 }] });
+  assert.equal(r.status, 201);
+});

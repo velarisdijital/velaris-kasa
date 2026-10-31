@@ -28,11 +28,11 @@ async function boot(bytes) {
   globalThis.__VK_DEMO__ = true; // demoda tüm paket özellikleri açık
   const SQL = await initSqlJs();
   useSqlJs(SQL, bytes);
-  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR] = await Promise.all([
+  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR, purchaseR] = await Promise.all([
     import('../../../server/db.js'), import('../../../server/auth.js'), import('../../../server/routes/auth.js'),
     import('../../../server/routes/products.js'), import('../../../server/routes/customers.js'), import('../../../server/routes/shifts.js'),
     import('../../../server/routes/sales.js'), import('../../../server/routes/appointments.js'), import('../../../server/routes/reports.js'),
-    import('../../../server/routes/settings.js'), import('../../../server/routes/notify.js'), import('../../../server/routes/booking.js'), import('../../../server/routes/branches.js'),
+    import('../../../server/routes/settings.js'), import('../../../server/routes/notify.js'), import('../../../server/routes/booking.js'), import('../../../server/routes/branches.js'), import('../../../server/routes/purchases.js'),
   ]);
   db = openDatabase('/demo');
   if (!getSetting(db, 'install_id')) setSettings(db, { install_id: crypto.randomUUID() });
@@ -44,7 +44,7 @@ async function boot(bytes) {
   api.use(bookingR.default(db));
   api.use(authenticate(db));
   api.use(authR.sessionRoutes(db));
-  for (const m of [productR, branchR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));
+  for (const m of [productR, branchR, purchaseR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));
   handler = api;
 }
 
@@ -220,7 +220,16 @@ async function seedData(type) {
     const debtor = (await call('GET', '/customers?debt=1', null, T))[0];
     if (debtor) await call('POST', `/customers/${debtor.id}/payment`, { amount: Math.min(debtor.balance, 10000), method: 'cash', register_name: 'Kasa 1' }, T);
     const milk = products.find((p) => p.name.startsWith('Süt'));
-    if (milk) await call('POST', `/products/${milk.id}/stock`, { type: 'in', qty: 24, unit_cost: 2600, note: 'Pınar - İrsaliye 4512' }, T);
+    // Tedarikçiler: geçen haftaki vadeli fatura + bugün kısmen nakit ödenen süt irsaliyesi
+    const toptan = await call('POST', '/suppliers', { name: 'Anadolu Toptan Gıda', phone: '0216 444 10 20', tax_number: '9876543210', tax_office: 'Üsküdar', note: 'Sipariş: salı · temsilci Murat' }, T);
+    const pinar = await call('POST', '/suppliers', { name: 'Pınar Süt Bayi', phone: '0532 600 70 80' }, T);
+    const wk = new Date(today); wk.setDate(wk.getDate() - 6);
+    const byName = (n) => products.find((x) => x.name === n);
+    const lines = [['Makarna 500 g', 24, 1500], ['Ayçiçek Yağı 1 L', 12, 6000], ['Çikolatalı Gofret', 48, 1000]].filter(([n]) => byName(n))
+      .map(([n, q, net]) => ({ product_id: byName(n).id, qty: q, unit_price: net }));
+    if (lines.length) await call('POST', '/purchases', { supplier_id: toptan.id, doc_type: 'fatura', doc_no: 'ATG2026000184', doc_date: wk.toLocaleDateString('sv-SE'), items: lines }, T);
+    if (milk) await call('POST', '/purchases', { supplier_id: pinar.id, doc_type: 'irsaliye', doc_no: '4512', prices_include_vat: true,
+      items: [{ product_id: milk.id, qty: 24, unit_price: 2600 }], payment: { amount: 30000, method: 'cash', register_name: 'Kasa 1' } }, T);
     await call('POST', `/shifts/${(await call('GET', '/shifts/current?register=Kasa%201', null, T)).shift.id}/cash`, { type: 'out', amount: 15000, note: 'Ekmek fırınına ödeme' }, T);
     // İkinci şube: Moda (Pro paket özelliği) — birkaç ürün transfer edilir
     const moda = await call('POST', '/branches', { name: 'Moda' }, T);

@@ -9,6 +9,7 @@ import { BookingPage, ManageBooking } from './pages/Booking.jsx';
 import Customers from './pages/Customers.jsx';
 import Login from './pages/Login.jsx';
 import Pos from './pages/Pos.jsx';
+import Purchases from './pages/Purchases.jsx';
 import Products from './pages/Products.jsx';
 import Reports from './pages/Reports.jsx';
 import Sales from './pages/Sales.jsx';
@@ -118,6 +119,7 @@ function Root() {
           <NavItem to="/kasa" icon="pos" label="Kasa" />
           {appointmentsOn && <NavItem to="/randevu" icon="calendar" label="Randevu" />}
           <NavItem to="/urunler" icon="box" label="Stok" />
+          {isManager(user) && <NavItem to="/alis" icon="truck" label="Alış" />}
           <NavItem to="/musteriler" icon="users" label="Müşteri" />
           <NavItem to="/satislar" icon="receipt" label="Satışlar" />
           <NavItem to="/gun-sonu" icon="cash" label="Gün Sonu" />
@@ -135,6 +137,7 @@ function Root() {
             <Route path="/kasa" element={<Pos />} />
             {appointmentsOn && <Route path="/randevu" element={<Appointments />} />}
             <Route path="/urunler" element={<Products />} />
+            {isManager(user) && <Route path="/alis" element={<Purchases />} />}
             <Route path="/musteriler" element={<Customers />} />
             <Route path="/satislar" element={<Sales />} />
             <Route path="/gun-sonu" element={<Shift />} />

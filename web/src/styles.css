@@ -344,3 +344,9 @@ a.btn.primary { color: var(--bg); }
 .lbl .bc { max-width: 100%; height: auto; }
 .label-preview { max-height: 50vh; overflow: auto; background: #e9e6e1; padding: 12px; border-radius: 12px; }
 .label-preview .labels { width: 194mm; transform-origin: top left; }
+
+/* Açılır arama listesi (alış ekranı ürün arama vb.) */
+.dropdown { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; padding: 4px; max-height: 320px; overflow: auto; }
+.dropdown-item { display: flex; width: 100%; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 0; background: none;
+  text-align: left; border-radius: 8px; cursor: pointer; font: inherit; color: inherit; }
+.dropdown-item:hover, .dropdown-item:focus { background: var(--panel-2); outline: none; }
