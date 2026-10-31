@@ -4,7 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
-const body = fs.readFileSync(path.join(dir, 'page.html'), 'utf8');
+// Canlı sitede demo bağlantıları aynı sitedeki uygulamaya gider (VK_APP_URL ile değiştirilebilir)
+const APP_URL = process.env.VK_APP_URL || 'uygulama/';
+const body = fs.readFileSync(path.join(dir, 'page.html'), 'utf8')
+  .replaceAll('href="https://claude.ai/artifact/LQ1BwDfuMRHvnQWcFTSVQa" target="_blank" rel="noopener"', `href="${APP_URL}"`);
 const out = path.join(dir, 'public');
 fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(path.join(out, 'index.html'), `<!doctype html>
