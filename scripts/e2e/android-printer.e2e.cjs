@@ -46,6 +46,9 @@ async function saveTsplPages(p, prefix) {
   try {
     const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 } });
     await ctx.addInitScript({ path: path.join(__dirname, 'fake-android-bridge.js') });
+    // GitHub'daki son sürüm (uygulama içinden güncelleme): 1.0.15
+    await ctx.route('https://api.github.com/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ name: 'VelarisKasa Android 1.0.15', assets: [{ name: 'VelarisKasa.apk', browser_download_url: 'https://github.com/velarisdijital/velaris-kasa/releases/download/android-latest/VelarisKasa.apk' }] }) }));
     const p = await ctx.newPage();
     const errors = [];
     p.on('pageerror', (e) => errors.push(e.message));
@@ -179,6 +182,65 @@ async function saveTsplPages(p, prefix) {
     ok(`Satış fişi Bluetooth yazıcıya gönderildi (${r2.length} etiket)`);
     ok('Kullanıcıya "Fiş yazıcıya gönderildi" bildirimi gösterildi');
     if (shots) { await saveTsplPages(p, path.join(shots, 'satis-fis')); await shot('4-satis'); }
+
+    // ---- Gün sonu: Z raporu Bluetooth yazıcıdan ----
+    await p.goto(`${url}#/gun-sonu`);
+    await p.getByRole('button', { name: /Günü kapat/ }).click();
+    await p.locator('.modal input.input').first().fill('15');
+    await p.getByRole('button', { name: 'Kapat ve Z raporu al' }).click();
+    await p.getByRole('button', { name: 'Günü kapat', exact: true }).click();
+    before = await p.evaluate(() => window.__fake.writes.length);
+    await p.getByRole('button', { name: /Yazdır/ }).click();
+    await p.getByText('Z raporu yazıcıya gönderildi').waitFor({ timeout: 20000 });
+    ok(`Z raporu Bluetooth yazıcıya gönderildi (${(await p.evaluate((n) => window.__fake.writes.length - n, before))} parça)`);
+    if (shots) await saveTsplPages(p, path.join(shots, 'z-raporu'));
+    await p.keyboard.press('Escape').catch(() => {});
+
+    // ---- Kasa modu ----
+    await p.goto(`${url}#/ayarlar`);
+    await p.getByRole('button', { name: 'Bu cihaz' }).click();
+    await p.getByText('Kasa modu (tablet)').waitFor({ timeout: 10000 });
+    if (!(await p.evaluate(() => window.__fake.keepAwake === true))) fail('açılışta "ekran kararmasın" uygulanmadı'); else ok('Açılışta ekran kararmasın açıldı');
+    await p.getByLabel(/Tam ekran/).check();
+    await p.waitForFunction(() => window.__fake.immersive === true, null, { timeout: 5000 });
+    ok('Tam ekran açıldı');
+    await p.getByRole('button', { name: 'Uygulamayı sabitle' }).click();
+    await p.getByRole('button', { name: 'Sabitlemeyi kaldır' }).waitFor({ timeout: 5000 });
+    ok('Uygulama sabitlendi, "Sabitlemeyi kaldır" görünüyor');
+    await p.getByText(/Uygulama sürümü: 1\.0\.14/).waitFor({ timeout: 5000 });
+    ok('Uygulama sürümü gösteriliyor (1.0.14)');
+
+    // ---- Uygulama içinden güncelleme ----
+    const upd = p.getByRole('button', { name: 'Güncelle', exact: true });
+    await upd.waitFor({ timeout: 15000 });
+    await upd.click();
+    await p.waitForFunction(() => /VelarisKasa\.apk\?v=1\.0\.15/.test(window.__fake.openedUrl || ''), null, { timeout: 5000 });
+    ok('"Yeni sürüm 1.0.15" bildirimi çıktı, Güncelle APK indirmesini açtı');
+
+    // ---- Yedekleme ve geri yükleme ----
+    await p.getByRole('button', { name: 'Yedekleme' }).click();
+    await p.getByRole('button', { name: 'Tablete kaydet' }).click();
+    await p.getByText(/Yedek kaydedildi: Belgeler\/VelarisKasa\//).waitFor({ timeout: 15000 });
+    ok('Yedek tablete kaydedildi (Belgeler/VelarisKasa)');
+    await p.getByRole('button', { name: /Yedeği paylaş/ }).click();
+    await p.waitForFunction(() => window.__fake.shared?.files?.[0]?.startsWith('file:///fake/CACHE/velariskasa-yedek-'), null, { timeout: 15000 });
+    ok('Yedek paylaşım menüsüne gönderildi (Drive, WhatsApp…)');
+    // Yedekten sonra veri değişsin: işletme adı
+    await p.getByRole('button', { name: 'İşletme' }).click();
+    const bizName = p.getByLabel('İşletme adı');
+    await bizName.fill('Değişmiş Market');
+    await p.getByRole('button', { name: 'Kaydet' }).first().click();
+    await p.waitForTimeout(800);
+    // Geri yükle → uygulama yeniden açılır, eski ad geri gelir
+    await p.getByRole('button', { name: 'Yedekleme' }).click();
+    await p.getByRole('button', { name: 'Geri yükle' }).first().click();
+    const reloaded = p.waitForEvent('load', { timeout: 20000 });
+    await p.locator('.modal').getByRole('button', { name: 'Geri yükle' }).click();
+    await reloaded;
+    await p.goto(`${url}#/ayarlar`);
+    await p.getByRole('button', { name: 'İşletme' }).click();
+    const nameAfter = await p.getByLabel('İşletme adı').inputValue({ timeout: 15000 });
+    if (nameAfter !== 'Deneme Market') fail(`geri yüklemeden sonra işletme adı ${nameAfter}`); else ok('Yedek geri yüklendi: sonradan yapılan değişiklik geri alındı, veriler yedekteki hâlinde');
 
     const pacing = await p.evaluate(() => window.__fake.pacing);
     if (!pacing || pacing.chunk > 512) fail(`klasik Bluetooth gönderimi yavaşlatılmamış: ${JSON.stringify(pacing)}`);

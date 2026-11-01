@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { get, post, registerName } from '../api.js';
+import { get, post, registerName, storage } from '../api.js';
 import { useSession } from '../App.jsx';
 import { printElement } from '../components/Receipt.jsx';
 import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
@@ -11,6 +11,7 @@ export default function Shift() {
   const history = useLoad(() => get('/shifts?limit=30'));
   const [modal, setModal] = useState(null);
   const [view, setView] = useState(null);
+  const { settings } = useSession();
   const s = current.data;
 
   const reload = () => { current.reload(); history.reload(); };
@@ -45,10 +46,15 @@ export default function Shift() {
       </div>
 
       {(modal === 'in' || modal === 'out') && <CashMoveModal shift={s.shift} type={modal} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
-      {modal === 'close' && <CloseModal s={s} onClose={() => setModal(null)} onDone={(z) => { setModal(null); reload(); setView(z); }} />}
+      {modal === 'close' && <CloseModal s={s} onClose={() => setModal(null)} onDone={(z) => {
+        setModal(null); reload(); setView(z);
+        if (storage.get('vk_autoprint', false)) printZ(z, settings);
+        // Gün sonunda otomatik yedek (tablet uygulaması)
+        if (import.meta.env.VITE_APP) import('../backup.js').then((b) => b.autoBackup({ force: true })).catch(() => {});
+      }} />}
       {view && (
         <Modal title={`Z Raporu — ${view.shift.register_name} #${view.shift.id}`} onClose={() => setView(null)} wide
-          footer={<button className="btn" onClick={() => printZ(view)}><Icon name="print" /> Yazdır</button>}>
+          footer={<button className="btn" onClick={() => printZ(view, settings)}><Icon name="print" /> Yazdır</button>}>
           <Summary s={view} />
         </Modal>
       )}
@@ -140,7 +146,27 @@ function CloseModal({ s, onClose, onDone }) {
   );
 }
 
-function printZ(z) {
+const notify = (type, message) => window.dispatchEvent(new CustomEvent('vk-toast', { detail: { type, message } }));
+
+/** Z raporu: Android uygulamasında Bluetooth yazıcı seçiliyse oraya, değilse sistemin yazdırma penceresine */
+async function printZ(z, settings = {}) {
+  try {
+    const lp = await import('../printing/labelPrinter.js');
+    const cfg = lp.getPrinter();
+    if (lp.isNative() && cfg.deviceId && cfg.receiptVia !== 'system') {
+      const { printZBluetooth } = await import('../printing/receiptBitmap.js');
+      await printZBluetooth(z, settings);
+      notify('success', 'Z raporu yazıcıya gönderildi');
+      return;
+    }
+  } catch (e) {
+    notify('error', `Z raporu basılamadı: ${e.message || e}`);
+    return;
+  }
+  printZSystem(z);
+}
+
+function printZSystem(z) {
   const lines = [
     `Z RAPORU - ${z.shift.register_name}`, `Açılış: ${dt(z.shift.opened_at)}`, `Kapanış: ${dt(z.shift.closed_at)}`, '-'.repeat(32),
     `Fiş sayısı: ${z.sales.count}`, `Satış: ${plain(z.sales.total)}`, `İade: ${plain(z.refunds.total)}`, `Net: ${plain(z.sales.net_total)}`, `KDV: ${plain(z.sales.vat_total)}`, '-'.repeat(32),

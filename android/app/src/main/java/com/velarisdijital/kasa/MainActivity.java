@@ -9,6 +9,8 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // Klasik Bluetooth yazıcı (SPP) eklentisi uygulamanın içinde
         registerPlugin(ClassicPrinterPlugin.class);
+        // Kasa modu: ekran kararmasın, tam ekran, uygulamayı sabitle, sürüm bilgisi
+        registerPlugin(DevicePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

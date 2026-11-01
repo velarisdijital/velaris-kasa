@@ -132,6 +132,7 @@ function Root() {
           </nav>
           <div className="main">
             <OfflineBanner />
+            <UpdateBanner />
             <Routes>
               <Route path="/masalar" element={<Tables />} />
               {appointmentsOn && <Route path="/randevu" element={<Appointments />} />}
@@ -165,6 +166,7 @@ function Root() {
         </nav>
         <div className="main">
           <OfflineBanner />
+          <UpdateBanner />
           <LicenseBanner license={license} admin={user.role === 'admin'} />
           <Routes>
             <Route path="/kasa" element={<Pos />} />
@@ -201,6 +203,29 @@ function LicenseBanner({ license, admin }) {
     : license.status === 'expired' ? 'Lisans süresi doldu; Ücretsiz pakete geçildi. Yenilemek için Velaris Dijital ile iletişime geçin.'
       : `Lisans geçersiz: ${license.error}`;
   return <div className="banner red">{text}{admin && <NavLink className="btn small" to="/ayarlar?sekme=paket">Paket</NavLink>}</div>;
+}
+
+/** Android uygulaması: GitHub'da yeni sürüm varsa üstte "Güncelle" (açılışta ve 6 saatte bir bakılır). */
+function UpdateBanner() {
+  const [upd, setUpd] = useState(null);
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    if (!import.meta.env.VITE_APP) return undefined;
+    let mod = null;
+    const check = () => (mod ? Promise.resolve(mod) : import('./appUpdate.js').then((m) => (mod = m)))
+      .then((m) => m.checkForUpdate()).then(setUpd).catch(() => {});
+    const first = setTimeout(check, 4000);
+    const every = setInterval(check, 6 * 3600 * 1000);
+    return () => { clearTimeout(first); clearInterval(every); };
+  }, []);
+  if (!upd || hidden) return null;
+  return (
+    <div className="banner blue">
+      <span style={{ flex: 1 }}>Yeni sürüm hazır: <b>{upd.version}</b> (tabletteki: {upd.current}). Güncelle'ye dokunun; indirme bitince bildirime dokunup "Güncelle" deyin. Verileriniz silinmez.</span>
+      <button className="btn small primary" onClick={() => import('./appUpdate.js').then((m) => m.installUpdate(upd.url))}>Güncelle</button>
+      <button className="btn small ghost" onClick={() => setHidden(true)}>Daha sonra</button>
+    </div>
+  );
 }
 
 function OfflineBanner() {

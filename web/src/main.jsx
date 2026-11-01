@@ -24,7 +24,12 @@ const render = () => root.render(
 
 if (import.meta.env.VITE_APP) {
   root.render(<div className="center-screen muted">VelarisKasa açılıyor…</div>);
-  import('./demo/backend.js').then((m) => m.ensureApp()).then(render, (e) => {
+  import('./demo/backend.js').then((m) => m.ensureApp()).then(() => {
+    render();
+    // Kasa modu (ekran kararmasın / tam ekran) ve günlük otomatik yedek
+    import('./kiosk.js').then((k) => k.applyKiosk()).catch(() => {});
+    setTimeout(() => import('./backup.js').then((b) => b.autoBackup()).catch(() => {}), 8000);
+  }, (e) => {
     root.render(<div className="center-screen danger-text">Uygulama başlatılamadı: {String(e?.message || e)}</div>);
   });
 } else if (import.meta.env.VITE_DEMO) {

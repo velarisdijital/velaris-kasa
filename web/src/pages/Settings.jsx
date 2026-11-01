@@ -517,8 +517,50 @@ function Device() {
         <b>Fiş yazıcı:</b> 80 mm termal yazıcıyı bilgisayarın varsayılan yazıcısı yapın; masaüstü uygulamasında fiş doğrudan basılır.
       </div>
       <div><button className="btn primary">Kaydet</button></div>
+      {import.meta.env.VITE_APP && <KioskSettings />}
       <LabelPrinterSettings />
     </form>
+  );
+}
+
+/** Tam kasa modu: ekran kararmasın, tam ekran, uygulamayı sabitle; uygulama sürümü ve güncelleme */
+function KioskSettings() {
+  const toast = useToast();
+  const [m, setM] = useState(null);
+  const [k, setK] = useState(null);
+  const [pinned, setPinned] = useState(false);
+  const [ver, setVer] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    import('../kiosk.js').then((mod) => { setM(mod); setK(mod.getKiosk()); mod.isPinned().then(setPinned).catch(() => {}); });
+    import('../appUpdate.js').then((u) => u.currentVersion()).then(setVer).catch(() => {});
+  }, []);
+  if (!m || !k) return null;
+  const toggle = (key) => async (e) => setK(await m.saveKiosk({ [key]: e.target.checked }));
+  const run = async (fn) => { setBusy(true); try { await fn(); } catch (err) { toast.err(err); } finally { setBusy(false); } };
+  const checkUpdate = () => run(async () => {
+    const u = await import('../appUpdate.js');
+    const upd = await u.checkForUpdate();
+    if (!upd) { toast.ok('Uygulama güncel'); return; }
+    toast.ok(`Yeni sürüm ${upd.version} indiriliyor; bitince bildirime dokunup "Güncelle" deyin`);
+    await u.installUpdate(upd.url);
+  });
+  return (
+    <div className="card card-pad stack" style={{ background: 'var(--panel-2)', boxShadow: 'none' }} onClick={(e) => e.stopPropagation()}>
+      <strong>Kasa modu (tablet)</strong>
+      <label className="check"><input type="checkbox" checked={!!k.keepAwake} onChange={toggle('keepAwake')} /> Ekran kararmasın (uygulama açıkken tablet uykuya geçmez)</label>
+      <label className="check"><input type="checkbox" checked={!!k.immersive} onChange={toggle('immersive')} /> Tam ekran (üst bildirim ve alt gezinme çubuklarını gizle; kenardan kaydırınca görünür)</label>
+      <div className="row wrap" style={{ gap: 8 }}>
+        {pinned
+          ? <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => { await m.unpinApp(); setPinned(false); toast.ok('Sabitleme kaldırıldı'); })}>Sabitlemeyi kaldır</button>
+          : <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => { await m.pinApp(); setTimeout(() => m.isPinned().then(setPinned).catch(() => {}), 1500); })}>Uygulamayı sabitle</button>}
+        <span className="muted small-text" style={{ flex: 1 }}>Sabitlenince çalışanlar uygulamadan çıkamaz. Çıkmak için buradan "Sabitlemeyi kaldır"a basın ya da Geri ve Son uygulamalar tuşlarına birlikte basılı tutun. Android ayarlarında "Sabitlemeyi kaldırmadan önce PIN iste"yi açarsanız tablet şifresi sorulur.</span>
+      </div>
+      <div className="row wrap" style={{ gap: 8 }}>
+        <span className="muted small-text" style={{ flex: 1 }}>Uygulama sürümü: <b>{ver?.versionName || '—'}</b>{ver?.model ? ` · ${ver.model} · Android ${ver.android}` : ''}</span>
+        <button type="button" className="btn small" disabled={busy} onClick={checkUpdate}>Güncellemeleri denetle</button>
+      </div>
+    </div>
   );
 }
 
@@ -895,6 +937,11 @@ function Crm() {
 }
 
 function Backup() {
+  if (import.meta.env.VITE_APP) return <AppBackup />;
+  return <ServerBackup />;
+}
+
+function ServerBackup() {
   const toast = useToast();
   const download = async () => {
     try {
@@ -911,6 +958,51 @@ function Backup() {
       <h2>Yedekleme</h2>
       <p className="muted">Tüm verileriniz (ürünler, satışlar, müşteriler, ayarlar) tek bir dosyada saklanır. Düzenli olarak yedek alıp USB belleğe veya buluta kopyalayın. Geri yüklemek için programı kapatıp yedek dosyayı veri klasöründeki <code>velaris-kasa.db</code> ile değiştirin.</p>
       <div><button className="btn primary" onClick={download}><Icon name="download" /> Yedeği indir</button></div>
+    </div>
+  );
+}
+
+/** Tablet uygulaması: yedeği paylaş / tablete kaydet / geri yükle */
+function AppBackup() {
+  const toast = useToast();
+  const ask = useConfirm();
+  const [bk, setBk] = useState(null);
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const refresh = (m) => m.listBackups().then(setList).catch(() => setList([]));
+  useEffect(() => { import('../backup.js').then((m) => { setBk(m); refresh(m); }); }, []);
+  if (!bk) return null;
+  const run = async (fn) => { setBusy(true); try { await fn(); } catch (e) { toast.err(e); } finally { setBusy(false); } };
+  const restore = async (label, fn) => {
+    if (!(await ask(`${label} geri yüklensin mi? Tabletteki şu anki verilerin yerine geçer (önce şu anki veri ayrıca yedeklenir). Uygulama yeniden açılır.`, { ok: 'Geri yükle', danger: true }))) return;
+    run(async () => { await fn(); toast.ok('Yedek geri yüklendi, uygulama yeniden açılıyor…'); });
+  };
+  const fmtSize = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n ? `${Math.max(1, Math.round(n / 1024))} KB` : '');
+  return (
+    <div className="card card-pad stack">
+      <h2>Yedekleme</h2>
+      <p className="muted">Tüm verileriniz (ürünler, satışlar, müşteriler, ayarlar) bu tabletin içinde saklanır. Uygulama silinir ya da tablet bozulursa kaybolmaması için yedeği <b>tabletin dışına</b> da gönderin (Google Drive, WhatsApp, e-posta).</p>
+      <div className="muted small-text">Otomatik yedek: her gün ilk açılışta ve gün sonu kapatılınca <b>Belgeler/VelarisKasa/Otomatik</b> klasörüne alınır (son 7 gün tutulur).</div>
+      <div className="row wrap" style={{ gap: 8 }}>
+        <button className="btn primary" disabled={busy} onClick={() => run(async () => { await bk.shareBackup(); })}><Icon name="download" /> Yedeği paylaş (Drive, WhatsApp…)</button>
+        <button className="btn" disabled={busy} onClick={() => run(async () => { const r = await bk.saveBackupToDevice(); toast.ok(`Yedek kaydedildi: ${r.where}`); refresh(bk); })}>Tablete kaydet</button>
+      </div>
+      <h3 style={{ marginTop: 12 }}>Geri yükle</h3>
+      <label className="btn" style={{ alignSelf: 'flex-start' }}>
+        Dosya seç (Drive'dan, İndirilenler'den…)
+        <input type="file" style={{ display: 'none' }} disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) restore(f.name, () => bk.restoreFromFile(f)); }} />
+      </label>
+      {list == null ? <div className="muted small-text">Tabletteki yedekler aranıyor…</div> : list.length === 0 ? <div className="muted small-text">Tablette kayıtlı yedek yok.</div> : (
+        <div className="stack" style={{ gap: 6 }}>
+          <div className="muted small-text">Tabletteki yedekler</div>
+          {list.slice(0, 15).map((b) => (
+            <div key={`${b.directory}/${b.path}`} className="row" style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '6px 10px' }}>
+              <span style={{ flex: 1 }}>{b.name}{b.auto && <span className="badge blue" style={{ marginLeft: 6 }}>otomatik</span>} <span className="muted small-text">{fmtSize(b.size)}</span></span>
+              <button className="btn small" disabled={busy} onClick={() => restore(b.name, () => bk.restoreFromDevice(b))}>Geri yükle</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -47,7 +47,9 @@ async function loadSaved() {
   try { const s = localStorage.getItem(STORE_KEY); return s ? b64decode(s) : null; } catch { return null; }
 }
 let saving = Promise.resolve();
+let frozen = false; // yedek geri yüklendi: uygulama yeniden açılana kadar eski veri kaydedilmesin
 function persist() {
+  if (frozen) return saving;
   const bytes = db.export();
   // Yazmalar sırayla yapılır; IndexedDB başarılıysa eski localStorage kopyası silinir
   saving = saving.then(() => idbOp('readwrite', (s) => s.put(bytes, STORE_KEY))
@@ -142,6 +144,46 @@ export async function ensureDemo() {
   await start();
   const status = await (await demoFetch('./api/setup/status')).json();
   if (!status.setup_done && !hadSaved) { await seed('market'); await persist(); }
+}
+
+const SQLITE_HEADER = 'SQLite format 3\u0000';
+
+/** Tüm veritabanı (yedek için): bekleyen kayıt bitince SQLite dosyasının baytları. */
+export async function exportDatabase() {
+  await start();
+  await saving;
+  return db.export();
+}
+
+/** Yedek dosyasını denetler: SQLite mi, VelarisKasa verisi mi? Hata mesajı ya da null döner. */
+export async function checkBackup(bytes) {
+  const head = new TextDecoder('latin1').decode(bytes.subarray(0, 16));
+  if (head !== SQLITE_HEADER) return 'Bu dosya bir VelarisKasa yedeği değil';
+  try {
+    const SQL = await initSqlJs();
+    const t = new SQL.Database(bytes);
+    const r = t.exec("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('products','sales','settings','users')");
+    t.close();
+    if (r[0]?.values[0][0] !== 4) return 'Dosya açıldı ama VelarisKasa tabloları yok';
+  } catch (e) {
+    return `Yedek dosyası bozuk: ${e.message || e}`;
+  }
+  return null;
+}
+
+/** Yedeği geri yükler: mevcut verinin yerine geçer. Sonrasında uygulama yeniden açılmalı (location.reload). */
+export async function importDatabase(bytes) {
+  const err = await checkBackup(bytes);
+  if (err) throw new Error(err);
+  frozen = true;
+  try {
+    await saving;
+    await idbOp('readwrite', (s) => s.put(bytes, STORE_KEY));
+  } catch (e) {
+    frozen = false;
+    throw new Error(`Yedek kaydedilemedi: ${e.message || e}`);
+  }
+  try { localStorage.removeItem(STORE_KEY); } catch { /* yok say */ }
 }
 
 /** Android uygulaması: örnek veri yok, ilk açılışta kurulum sihirbazı. */

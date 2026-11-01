@@ -8,6 +8,8 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/share": "^8.0.3",
     "@fontsource/archivo": "^5.3.0",
     "better-sqlite3": "^13.0.3",
     "express": "^5.3.0",

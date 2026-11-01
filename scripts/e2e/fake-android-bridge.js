@@ -6,7 +6,7 @@
   const PRINTER_BLE = 'DC:0D:30:AA:B3:34';
   // Eşleşmeler gerçek tablette olduğu gibi uygulama yeniden açılınca da korunur
   const saved = JSON.parse(sessionStorage.getItem('fakeBonded') || 'null');
-  const state = { bonded: saved || [{ address: '11:22:33:44:55:66', name: 'Galaxy Buds', type: 1 }], calls: [], written: 0, writes: [], status: 4 };
+  const state = { bonded: saved || [{ address: '11:22:33:44:55:66', name: 'Galaxy Buds', type: 1 }], calls: [], written: 0, writes: [], status: 4, files: {} };
   window.__fake = state;
   const listeners = {}; // "Plugin:event" -> [callback]
   let nextId = 1;
@@ -47,6 +47,38 @@
         return { data: btoa(String.fromCharCode(state.status)), bytes: 1 };
       },
       async disconnect() {},
+    },
+    // Kasa modu ve sürüm (android/.../DevicePlugin.java)
+    VKDevice: {
+      async appInfo() { return { versionName: '1.0.14', versionCode: 14, android: '13', model: 'Test Tablet' }; },
+      async keepAwake({ on }) { state.keepAwake = on; },
+      async immersive({ on }) { state.immersive = on; },
+      async pin() { state.pinned = true; },
+      async unpin() { state.pinned = false; },
+      async isPinned() { return { pinned: !!state.pinned }; },
+      async openUrl({ url }) { state.openedUrl = url; },
+    },
+    // @capacitor/filesystem (bellekte)
+    Filesystem: {
+      async writeFile({ path, data, directory }) { state.files[`${directory}/${path}`] = { data, mtime: Date.now() }; return { uri: `file:///fake/${directory}/${path}` }; },
+      async readFile({ path, directory }) {
+        const f = state.files[`${directory}/${path}`];
+        if (!f) throw new Error('File does not exist');
+        return { data: f.data };
+      },
+      async readdir({ path, directory }) {
+        const prefix = `${directory}/${path}/`;
+        const files = Object.entries(state.files).filter(([k]) => k.startsWith(prefix) && !k.slice(prefix.length).includes('/'))
+          .map(([k, f]) => ({ name: k.slice(prefix.length), type: 'file', size: atob(f.data).length, mtime: f.mtime, uri: `file:///fake/${k}` }));
+        if (!files.length) throw new Error('Directory does not exist');
+        return { files };
+      },
+      async deleteFile({ path, directory }) { delete state.files[`${directory}/${path}`]; },
+      async getUri({ path, directory }) { return { uri: `file:///fake/${directory}/${path}` }; },
+    },
+    Share: {
+      async share(opts) { state.shared = opts; return {}; },
+      async canShare() { return { value: true }; },
     },
     BluetoothLe: {
       async initialize() {},

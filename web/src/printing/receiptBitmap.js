@@ -6,8 +6,8 @@ import { getPrinter, isRoll, receiptPrintWidth, sendLabels } from './labelPrinte
 const DOTS_PER_MM = 8;
 const font = (w, s) => `${w} ${s}px Archivo, "Helvetica Neue", Arial, sans-serif`;
 
-/** Fiş satırlarını hazırlar: her satır { h, draw(ctx, y, W) } */
-function receiptRows(sale, settings, change, W) {
+/** Belge satırlarını hazırlar: build({ center, left, lr, hr }) çağrılır; her satır { h, draw(ctx, y, W) } */
+function docRows(W, build) {
   const rows = [];
   const pad = 6;
   const measure = document.createElement('canvas').getContext('2d');
@@ -44,7 +44,12 @@ function receiptRows(sale, settings, change, W) {
     x.fillText(t, pad, y);
   } });
   const hr = () => rows.push({ h: 10, draw: (x, y) => { x.fillRect(pad, y + 4, W - pad * 2, 2); } });
+  build({ center, left, lr, hr });
+  return rows;
+}
 
+/** Satış fişinin içeriği */
+const receiptContent = (sale, settings, change) => ({ center, left, lr, hr }) => {
   center(settings.business_name || 'VelarisKasa', 26, 800);
   if (settings.business_address) center(settings.business_address, 17);
   if (settings.business_phone) center(`Tel: ${settings.business_phone}`, 17);
@@ -74,8 +79,31 @@ function receiptRows(sale, settings, change, W) {
   hr();
   if (settings.receipt_footer) center(settings.receipt_footer, 18);
   center('Bilgi fişidir. Mali değeri yoktur.', 15);
-  return rows;
-}
+};
+
+/** Gün sonu (Z) raporunun içeriği */
+const zContent = (z, settings) => ({ center, lr, hr }) => {
+  center(settings.business_name || 'VelarisKasa', 24, 800);
+  center(`GÜN SONU (Z) RAPORU`, 20, 700);
+  if (z.shift.register_name) center(z.shift.register_name, 17);
+  hr();
+  lr('Açılış', dt(z.shift.opened_at), 17);
+  lr('Kapanış', dt(z.shift.closed_at) || '—', 17);
+  hr();
+  lr('Fiş sayısı', String(z.sales.count), 18);
+  lr('Satış', plain(z.sales.total), 18);
+  lr('İade', plain(z.refunds.total), 18);
+  lr('KDV', plain(z.sales.vat_total), 18);
+  lr('NET', `${plain(z.sales.net_total)} ₺`, 26, 800);
+  hr();
+  for (const [m, a] of Object.entries(z.payments || {})) lr(METHOD_LABELS[m] || m, plain(a), 18);
+  hr();
+  lr('Beklenen nakit', plain(z.expected_cash), 18);
+  lr('Sayılan nakit', plain(z.shift.counted_cash ?? 0), 18);
+  lr('Fark', plain(z.difference ?? 0), 20, 700);
+  hr();
+  center(`Basım: ${new Date().toLocaleString('tr-TR')}`, 15);
+};
 
 function paint(rows, W, H, top) {
   const c = document.createElement('canvas');
@@ -93,17 +121,22 @@ function paint(rows, W, H, top) {
  * paper: 'label' (etiket rulosu: etiket boyunda sayfalar) | 'continuous' (fiş kâğıdı: tek uzun sayfa)
  */
 export function drawReceipt(sale, settings, change = 0, cfg = getPrinter()) {
+  return drawDoc(receiptContent(sale, settings, change), cfg);
+}
+
+/** Herhangi bir belgeyi (fiş, Z raporu) yazıcının kâğıdına göre sayfalara çizer. */
+export function drawDoc(build, cfg = getPrinter()) {
   const margin = 10;
   if (isRoll(cfg)) {
     // Düz fiş kâğıdı: 56 mm kâğıtta 48 mm basılır; fiş tek parça, içeriği kadar uzun
     const mm = receiptPrintWidth(cfg.receiptWidth);
     const W = mm * DOTS_PER_MM;
-    const rows = receiptRows(sale, settings, change, W);
+    const rows = docRows(W, build);
     const H = rows.reduce((a, r) => a + r.h, 0) + margin * 2 + 80; // sonda yırtma payı
     return { pages: [paint(rows, W, H, margin)], cfg: { ...cfg, width: mm, height: Math.ceil(H / DOTS_PER_MM), gap: 0 } };
   }
   const W = Math.round(cfg.width * DOTS_PER_MM);
-  const rows = receiptRows(sale, settings, change, W);
+  const rows = docRows(W, build);
   const H = Math.round(cfg.height * DOTS_PER_MM);
   const pages = [];
   let cur = [];
@@ -127,6 +160,14 @@ export function drawReceipt(sale, settings, change = 0, cfg = getPrinter()) {
 export async function printReceiptBluetooth(sale, settings, change = 0) {
   if (document.fonts?.ready) await document.fonts.ready;
   const { pages, cfg } = drawReceipt(sale, settings, change);
+  await sendLabels(pages.map((canvas) => ({ canvas, copies: 1 })), cfg);
+  return pages.length;
+}
+
+/** Gün sonu (Z) raporunu Bluetooth yazıcıya gönderir. */
+export async function printZBluetooth(z, settings) {
+  if (document.fonts?.ready) await document.fonts.ready;
+  const { pages, cfg } = drawDoc(zContent(z, settings));
   await sendLabels(pages.map((canvas) => ({ canvas, copies: 1 })), cfg);
   return pages.length;
 }
