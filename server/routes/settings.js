@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { allow, createApiKey, hashSecret } from '../auth.js';
+import { allow, createApiKey, hashSecret, PERMISSIONS, rolePermissions } from '../auth.js';
 import { DEFAULT_SETTINGS, emitEvent, getSettings, setSettings } from '../db.js';
 import { FISCAL_DRIVERS, fiscalStatus } from '../fiscal.js';
 import { currentLicense, FEATURE_LABELS, limitError, PLANS, requireFeature, verifyLicense } from '../license.js';
@@ -81,6 +81,21 @@ export default function settingsRoutes(db) {
   r.get('/fiscal/status', h(async (req, res) => res.json({ ...(await fiscalStatus(db)), drivers: FISCAL_DRIVERS })));
 
   // ---- Kullanıcılar / personel ----
+  // ---- Rol yetkileri (kasiyer, personel) ----
+  r.get('/permissions', allow(), h((req, res) => {
+    res.json({ labels: PERMISSIONS, roles: { cashier: rolePermissions(db, 'cashier'), staff: rolePermissions(db, 'staff') } });
+  }));
+  r.put('/permissions', allow(), h((req, res) => {
+    const out = {};
+    for (const role of ['cashier', 'staff']) {
+      const src = req.body?.[role] || {};
+      out[role] = Object.fromEntries(Object.keys(PERMISSIONS).map((k) => [k, !!src[k]]));
+      out[role].max_discount_pct = Math.max(0, Math.min(100, num(src.max_discount_pct, 100)));
+    }
+    setSettings(db, { permissions: JSON.stringify(out) });
+    res.json({ labels: PERMISSIONS, roles: { cashier: rolePermissions(db, 'cashier'), staff: rolePermissions(db, 'staff') } });
+  }));
+
   r.get('/users', h((req, res) => {
     const cols = req.user.role === 'admin' ? 'id, name, role, commission_rate, color, active, created_at' : 'id, name, role, color, active';
     res.json(db.prepare(`SELECT ${cols} FROM users ORDER BY active DESC, name`).all());

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { applyTicketPayment } from './tables.js';
-import { allow, MANAGERS } from '../auth.js';
+import { allow, can, MANAGERS, PERMISSIONS, requirePerm, rolePermissions } from '../auth.js';
 import { emitEvent, getSetting, nextReceiptNo } from '../db.js';
 import { fiscalEnabled, fiscalRefund, printFiscal } from '../fiscal.js';
 import { createInvoice, refreshInvoice } from '../invoice.js';
@@ -134,6 +134,20 @@ export default function saleRoutes(db) {
     const pointsEarned = loyaltyOn && customer
       ? Math.floor(((total - (pays.credit || 0) - (pays.points || 0)) * Number(getSetting(db, 'loyalty_rate') || 0)) / 100)
       : 0;
+    // Rol yetkileri: indirim (ve azami oranı), fiyat değiştirme, veresiye
+    const denied = (perm) => Object.assign(new Error(`Yetkiniz yok: ${PERMISSIONS[perm]}`), { status: 403, code: 'PERMISSION' });
+    const ticketDiscount = b.ticket_id ? db.prepare('SELECT discount FROM tickets WHERE id = ?').get(int(b.ticket_id))?.discount || 0 : 0;
+    const lineDiscount = items.reduce((a, i) => a + i.discount, 0);
+    if ((discount > ticketDiscount || lineDiscount > 0) && !can(db, req.user, 'discount')) throw denied('discount');
+    const maxPct = ['admin', ...MANAGERS].includes(req.user.role) ? 100 : Number(rolePermissions(db, req.user.role).max_discount_pct ?? 100);
+    const gross = subtotal + lineDiscount;
+    if (maxPct < 100 && gross > 0 && ((discount - ticketDiscount + lineDiscount) / gross) * 100 > maxPct + 0.001) {
+      throw Object.assign(new Error(`En fazla %${maxPct} indirim yapabilirsiniz`), { status: 403, code: 'PERMISSION' });
+    }
+    if (items.some((i) => i.product && i.product.sell_price > 0 && !i.ticket_item_id && i.unit_price !== i.product.sell_price) && !can(db, req.user, 'price_edit')) {
+      throw denied('price_edit');
+    }
+    if (pays.credit && !can(db, req.user, 'credit_sale')) throw denied('credit_sale');
     if (pays.credit) {
       if (!customer) throw bad('Veresiye için müşteri seçmelisiniz');
       if (customer.credit_limit > 0 && customer.balance + pays.credit > customer.credit_limit) {
@@ -243,7 +257,7 @@ export default function saleRoutes(db) {
    * İade. body: { items: [{ sale_item_id, qty }], method?, note?, register_name? }
    * items verilmezse tüm kalan ürünler iade edilir. Stok geri eklenir.
    */
-  r.post('/sales/:id/refund', allow(...MANAGERS, 'cashier'), h(async (req, res) => {
+  r.post('/sales/:id/refund', requirePerm(db, 'refund'), h(async (req, res) => {
     const sale = loadSale(db, req.params.id);
     if (!sale) throw notFound();
     if (sale.status === 'refunded') throw bad('Bu satış zaten tamamen iade edilmiş');

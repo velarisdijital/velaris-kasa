@@ -968,3 +968,53 @@ test('yemek platformları: imzalı webhook, eşleme, kabul/ret, durum bildirimi,
     await call('PUT', '/api/settings', { platform_auto_accept: '0' });
   }
 });
+
+test('yetkiler: kasiyer indirim sınırı, fiyat değiştirme, iade; tedarikçi fiyat karşılaştırma', async () => {
+  const u = (await call('POST', '/api/users', { name: 'Kasiyer Can', role: 'cashier', pin: '5555' })).body;
+  const login = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: u.id, pin: '5555' }) });
+  const ct = (await login.json()).token;
+  const as = async (method, url, body) => {
+    const res = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ct}` }, body: body ? JSON.stringify(body) : undefined });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  const p = (await call('POST', '/api/products', { name: 'Yetki Ürünü', sell_price: 10000, track_stock: 0 })).body;
+  const sale = (extra) => as('POST', '/api/sales', { register_name: 'Kasa 1', items: [{ product_id: p.id, qty: 1, ...extra.item }], discount: extra.discount || 0,
+    payments: [{ method: 'cash', amount: 10000 }] });
+  // Varsayılan: kasiyer indirim ve fiyat değiştirebilir
+  assert.equal((await sale({ discount: 3000 })).status, 201);
+  const me = (await as('GET', '/api/auth/me')).body.user;
+  assert.equal(me.permissions.discount, true);
+  // Kısıtla: en çok %10 indirim, fiyat değiştiremez, iade alamaz
+  let perms = (await call('GET', '/api/permissions')).body;
+  assert.equal(perms.roles.staff.discount, false);
+  perms = (await call('PUT', '/api/permissions', { cashier: { ...perms.roles.cashier, max_discount_pct: 10, price_edit: false, refund: false }, staff: perms.roles.staff })).body;
+  assert.equal(perms.roles.cashier.max_discount_pct, 10);
+  let r = await sale({ discount: 1500 });
+  assert.equal(r.status, 403);
+  assert.match(r.body.error, /%10/);
+  assert.equal((await sale({ discount: 1000 })).status, 201);
+  r = await sale({ item: { unit_price: 8000 } });
+  assert.equal(r.status, 403);
+  assert.equal(r.body.code, 'PERMISSION');
+  const done = (await sale({})).body;
+  assert.equal((await as('POST', `/api/sales/${done.id}/refund`, { method: 'cash' })).status, 403);
+  assert.equal((await call('POST', `/api/sales/${done.id}/refund`, { method: 'cash' })).status, 200); // yönetici alabilir
+  // Yetkisiz kullanıcı yetki ayarını değiştiremez
+  assert.equal((await as('PUT', '/api/permissions', {})).status, 403);
+  await call('PUT', '/api/permissions', { cashier: { discount: true, price_edit: true, refund: true, credit_sale: true, void: true, cancel_ticket: true, stock: true, close_shift: true, max_discount_pct: 100 },
+    staff: perms.roles.staff });
+
+  // Tedarikçi fiyat karşılaştırma
+  const a = (await call('POST', '/api/suppliers', { name: 'Ucuz Toptan' })).body;
+  const b = (await call('POST', '/api/suppliers', { name: 'Pahalı Toptan' })).body;
+  await call('POST', '/api/purchases', { supplier_id: b.id, doc_no: 'K-1', doc_date: '2026-10-01', items: [{ product_id: p.id, qty: 5, unit_price: 5000 }] });
+  await call('POST', '/api/purchases', { supplier_id: a.id, doc_no: 'K-2', doc_date: '2026-10-05', items: [{ product_id: p.id, qty: 5, unit_price: 4800 }] });
+  await call('POST', '/api/purchases', { supplier_id: b.id, doc_no: 'K-3', doc_date: '2026-10-10', items: [{ product_id: p.id, qty: 5, unit_price: 5200 }] });
+  const cmp = (await call('GET', `/api/products/${p.id}/supplier-prices`)).body;
+  assert.equal(cmp.cheapest.supplier_name, 'Ucuz Toptan');
+  assert.equal(cmp.cheapest.last_net, 4800);
+  const pb = cmp.suppliers.find((s) => s.supplier_id === b.id);
+  assert.equal(pb.last_net, 5200);
+  assert.equal(pb.min_net, 5000);
+  assert.equal(pb.purchase_count, 2);
+});

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { allow, MANAGERS } from '../auth.js';
+import { allow, MANAGERS, requirePerm } from '../auth.js';
 import { emitEvent, getSetting } from '../db.js';
 import { hasFeature, requireFeature } from '../license.js';
 import { branchForRegister, branchStock, changeStock, recipeOf, refreshRecipeCosts } from '../stock.js';
@@ -327,7 +327,7 @@ export default function productRoutes(db) {
   }));
 
   /** Stok girişi / çıkışı / sayım. body: { type: in|out|adjust|count, qty, unit_cost?, note? } */
-  r.post('/products/:id/stock', allow(...MANAGERS, 'cashier'), h((req, res) => {
+  r.post('/products/:id/stock', requirePerm(db, 'stock'), h((req, res) => {
     const p = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
     if (!p) throw notFound();
     if (p.type === 'service' || !p.track_stock) throw bad('Bu ürün için stok takibi kapalı');

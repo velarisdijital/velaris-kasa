@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createSession, hashSecret, verifySecret } from '../auth.js';
+import { createSession, hashSecret, PERMISSIONS, rolePermissions, verifySecret } from '../auth.js';
 import { getSetting, setSettings } from '../db.js';
 import { BUSINESS_TYPES, seedPreset } from '../presets.js';
 import { bad, h, str } from '../util.js';
@@ -75,7 +75,11 @@ export function publicRoutes(db) {
 
 export function sessionRoutes(db) {
   const r = Router();
-  r.get('/auth/me', (req, res) => res.json({ user: req.user }));
+  r.get('/auth/me', (req, res) => {
+    const full = ['admin', 'manager', 'integration'].includes(req.user.role);
+    const perms = full ? { ...Object.fromEntries(Object.keys(PERMISSIONS).map((k) => [k, true])), max_discount_pct: 100 } : rolePermissions(db, req.user.role);
+    res.json({ user: { ...req.user, permissions: perms } });
+  });
   r.post('/auth/logout', (req, res) => {
     if (req.token) db.prepare('DELETE FROM sessions WHERE token = ?').run(req.token);
     res.json({ ok: true });

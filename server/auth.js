@@ -70,3 +70,37 @@ export const allow = (...roles) => (req, res, next) => {
 };
 
 export const MANAGERS = ['manager', 'integration'];
+
+// ---- Rol bazlı yetkiler (yönetici ve müdür her şeye yetkilidir; kasiyer ve personel için Ayarlar → Kullanıcılar'dan) ----
+export const PERMISSIONS = {
+  discount: 'İndirim yapabilir',
+  price_edit: 'Satışta fiyat değiştirebilir',
+  refund: 'İade alabilir',
+  credit_sale: 'Veresiye satış yapabilir',
+  void: 'Mutfağa gitmiş siparişi iptal / ikram edebilir',
+  cancel_ticket: 'Adisyon iptal edebilir',
+  stock: 'Stok girişi / sayım yapabilir',
+  close_shift: 'Gün sonu (kasa kapatma) yapabilir',
+};
+export const DEFAULT_PERMISSIONS = {
+  cashier: { discount: true, price_edit: true, refund: true, credit_sale: true, void: true, cancel_ticket: true, stock: true, close_shift: true, max_discount_pct: 100 },
+  staff: { discount: false, price_edit: false, refund: false, credit_sale: false, void: false, cancel_ticket: false, stock: false, close_shift: false, max_discount_pct: 0 },
+};
+
+export function rolePermissions(db, role) {
+  let saved = {};
+  try { saved = JSON.parse(db.prepare("SELECT value FROM settings WHERE key = 'permissions'").get()?.value || '{}'); } catch { saved = {}; }
+  return { ...DEFAULT_PERMISSIONS[role], ...(saved[role] || {}) };
+}
+
+/** Kullanıcının yetkisi var mı? Yönetici, müdür ve entegrasyon anahtarı her zaman yetkilidir. */
+export function can(db, user, perm) {
+  if (!user) return false;
+  if (user.role === 'admin' || MANAGERS.includes(user.role)) return true;
+  return !!rolePermissions(db, user.role)[perm];
+}
+
+export const requirePerm = (db, perm) => (req, res, next) => {
+  if (can(db, req.user, perm)) return next();
+  res.status(403).json({ error: `Yetkiniz yok: ${PERMISSIONS[perm] || perm}`, code: 'PERMISSION', permission: perm });
+};

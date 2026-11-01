@@ -12,6 +12,8 @@ const HELD_KEY = 'vk_held_carts';
 
 export default function Pos() {
   const { user, settings } = useSession();
+  // Rol yetkileri (sunucu da denetler); eski oturumda bilgi yoksa açık kabul edilir
+  const perm = (k) => !user.permissions || !!user.permissions[k];
   const toast = useToast();
   const ask = useConfirm();
   const location = useLocation();
@@ -196,10 +198,10 @@ export default function Pos() {
       const key = e.key;
       if (key === 'F2') { e.preventDefault(); if (cart.length) setModal({ type: 'cash' }); }
       else if (key === 'F3') { e.preventDefault(); if (cart.length) payCard(); }
-      else if (key === 'F4') { e.preventDefault(); if (cart.length) payCredit(); }
+      else if (key === 'F4') { e.preventDefault(); if (cart.length && perm('credit_sale')) payCredit(); }
       else if (key === 'F6') { e.preventDefault(); if (cart.length) setModal({ type: 'split' }); }
       else if (key === 'F8') { e.preventDefault(); setModal({ type: 'customer' }); }
-      else if (key === 'F9') { e.preventDefault(); if (cart.length) setModal({ type: 'discount' }); }
+      else if (key === 'F9') { e.preventDefault(); if (cart.length && perm('discount')) setModal({ type: 'discount' }); }
       else if (key === 'Delete' && sel && !scanRef.current?.value) { removeLine(sel); }
       else if ((key === '+' || key === '-') && sel && !scanRef.current?.value) {
         e.preventDefault();
@@ -326,7 +328,7 @@ export default function Pos() {
           {discount > 0 && <div className="line"><span>Ara toplam</span><span>{money(subtotal)}</span></div>}
           {discount > 0 && <div className="line"><span>İndirim</span><span className="success-text">−{money(discount)}</span></div>}
           <div className="row" style={{ justifyContent: 'space-between' }}>
-            <button className="btn small ghost" disabled={!cart.length} onClick={() => setModal({ type: 'discount' })}>İndirim <span className="kbd">F9</span></button>
+            <button className="btn small ghost" disabled={!cart.length || !perm('discount')} title={perm('discount') ? '' : 'İndirim yetkiniz yok'} onClick={() => setModal({ type: 'discount' })}>İndirim <span className="kbd">F9</span></button>
             <button className="btn small ghost" disabled={!cart.length} onClick={() => setModal({ type: 'split' })}>Parçalı <span className="kbd">F6</span></button>
             <button className="btn small ghost danger-text" disabled={!cart.length} onClick={async () => { if (await ask('Sepet temizlensin mi?', { ok: 'Temizle' })) clearCart(); }}>Temizle</button>
           </div>
@@ -335,7 +337,7 @@ export default function Pos() {
         <div className="pay-buttons">
           <button className="btn success" disabled={!cart.length || busy} onClick={() => setModal({ type: 'cash' })}>Nakit<small><span className="kbd">F2</span></small></button>
           <button className="btn primary" disabled={!cart.length || busy} onClick={payCard}>Kart<small><span className="kbd">F3</span></small></button>
-          <button className="btn" disabled={!cart.length || busy} onClick={payCredit}>Veresiye<small><span className="kbd">F4</span></small></button>
+          <button className="btn" disabled={!cart.length || busy || !perm('credit_sale')} onClick={payCredit}>Veresiye<small><span className="kbd">F4</span></small></button>
         </div>
       </div>
 
@@ -588,6 +590,9 @@ function DiscountModal({ subtotal, value, onSave, onClose }) {
 }
 
 function LineModal({ line, staff, onSave, onClose, onRemove }) {
+  const { user } = useSession();
+  const canPrice = !user.permissions || user.permissions.price_edit || !(line.unit_price > 0) || !!line.ticket_item_id;
+  const canDiscount = !user.permissions || user.permissions.discount;
   const [f, setF] = useState({ qty: String(line.qty).replace('.', ','), price: toInput(line.unit_price), discount: toInput(line.discount), staff_id: line.staff_id || '' });
   const save = (e) => {
     e?.preventDefault();
@@ -601,8 +606,8 @@ function LineModal({ line, staff, onSave, onClose, onRemove }) {
       <form className="stack" onSubmit={save}>
         <div className="grid-3">
           <Field label={`Miktar (${line.unit})`}><input className="input" autoFocus inputMode="decimal" value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })} onFocus={(e) => e.target.select()} /></Field>
-          <Field label="Birim fiyat (₺)"><input className="input" inputMode="decimal" value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} onFocus={(e) => e.target.select()} /></Field>
-          <Field label="Satır indirimi (₺)"><input className="input" inputMode="decimal" value={f.discount} onChange={(e) => setF({ ...f, discount: e.target.value })} /></Field>
+          <Field label="Birim fiyat (₺)" hint={canPrice ? null : 'Fiyat değiştirme yetkiniz yok'}><input className="input" inputMode="decimal" readOnly={!canPrice} value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} onFocus={(e) => e.target.select()} /></Field>
+          <Field label="Satır indirimi (₺)"><input className="input" inputMode="decimal" readOnly={!canDiscount} value={f.discount} onChange={(e) => setF({ ...f, discount: e.target.value })} /></Field>
         </div>
         {staff.length > 1 && (
           <Field label="İşlemi yapan personel (prim için)">

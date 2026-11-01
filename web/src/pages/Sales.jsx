@@ -53,15 +53,16 @@ export default function Sales() {
 }
 
 function SaleDetail({ id, onClose }) {
-  const { settings } = useSession();
+  const { settings, user } = useSession();
   const sale = useLoad(() => get(`/sales/${id}`), [id]);
   const [refund, setRefund] = useState(false);
   const s = sale.data;
   if (!s) return null;
+  const canRefund = !user.permissions || user.permissions.refund;
   return (
     <Modal title={`Fiş ${s.receipt_no}`} onClose={onClose} wide
       footer={<>
-        {s.status !== 'refunded' && <button className="btn danger" onClick={() => setRefund(true)}><Icon name="refund" /> İade</button>}
+        {s.status !== 'refunded' && canRefund && <button className="btn danger" onClick={() => setRefund(true)}><Icon name="refund" /> İade</button>}
         <div style={{ flex: 1 }} />
         <button className="btn" onClick={() => printReceipt(s, settings)}><Icon name="print" /> Fiş yazdır</button>
       </>}>

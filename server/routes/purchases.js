@@ -99,6 +99,20 @@ export default function purchaseRoutes(db) {
     res.json(getSupplier(s.id));
   }));
 
+  /** Tedarikçi fiyat karşılaştırma: ürünün her tedarikçiden son ve en düşük alış fiyatı (KDV hariç ve dahil). */
+  r.get('/products/:id/supplier-prices', allow(...MANAGERS), h((req, res) => {
+    const rows = db.prepare(`SELECT s.id AS supplier_id, s.name AS supplier_name, COUNT(*) AS purchase_count,
+        MIN(i.unit_cost_net) AS min_net, ROUND(AVG(i.unit_cost_net)) AS avg_net,
+        (SELECT i2.unit_cost_net FROM purchase_items i2 JOIN purchases p2 ON p2.id = i2.purchase_id
+          WHERE i2.product_id = @pid AND p2.supplier_id = s.id AND p2.status = 'posted' ORDER BY p2.doc_date DESC, p2.id DESC LIMIT 1) AS last_net,
+        (SELECT i2.unit_cost FROM purchase_items i2 JOIN purchases p2 ON p2.id = i2.purchase_id
+          WHERE i2.product_id = @pid AND p2.supplier_id = s.id AND p2.status = 'posted' ORDER BY p2.doc_date DESC, p2.id DESC LIMIT 1) AS last_gross,
+        MAX(p.doc_date) AS last_date
+      FROM purchase_items i JOIN purchases p ON p.id = i.purchase_id JOIN suppliers s ON s.id = p.supplier_id
+      WHERE i.product_id = @pid AND p.status = 'posted' GROUP BY s.id ORDER BY last_net`).all({ pid: int(req.params.id) });
+    res.json({ suppliers: rows, cheapest: rows[0] || null });
+  }));
+
   // ---- Alış faturaları ----
   const loadPurchase = (id) => {
     const p = db.prepare(`SELECT p.*, s.name AS supplier_name, b.name AS branch_name, u.name AS user_name FROM purchases p

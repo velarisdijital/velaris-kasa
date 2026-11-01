@@ -538,9 +538,45 @@ function Users() {
         </table>
       </div>
       <div className="muted small-text">
-        <b>Yönetici:</b> her şey · <b>Müdür:</b> ürün, stok, raporlar · <b>Kasiyer:</b> satış, iade, müşteri, gün sonu · <b>Personel:</b> satış ve randevu (berber/kuaför çalışanları)
+        <b>Yönetici:</b> her şey · <b>Müdür:</b> ürün, stok, raporlar · <b>Kasiyer:</b> satış, iade, müşteri, gün sonu · <b>Personel:</b> satış ve randevu (berber/kuaför çalışanları); masa modülü açıksa garson
       </div>
+      <PermissionsEditor />
       {edit && <UserForm user={edit.id ? edit : null} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); users.reload(); }} />}
+    </div>
+  );
+}
+
+/** Kasiyer ve personel rollerinin yetkileri (yönetici ve müdür her şeye yetkilidir). */
+function PermissionsEditor() {
+  const toast = useToast();
+  const p = useLoad(() => get('/permissions'));
+  const [roles, setRoles] = useState(null);
+  if (!p.data) return null;
+  const r = roles || p.data.roles;
+  const set = (role, k, v) => setRoles({ ...r, [role]: { ...r[role], [k]: v } });
+  const save = async () => {
+    try { setRoles((await put('/permissions', r)).roles); toast.ok('Yetkiler kaydedildi'); } catch (e) { toast.err(e); }
+  };
+  return (
+    <div className="card card-pad stack">
+      <div className="row"><h3 style={{ flex: 1, margin: 0 }}>Yetkiler</h3><button className="btn primary" disabled={!roles} onClick={save}>Kaydet</button></div>
+      <div className="table-wrap">
+        <table className="table">
+          <thead><tr><th>Yetki</th><th className="right">Kasiyer</th><th className="right">Personel / Garson</th></tr></thead>
+          <tbody>
+            {Object.entries(p.data.labels).map(([k, label]) => (
+              <tr key={k}><td>{label}</td>
+                {['cashier', 'staff'].map((role) => <td key={role} className="right"><input type="checkbox" aria-label={`${label} — ${role}`} checked={!!r[role][k]} onChange={(e) => set(role, k, e.target.checked)} /></td>)}
+              </tr>
+            ))}
+            <tr><td>En fazla indirim (%)</td>
+              {['cashier', 'staff'].map((role) => <td key={role} className="right"><input className="input" style={{ width: 80, marginLeft: 'auto' }} inputMode="numeric" value={r[role].max_discount_pct}
+                onChange={(e) => set(role, 'max_discount_pct', e.target.value)} /></td>)}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <small className="muted">Yönetici ve müdür her şeye yetkilidir. Kurallar sunucuda da denetlenir; yetkisiz işlem kasada uyarıyla durur.</small>
     </div>
   );
 }

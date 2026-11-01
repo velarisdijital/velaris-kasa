@@ -225,7 +225,8 @@ function PurchaseForm({ suppliers, onClose, onSaved, onNewSupplier }) {
                 const low = c.gross > 0 && l.product.sell_price > 0 && c.gross >= l.product.sell_price;
                 return (
                   <tr key={l.product.id}>
-                    <td><strong>{l.product.name}</strong><div className="muted small-text">{l.product.barcode} · stok {qty(l.product.stock)} {l.product.unit}</div></td>
+                    <td><strong>{l.product.name}</strong><div className="muted small-text">{l.product.barcode} · stok {qty(l.product.stock)} {l.product.unit}</div>
+                      <SupplierPrices productId={l.product.id} supplierId={Number(h.supplier_id) || null} /></td>
                     <td><input className="input" inputMode="decimal" value={l.qty} onChange={(e) => upd(i, 'qty', e.target.value)} /></td>
                     <td><input className="input" inputMode="decimal" value={l.price} onChange={(e) => upd(i, 'price', e.target.value)} /></td>
                     <td><input className="input" inputMode="decimal" value={l.vat} onChange={(e) => upd(i, 'vat', e.target.value)} /></td>
@@ -262,6 +263,23 @@ function PurchaseForm({ suppliers, onClose, onSaved, onNewSupplier }) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** Tedarikçi fiyat karşılaştırma: bu ürünü kimden en son kaça aldık (KDV hariç); seçili tedarikçi pahalıysa uyarır. */
+function SupplierPrices({ productId, supplierId }) {
+  const r = useLoad(() => get(`/products/${productId}/supplier-prices`), [productId]);
+  const list = r.data?.suppliers || [];
+  if (!list.length) return null;
+  const cheapest = list[0];
+  const mine = supplierId ? list.find((x) => x.supplier_id === supplierId) : null;
+  const pricier = mine && cheapest.supplier_id !== mine.supplier_id && mine.last_net > cheapest.last_net;
+  return (
+    <div className="small-text" title={list.map((x) => `${x.supplier_name}: son ${money(x.last_net)}, en düşük ${money(x.min_net)} (${x.purchase_count} alış)`).join('\n')}>
+      {pricier
+        ? <span className="warn-text">Daha ucuzu: {cheapest.supplier_name} {money(cheapest.last_net)} (bu tedarikçi {money(mine.last_net)})</span>
+        : <span className="muted">Son alışlar: {list.slice(0, 3).map((x) => `${x.supplier_name} ${money(x.last_net)}`).join(' · ')} (KDV hariç)</span>}
+    </div>
   );
 }
 

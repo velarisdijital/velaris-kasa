@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { allow, MANAGERS } from '../auth.js';
+import { allow, MANAGERS, requirePerm } from '../auth.js';
 import { emitEvent } from '../db.js';
 import { fiscalEnabled, fiscalZReport } from '../fiscal.js';
 import { currentLicense, limitError } from '../license.js';
@@ -92,7 +92,7 @@ export default function shiftRoutes(db) {
   }));
 
   /** Gün sonu (Z raporu). body: { counted_cash, note } */
-  r.post('/shifts/:id/close', allow(...MANAGERS, 'cashier'), h(async (req, res) => {
+  r.post('/shifts/:id/close', requirePerm(db, 'close_shift'), h(async (req, res) => {
     const shift = get(req.params.id);
     if (!shift || shift.closed_at) throw bad('Açık kasa bulunamadı');
     const counted = int(req.body.counted_cash, NaN);

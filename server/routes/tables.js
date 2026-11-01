@@ -2,7 +2,7 @@
 // Adisyon açık kaldıkça stok düşmez; ödeme kasada normal satış olarak alınır (POST /sales { ticket_id, items[].ticket_item_id }),
 // böylece yazarkasa, e-Arşiv, puan ve veresiye aynen çalışır. Hesap bölme = adisyonun bir kısmını ödemek.
 import { Router } from 'express';
-import { allow, MANAGERS } from '../auth.js';
+import { allow, can, MANAGERS, requirePerm } from '../auth.js';
 import { getSetting } from '../db.js';
 import { requireFeature } from '../license.js';
 import { round3 } from '../stock.js';
@@ -215,6 +215,7 @@ export default function tableRoutes(db) {
         return;
       }
       if (!reason) throw bad('İptal / ikram sebebi yazın');
+      if (!can(db, req.user, 'void')) throw Object.assign(new Error('Yetkiniz yok: mutfağa gitmiş siparişi iptal / ikram'), { status: 403, code: 'PERMISSION' });
       if (qty < it.qty) {
         // Kısmi iptal: iptal edilen kısım ayrı satır olarak saklanır
         db.prepare('UPDATE ticket_items SET qty = ? WHERE id = ?').run(round3(it.qty - qty), it.id);
@@ -301,7 +302,7 @@ export default function tableRoutes(db) {
   }));
 
   /** Adisyonu iptal et (ödeme alınmamışsa). */
-  r.post('/tickets/:id/cancel', allow(...MANAGERS, 'cashier'), h((req, res) => {
+  r.post('/tickets/:id/cancel', requirePerm(db, 'cancel_ticket'), h((req, res) => {
     const t = openTicket(req.params.id);
     if (t.paid_total > 0) throw bad('Kısmen ödenmiş adisyon iptal edilemez; kalan kalemleri iptal edin');
     const reason = str(req.body?.reason);

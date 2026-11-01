@@ -23,6 +23,7 @@ export const DEFAULT_SETTINGS = {
   qrmenu_orders: '0',              // QR menüden sipariş isteği (garson onaylar)
   qrmenu_note: '',                 // menü üstünde gösterilen not (Wi-Fi şifresi vb.)
   modules_delivery: '0',           // paket servis / gel-al
+  permissions: '{}',               // rol bazlı yetkiler (JSON), varsayılanlar auth.js DEFAULT_PERMISSIONS
   delivery_fee: '0',               // varsayılan paket servis ücreti (kuruş)
   delivery_couriers: '',           // kuryeler, virgülle: "Ahmet, Mehmet"
   // Yemek platformları (Yemeksepeti, Trendyol Go/Yemek, Migros Yemek, Getir) — entegratör (middleware) webhook'u ile
