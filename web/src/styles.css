@@ -421,3 +421,6 @@ a.btn.primary { color: var(--bg); }
 .mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; max-height: 260px; overflow: auto; }
 .mini-grid .tile { min-height: 70px; }
 @media (max-width: 760px) { .kanban { grid-template-columns: repeat(5, 80vw); } }
+.order-card.pending { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); animation: vk-pulse 1.4s ease-in-out infinite; }
+@keyframes vk-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 12%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .order-card.pending { animation: none; } }

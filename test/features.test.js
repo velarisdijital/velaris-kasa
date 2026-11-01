@@ -874,3 +874,97 @@ test('paket servis: sipariş, ücret, durumlar, kurye, ödeme ve kurye raporu; g
   assert.equal(g.order_no, d.order_no + 1);
   assert.equal((await call('GET', '/api/deliveries/settings')).body.couriers.join('|'), 'Ahmet|Mehmet');
 });
+
+test('yemek platformları: imzalı webhook, eşleme, kabul/ret, durum bildirimi, iptal, online ödeme', async () => {
+  const crypto = await import('node:crypto');
+  const hook = async (body, secret) => {
+    const raw = JSON.stringify(body);
+    const sig = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+    const res = await fetch(`${base}/api/integrations/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-VK-Signature': `sha256=${sig}` }, body: raw });
+    return { status: res.status, body: await res.json() };
+  };
+  // Sahte entegratör: durum bildirimlerini toplar
+  const http = await import('node:http');
+  const got = [];
+  const cb = http.createServer((req, res) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { got.push({ sig: req.headers['x-vk-signature'], body: JSON.parse(b) }); res.end('{}'); }); });
+  await new Promise((r) => cb.listen(0, r));
+  try {
+    assert.equal((await hook({ platform: 'yemeksepeti', external_id: 'X' }, 'yanlis')).status, 401); // kapalı
+    const secret = (await call('POST', '/api/platforms/secret')).body.secret;
+    await call('PUT', '/api/settings', { platforms_enabled: '1', modules_delivery: '1', platform_callback_url: `http://127.0.0.1:${cb.address().port}/cb` });
+    assert.equal((await call('GET', '/api/settings')).body.platform_secret, '••••••••');
+    assert.equal((await hook({ platform: 'yemeksepeti', external_id: 'X' }, 'yanlis')).status, 401);
+
+    const lahmacun = (await call('POST', '/api/products', { name: 'Lahmacun', sell_price: 6000, track_stock: 0 })).body;
+    const order = {
+      platform: 'yemeksepeti', external_id: 'YS-1001',
+      customer: { name: 'Elif', phone: '0532 123 45 67', address: 'Bağdat Cad. 100', note: 'Acısız' },
+      items: [{ external_id: 'p-77', name: 'lahmacun', qty: 3, unit_price: 6000, options: [{ name: 'Ekstra limon', price: 200 }] },
+        { external_id: 'p-99', name: 'Ayran (Büyük)', qty: 1, unit_price: 3000 }],
+      delivery_fee: 0, discount: 1500, paid_online: true,
+    };
+    let r = await hook(order, secret);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.action, 'created');
+    assert.deepEqual(r.body.unmapped, ['Ayran (Büyük)']);
+    const id = r.body.ticket_id;
+    // Aynı sipariş ikinci kez gelirse çoğalmaz
+    assert.equal((await hook(order, secret)).body.action, 'duplicate');
+    let t = (await call('GET', `/api/tickets/${id}`)).body;
+    assert.equal(t.source, 'yemeksepeti');
+    assert.equal(t.external_status, 'pending');
+    assert.equal(t.prepaid, 1);
+    assert.equal(t.discount, 1500);
+    assert.equal(t.items[0].product_id, lahmacun.id); // ada göre eşleşti
+    assert.equal(t.items[0].unit_price, 6200);
+    assert.equal(t.items[0].note, 'Ekstra limon');
+    assert.equal(t.total, 3 * 6200 + 3000);
+    // Kabul edilmeden durum ilerlemez
+    assert.equal((await call('PUT', `/api/deliveries/${id}`, { delivery_status: 'ready' })).status, 400);
+    t = (await call('POST', `/api/deliveries/${id}/accept`, { prep_minutes: 25 })).body;
+    assert.equal(t.external_status, 'accepted');
+    assert.equal(t.delivery_status, 'preparing');
+    await call('PUT', `/api/deliveries/${id}`, { delivery_status: 'ready' });
+    await call('PUT', `/api/deliveries/${id}`, { delivery_status: 'on_way', courier_name: 'Ahmet' });
+    // Eşlemesiz ürünü eşle
+    const un = (await call('GET', '/api/platforms/products?unmapped=1')).body;
+    assert.equal(un[0].external_name, 'Ayran (Büyük)');
+    const ayran = (await call('POST', '/api/products', { name: 'Ayran Büyük', sell_price: 3000, track_stock: 0 })).body;
+    await call('PUT', '/api/platforms/products', { platform: 'yemeksepeti', external_id: 'p-99', product_id: ayran.id });
+    assert.equal((await call('GET', '/api/platforms/products?unmapped=1')).body.length, 0);
+    // Durumlar entegratöre imzalı gider
+    const f = (await call('POST', '/api/platforms/flush')).body;
+    assert.equal(f.sent, 3);
+    assert.deepEqual(got.map((g) => g.body.event), ['order.accept', 'order.ready', 'order.picked_up']);
+    assert.equal(got[0].body.data.prep_minutes, 25);
+    const raw0 = JSON.stringify(got[0].body);
+    assert.equal(got[0].sig, `sha256=${crypto.createHmac('sha256', secret).update(raw0).digest('hex')}`);
+    // Online ödendi olarak kapanır (indirim dahil)
+    const live = t.items.filter((i) => !i.void_at);
+    const sale = await call('POST', '/api/sales', { register_name: 'Kasa 1', ticket_id: id, discount: 1500,
+      items: live.map((i) => ({ product_id: i.product_id, name: i.name, qty: i.qty, unit_price: i.unit_price, vat_rate: i.vat_rate, ticket_item_id: i.id })),
+      payments: [{ method: 'online', amount: t.total - 1500 }] });
+    assert.equal(sale.status, 201, JSON.stringify(sale.body));
+    assert.equal(sale.body.payments[0].method, 'online');
+    assert.equal((await call('GET', `/api/tickets/${id}`)).body.status, 'closed');
+
+    // Ret ve platform iptali
+    const o2 = { ...order, external_id: 'YS-1002' };
+    const id2 = (await hook(o2, secret)).body.ticket_id;
+    assert.equal((await call('POST', `/api/deliveries/${id2}/reject`, { reason: 'Malzeme bitti' })).body.status, 'cancelled');
+    const id3 = (await hook({ ...order, external_id: 'TG-5', platform: 'trendyol' }, secret)).body.ticket_id;
+    assert.equal((await hook({ platform: 'trendyol', external_id: 'TG-5', status: 'cancelled', reason: 'Müşteri iptal etti' }, secret)).body.action, 'cancelled');
+    assert.equal((await call('GET', `/api/tickets/${id3}`)).body.status, 'cancelled');
+    // Otomatik kabul + deneme siparişi
+    await call('PUT', '/api/settings', { platform_auto_accept: '1' });
+    const sim = (await call('POST', '/api/platforms/simulate', { platform: 'migros' })).body;
+    assert.equal(sim.ticket.external_status, 'accepted');
+    assert.equal(sim.ticket.unsent_count, 0); // mutfağa gönderilmiş
+    const st = (await call('GET', '/api/platforms/status')).body;
+    assert.equal(st.enabled, true);
+    assert.ok(st.events.pending >= 2);
+  } finally {
+    cb.close();
+    await call('PUT', '/api/settings', { platform_auto_accept: '0' });
+  }
+});

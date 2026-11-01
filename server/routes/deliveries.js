@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { getSettings } from '../db.js';
 import { requireFeature } from '../license.js';
 import { bad, h, int, notFound, phoneTR, str } from '../util.js';
+import { queueEvent } from '../integrations/platforms.js';
 import { addTicketItems, loadTicket } from './tables.js';
 
 export const DELIVERY_STATUSES = ['new', 'preparing', 'ready', 'on_way', 'delivered'];
@@ -75,9 +76,42 @@ export default function deliveryRoutes(db) {
     if (!DELIVERY_STATUSES.includes(status)) throw bad('Geçersiz durum');
     if (status === 'on_way' && t.kind === 'delivery' && !(str(b.courier_name) || t.courier_name)) throw bad('Yola çıkarmak için kurye seçin');
     const v = (k) => (b[k] !== undefined ? str(b[k]) : t[k]);
-    db.prepare(`UPDATE tickets SET delivery_status = ?, courier_name = ?, customer_name = ?, phone = ?, address = ?, delivery_note = ?, payment_hint = ?,
-        status_at = CASE WHEN ? != COALESCE(delivery_status, '') THEN datetime('now','localtime') ELSE status_at END WHERE id = ?`)
-      .run(status, v('courier_name'), v('customer_name'), v('phone'), v('address'), v('delivery_note'), v('payment_hint'), status, t.id);
+    if (t.external_id && t.external_status === 'pending' && status !== t.delivery_status) throw bad('Önce platform siparişini kabul edin');
+    db.transaction(() => {
+      db.prepare(`UPDATE tickets SET delivery_status = ?, courier_name = ?, customer_name = ?, phone = ?, address = ?, delivery_note = ?, payment_hint = ?,
+          status_at = CASE WHEN ? != COALESCE(delivery_status, '') THEN datetime('now','localtime') ELSE status_at END WHERE id = ?`)
+        .run(status, v('courier_name'), v('customer_name'), v('phone'), v('address'), v('delivery_note'), v('payment_hint'), status, t.id);
+      // Platform siparişinde durum değişikliği platforma bildirilir
+      const action = { ready: 'ready', on_way: 'picked_up', delivered: 'delivered' }[status];
+      if (action && status !== t.delivery_status) queueEvent(db, t, action, { courier_name: v('courier_name') });
+    })();
+    res.json(loadTicket(db, t.id));
+  }));
+
+  /** Platform siparişini kabul et (hazırlanma süresiyle); istenirse mutfağa gönderilir. */
+  r.post('/deliveries/:id/accept', feature, h((req, res) => {
+    const t = db.prepare("SELECT * FROM tickets WHERE id = ? AND kind != 'table' AND status = 'open'").get(req.params.id);
+    if (!t) throw notFound('Sipariş bulunamadı');
+    if (t.external_status !== 'pending') throw bad('Bu sipariş kabul bekliyor değil');
+    const prep = int(req.body?.prep_minutes) || int(getSettings(db).platform_prep_minutes) || 20;
+    db.transaction(() => {
+      db.prepare("UPDATE tickets SET external_status = 'accepted', delivery_status = 'preparing', status_at = datetime('now','localtime') WHERE id = ?").run(t.id);
+      queueEvent(db, t, 'accept', { prep_minutes: prep });
+    })();
+    res.json(loadTicket(db, t.id));
+  }));
+
+  /** Platform siparişini reddet: sipariş iptal edilir, sebep platforma bildirilir. */
+  r.post('/deliveries/:id/reject', feature, h((req, res) => {
+    const t = db.prepare("SELECT * FROM tickets WHERE id = ? AND kind != 'table' AND status = 'open'").get(req.params.id);
+    if (!t) throw notFound('Sipariş bulunamadı');
+    if (!t.external_id || t.external_status !== 'pending') throw bad('Yalnızca kabul bekleyen platform siparişi reddedilir');
+    const reason = str(req.body?.reason) || 'Restoran yoğun';
+    db.transaction(() => {
+      db.prepare("UPDATE ticket_items SET void_at = datetime('now','localtime'), void_reason = ?, void_user_id = ? WHERE ticket_id = ? AND void_at IS NULL").run(`Reddedildi: ${reason}`, req.user.id, t.id);
+      db.prepare("UPDATE tickets SET status = 'cancelled', external_status = 'rejected', closed_at = datetime('now','localtime'), cancel_reason = ? WHERE id = ?").run(reason, t.id);
+      queueEvent(db, t, 'reject', { reason });
+    })();
     res.json(loadTicket(db, t.id));
   }));
 

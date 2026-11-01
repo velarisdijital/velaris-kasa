@@ -71,8 +71,8 @@ export default function Pos() {
     if (!t) return;
     setCart(t.items.map((i) => ({ key: uuid(), product_id: i.product_id, name: i.name, unit: i.unit, type: 'product', qty: i.qty,
       unit_price: i.unit_price, discount: 0, vat_rate: i.vat_rate, staff_id: null, ticket_item_id: i.ticket_item_id })));
-    setTicket({ id: t.id, table_name: t.table_name, partial: t.partial, back: t.back || '/masalar' });
-    setDiscount(0);
+    setTicket({ id: t.id, table_name: t.table_name, partial: t.partial, back: t.back || '/masalar', prepaid: !!t.prepaid, source: t.source });
+    setDiscount(t.partial ? 0 : t.discount || 0); // platform indirimi tam hesapta uygulanır
     if (t.customer_id) get(`/customers/${t.customer_id}`).then(setCustomer).catch(() => {});
     navigate('.', { replace: true, state: null });
   }, [location.state, navigate]);
@@ -274,6 +274,7 @@ export default function Pos() {
           <div className="ticket-bar">
             <Icon name="table" /><span><b>{ticket.table_name}</b> adisyonu{ticket.partial ? ' · bölünmüş hesap' : ''}</span>
             <div style={{ flex: 1 }} />
+            {ticket.prepaid && <button className="btn small success" disabled={busy || !cart.length} onClick={() => complete([{ method: 'online', amount: total }])}>Online ödendi · kapat</button>}
             <button className="btn small ghost" onClick={() => { const back = ticket.back || '/masalar'; clearCart(); navigate(back); }}>Geri dön</button>
           </div>
         )}

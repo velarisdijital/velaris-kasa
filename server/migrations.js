@@ -294,6 +294,42 @@ const MIGRATIONS = [
   CREATE INDEX idx_tickets_kind ON tickets(kind, status);
   CREATE UNIQUE INDEX idx_tickets_external ON tickets(source, external_id) WHERE external_id IS NOT NULL;
   `,
+  // 12: Yemek platformları — online ödeme yöntemi, ürün eşleme, platforma giden durum bildirimleri, adisyon indirimi
+  `
+  CREATE TABLE sale_payments_new (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    sale_id INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+    method  TEXT NOT NULL CHECK (method IN ('cash','card','credit','transfer','points','online')),
+    amount  INTEGER NOT NULL
+  );
+  INSERT INTO sale_payments_new (id, sale_id, method, amount) SELECT id, sale_id, method, amount FROM sale_payments;
+  DROP TABLE sale_payments;
+  ALTER TABLE sale_payments_new RENAME TO sale_payments;
+  CREATE INDEX idx_sale_payments_sale ON sale_payments(sale_id);
+  ALTER TABLE tickets ADD COLUMN discount INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE platform_products (
+    platform      TEXT NOT NULL,
+    external_id   TEXT NOT NULL,
+    external_name TEXT,
+    product_id    INTEGER REFERENCES products(id),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    PRIMARY KEY (platform, external_id)
+  );
+  CREATE TABLE platform_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform    TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    ticket_id   INTEGER,
+    action      TEXT NOT NULL,                     -- accept | reject | ready | picked_up | delivered | cancel
+    data_json   TEXT,
+    status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','failed')),
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    error       TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    sent_at     TEXT
+  );
+  CREATE INDEX idx_platform_events_status ON platform_events(status);
+  `,
 ];
 
 export function migrate(db) {

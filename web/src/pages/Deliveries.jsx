@@ -18,7 +18,7 @@ export default function Deliveries() {
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useSession();
+  const { user, settings } = useSession();
   const list = useLoad(() => get('/deliveries'));
   const cfg = useLoad(() => get('/deliveries/settings'));
   const [form, setForm] = useState(false);
@@ -33,7 +33,22 @@ export default function Deliveries() {
   const update = async (d, body) => {
     try { await put(`/deliveries/${d.id}`, body); list.reload(); } catch (e) { toast.err(e); }
   };
+  const decide = async (d, accept) => {
+    try {
+      if (accept) await post(`/deliveries/${d.id}/accept`, {});
+      else {
+        const reason = window.prompt('Ret sebebi (platforma iletilir):', 'Restoran yoğun');
+        if (reason == null) return;
+        await post(`/deliveries/${d.id}/reject`, { reason });
+      }
+      list.reload();
+    } catch (e) { toast.err(e); }
+  };
+  const simulate = async () => {
+    try { await post('/platforms/simulate', { platform: 'yemeksepeti' }); list.reload(); toast.ok('Deneme siparişi geldi'); } catch (e) { toast.err(e); }
+  };
   const pay = (d) => navigate('/kasa', { state: { ticket: { id: d.id, table_name: d.table_name, customer_id: d.customer_id, back: '/paket',
+    prepaid: !!d.prepaid, discount: d.discount, source: d.source,
     items: d.items.filter((i) => i.remaining_qty > 0).map((i) => ({ ticket_item_id: i.id, product_id: i.product_id, name: i.name, unit: i.unit, qty: i.remaining_qty, unit_price: i.unit_price, vat_rate: i.vat_rate })) } } });
 
   if (open) {
@@ -47,6 +62,7 @@ export default function Deliveries() {
         <h1>Paket servis</h1>
         <div className="grow" />
         <div className="muted">{rows.length} aktif sipariş</div>
+        {isManager(user) && settings.platforms_enabled === '1' && <button className="btn" onClick={simulate}>Deneme platform siparişi</button>}
         {isManager(user) && <button className="btn" onClick={() => setSettingsOpen(true)}>Ayarlar</button>}
         <button className="btn primary" onClick={() => setForm(true)}><Icon name="plus" /> Yeni sipariş</button>
       </div>
@@ -57,7 +73,7 @@ export default function Deliveries() {
             <section key={st} className="kanban-col">
               <h3>{label} <span className="badge">{col.length}</span></h3>
               {col.map((d) => (
-                <div key={d.id} className={`card order-card ${mins(d.opened_at) > 40 && st !== 'delivered' ? 'late' : ''}`}>
+                <div key={d.id} className={`card order-card ${mins(d.opened_at) > 40 && st !== 'delivered' ? 'late' : ''} ${d.external_status === 'pending' ? 'pending' : ''}`}>
                   <div className="row">
                     <strong style={{ flex: 1 }}>{d.table_name}</strong>
                     <span className={`badge ${d.source === 'pos' || d.source === 'phone' ? '' : 'blue'}`}>{SOURCE_LABELS[d.source] || d.source}</span>
@@ -80,7 +96,12 @@ export default function Deliveries() {
                     <button className="btn small" onClick={() => setOpen(d)}>Aç</button>
                     <button className="btn small ghost" onClick={() => printElement(<DeliverySlip d={d} />)}><Icon name="print" /></button>
                     <div style={{ flex: 1 }} />
-                    {NEXT[st] && !(st === 'ready' && d.kind === 'takeaway') && (
+                    {d.external_status === 'pending' ? (
+                      <>
+                        <button className="btn small ghost danger-text" onClick={() => decide(d, false)}>Reddet</button>
+                        <button className="btn small success" onClick={() => decide(d, true)}>Kabul et</button>
+                      </>
+                    ) : NEXT[st] && !(st === 'ready' && d.kind === 'takeaway') && (
                       <button className="btn small primary" onClick={() => update(d, { delivery_status: NEXT[st][0] })}>{NEXT[st][1]}</button>
                     )}
                     {st === 'ready' && d.kind === 'takeaway' && <button className="btn small primary" onClick={() => update(d, { delivery_status: 'delivered' })}>Teslim edildi</button>}
@@ -188,23 +209,89 @@ function NewOrder({ fee, onClose, onSaved }) {
 
 function DeliverySettings({ onClose }) {
   const toast = useToast();
-  const { settings, reloadSettings } = useSession();
-  const [fee, setFee] = useState(toInput(Number(settings.delivery_fee || 0)));
-  const [couriers, setCouriers] = useState(settings.delivery_couriers || '');
+  const { user, settings, reloadSettings } = useSession();
+  const [tab, setTab] = useState('general');
+  const [f, setF] = useState({
+    fee: toInput(Number(settings.delivery_fee || 0)), couriers: settings.delivery_couriers || '',
+    platforms_enabled: settings.platforms_enabled === '1', platform_auto_accept: settings.platform_auto_accept === '1',
+    platform_prep_minutes: settings.platform_prep_minutes || '20', platform_callback_url: settings.platform_callback_url || '',
+  });
+  const [secret, setSecret] = useState(null);
+  const status = useLoad(() => get('/platforms/status').catch(() => null));
+  const mapping = useLoad(() => get('/platforms/products').catch(() => []));
+  const products = useLoad(() => get('/products'));
   const save = async () => {
     try {
-      await put('/settings', { delivery_fee: String(toKurus(fee)), delivery_couriers: couriers });
+      await put('/settings', { delivery_fee: String(toKurus(f.fee)), delivery_couriers: f.couriers,
+        platforms_enabled: f.platforms_enabled ? '1' : '0', platform_auto_accept: f.platform_auto_accept ? '1' : '0',
+        platform_prep_minutes: String(f.platform_prep_minutes), platform_callback_url: f.platform_callback_url });
       await reloadSettings();
       toast.ok('Kaydedildi');
       onClose();
     } catch (e) { toast.err(e); }
   };
+  const newSecret = async () => {
+    try { setSecret((await post('/platforms/secret')).secret); status.reload(); } catch (e) { toast.err(e); }
+  };
+  const mapTo = async (m, productId) => {
+    try { await put('/platforms/products', { platform: m.platform, external_id: m.external_id, product_id: productId || null }); mapping.reload(); } catch (e) { toast.err(e); }
+  };
+  const webhook = `${(settings.public_base_url || `${location.origin}${location.pathname}`).replace(/#.*$/, '').replace(/\/$/, '')}/api/integrations/orders`;
+  const st = status.data;
   return (
-    <Modal title="Paket servis ayarları" onClose={onClose} footer={<button className="btn primary" onClick={save}>Kaydet</button>}>
+    <Modal title="Paket servis ayarları" onClose={onClose} wide footer={<button className="btn primary" onClick={save}>Kaydet</button>}>
       <div className="stack">
-        <Field label="Varsayılan servis ücreti (₺)" hint="0 ise eklenmez"><input className="input" inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} /></Field>
-        <Field label="Kuryeler" hint="Virgülle ayırın: Ahmet, Mehmet"><input className="input" value={couriers} onChange={(e) => setCouriers(e.target.value)} /></Field>
-        <small className="muted">Yemeksepeti, Getir ve Trendyol Yemek bağlantısı: Ayarlar → Yemek platformları.</small>
+        <div className="tabs">
+          <button className={`tab ${tab === 'general' ? 'active' : ''}`} onClick={() => setTab('general')}>Genel</button>
+          <button className={`tab ${tab === 'platforms' ? 'active' : ''}`} onClick={() => setTab('platforms')}>Yemek platformları</button>
+          <button className={`tab ${tab === 'mapping' ? 'active' : ''}`} onClick={() => setTab('mapping')}>Ürün eşleme {st?.unmapped > 0 && <span className="badge red">{st.unmapped}</span>}</button>
+        </div>
+        {tab === 'general' && <>
+          <Field label="Varsayılan servis ücreti (₺)" hint="0 ise eklenmez"><input className="input" inputMode="decimal" value={f.fee} onChange={(e) => setF({ ...f, fee: e.target.value })} /></Field>
+          <Field label="Kuryeler" hint="Virgülle ayırın: Ahmet, Mehmet"><input className="input" value={f.couriers} onChange={(e) => setF({ ...f, couriers: e.target.value })} /></Field>
+        </>}
+        {tab === 'platforms' && <>
+          <p className="muted small-text">Yemeksepeti, Trendyol Go / Yemek, Migros Yemek ve Getir siparişleri, platformların onaylı entegratörleri üzerinden bu kasaya düşer.
+            Entegratör paneline aşağıdaki webhook adresini ve gizli anahtarı girin; kabul, ret, hazır, yolda ve teslim bilgileri geri bildirim adresine gönderilir.
+            Ayrıntılar: docs/YEMEK_PLATFORMLARI.md</p>
+          <label className="check"><input type="checkbox" checked={f.platforms_enabled} onChange={(e) => setF({ ...f, platforms_enabled: e.target.checked })} /> Platform siparişlerini al</label>
+          <Field label="Sipariş webhook adresi (entegratöre verin)" hint="Bulut kurulumunda herkese açık adres gerekir (Ayarlar → QR menü / online randevu adresi)">
+            <input className="input" readOnly value={webhook} onFocus={(e) => e.target.select()} />
+          </Field>
+          <div className="row wrap">
+            <span>Gizli anahtar: {st?.has_secret ? <b>tanımlı</b> : <span className="danger-text">yok</span>}</span>
+            {user.role === 'admin' && <button className="btn small" onClick={newSecret}>{st?.has_secret ? 'Yenile' : 'Oluştur'}</button>}
+          </div>
+          {secret && <div className="banner warn" style={{ borderRadius: 10, flexWrap: 'wrap' }}>Bu anahtar yalnızca şimdi gösterilir, entegratöre girin: <code style={{ userSelect: 'all' }}>{secret}</code></div>}
+          <Field label="Geri bildirim adresi" hint="Entegratörün durum güncellemesi aldığı adres (X-VK-Signature imzalı POST)">
+            <input className="input" placeholder="https://entegrator.example.com/velariskasa" value={f.platform_callback_url} onChange={(e) => setF({ ...f, platform_callback_url: e.target.value })} />
+          </Field>
+          <div className="grid-2">
+            <label className="check"><input type="checkbox" checked={f.platform_auto_accept} onChange={(e) => setF({ ...f, platform_auto_accept: e.target.checked })} /> Gelen siparişi otomatik kabul et ve mutfağa gönder</label>
+            <Field label="Hazırlanma süresi (dk)"><input className="input" inputMode="numeric" value={f.platform_prep_minutes} onChange={(e) => setF({ ...f, platform_prep_minutes: e.target.value })} /></Field>
+          </div>
+          {st && <div className="small-text muted">Bugün: {st.today.map((x) => `${SOURCE_LABELS[x.source] || x.source} ${x.n}`).join(', ') || 'sipariş yok'} ·
+            bildirim kuyruğu: {st.events.pending || 0} bekliyor, {st.events.sent || 0} gönderildi, {st.events.failed || 0} hatalı
+            {st.last_error ? ` · son hata: ${st.last_error.error}` : ''}</div>}
+        </>}
+        {tab === 'mapping' && <>
+          <p className="muted small-text">Platformdaki ürünler adı aynıysa otomatik eşlenir. Eşleşmeyenler adisyona adı ve platform fiyatıyla düşer; burada eşlerseniz stok, reçete ve raporlar doğru çalışır.</p>
+          <div className="table-wrap" style={{ maxHeight: 360 }}>
+            <table className="table">
+              <thead><tr><th>Platform</th><th>Platformdaki ad</th><th>VelarisKasa ürünü</th></tr></thead>
+              <tbody>{(mapping.data || []).map((m) => (
+                <tr key={`${m.platform}-${m.external_id}`}>
+                  <td>{SOURCE_LABELS[m.platform] || m.platform}</td><td>{m.external_name}</td>
+                  <td><select className="input" value={m.product_id || ''} onChange={(e) => mapTo(m, Number(e.target.value))}>
+                    <option value="">— eşlenmedi —</option>
+                    {(products.data || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select></td>
+                </tr>
+              ))}</tbody>
+            </table>
+            {!(mapping.data || []).length && <div className="empty">Henüz platform siparişi gelmedi</div>}
+          </div>
+        </>}
       </div>
     </Modal>
   );

@@ -11,7 +11,7 @@ import { flushOutbox, outboxStatus, pullCustomers, sign, testConnection } from '
 import { bad, bool, h, int, notFound, num, str } from '../util.js';
 import { upsertCustomerFromCrm } from './customers.js';
 
-const SECRET_KEYS = ['license_key', 'crm_api_key', 'crm_webhook_secret', 'netgsm_password', 'iletimerkezi_hash', 'whatsapp_token', 'parasut_client_secret', 'parasut_password', 'parasut_access_token', 'iys_password', 'iys_access_token'];
+const SECRET_KEYS = ['license_key', 'crm_api_key', 'crm_webhook_secret', 'netgsm_password', 'iletimerkezi_hash', 'whatsapp_token', 'parasut_client_secret', 'parasut_password', 'parasut_access_token', 'iys_password', 'iys_access_token', 'platform_secret'];
 const ADMIN_ONLY_KEYS = [...SECRET_KEYS, 'crm_base_url', 'install_id', 'netgsm_usercode', 'iletimerkezi_key', 'whatsapp_phone_id', 'parasut_client_id', 'parasut_username', 'parasut_company_id', 'iys_username', 'iys_code', 'iys_brand_code', 'iys_token_expires'];
 
 export default function settingsRoutes(db) {

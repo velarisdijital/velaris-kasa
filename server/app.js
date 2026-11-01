@@ -11,6 +11,8 @@ import appointmentRoutes from './routes/appointments.js';
 import { publicRoutes, sessionRoutes } from './routes/auth.js';
 import bookingRoutes from './routes/booking.js';
 import qrMenuRoutes from './routes/qrmenu.js';
+import platformRoutes, { platformWebhook } from './routes/platforms.js';
+import { startPlatformWorker } from './integrations/platforms.js';
 import branchRoutes from './routes/branches.js';
 import customerRoutes from './routes/customers.js';
 import notifyRoutes from './routes/notify.js';
@@ -45,6 +47,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
   api.use(inboundWebhook(db));
   api.use(bookingRoutes(db));
   api.use(qrMenuRoutes(db));
+  api.use(platformWebhook(db));
   api.use(authenticate(db));
   api.use(sessionRoutes(db));
   api.use(productRoutes(db));
@@ -52,6 +55,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
   api.use(purchaseRoutes(db));
   api.use(tableRoutes(db));
   api.use(deliveryRoutes(db));
+  api.use(platformRoutes(db));
   api.use(customerRoutes(db));
   api.use(shiftRoutes(db));
   api.use(saleRoutes(db));
@@ -83,7 +87,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
     });
   }
 
-  const stops = worker ? [startIntegrationWorker(db), startNotifyWorker(db)] : [];
+  const stops = worker ? [startIntegrationWorker(db), startNotifyWorker(db), startPlatformWorker(db)] : [];
   return { app, db, close: () => { stops.forEach((s) => s()); db.close(); } };
 }
 

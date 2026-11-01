@@ -5,5 +5,5 @@
   "serial_port": null,
   "state_path": "okc-state.json",
   "vat_groups": { "0": 1, "1": 2, "10": 3, "20": 4 },
-  "payments": { "cash": "NAKIT", "card": "KREDI_KARTI", "transfer": "HAVALE", "credit": "ACIK_HESAP", "points": "INDIRIM" }
+  "payments": { "cash": "NAKIT", "card": "KREDI_KARTI", "transfer": "HAVALE", "credit": "ACIK_HESAP", "points": "INDIRIM", "online": "DIGER" }
 }

@@ -46,7 +46,7 @@ public sealed class Config
     /// <summary>VelarisKasa ödeme yöntemi → cihaz ödeme tipi (marka SDK'sına göre değer).</summary>
     public Dictionary<string, string> Payments { get; set; } = new()
     {
-        ["cash"] = "NAKIT", ["card"] = "KREDI_KARTI", ["transfer"] = "HAVALE", ["credit"] = "ACIK_HESAP", ["points"] = "INDIRIM",
+        ["cash"] = "NAKIT", ["card"] = "KREDI_KARTI", ["transfer"] = "HAVALE", ["credit"] = "ACIK_HESAP", ["points"] = "INDIRIM", ["online"] = "DIGER",
     };
 
     public static Config Load()

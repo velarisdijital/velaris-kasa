@@ -10,7 +10,7 @@ import { bad, dateRange, h, int, notFound, num, str, vatOf } from '../util.js';
 import { addCustomerTx, addPointsTx, customerPayload } from './customers.js';
 import { openShiftFor } from './shifts.js';
 
-const METHODS = ['cash', 'card', 'credit', 'transfer', 'points'];
+const METHODS = ['cash', 'card', 'credit', 'transfer', 'points', 'online'];
 
 export function loadSale(db, id) {
   const sale = db.prepare(`SELECT s.*, u.name AS user_name, c.name AS customer_name, c.phone AS customer_phone,

@@ -25,6 +25,12 @@ export const DEFAULT_SETTINGS = {
   modules_delivery: '0',           // paket servis / gel-al
   delivery_fee: '0',               // varsayılan paket servis ücreti (kuruş)
   delivery_couriers: '',           // kuryeler, virgülle: "Ahmet, Mehmet"
+  // Yemek platformları (Yemeksepeti, Trendyol Go/Yemek, Migros Yemek, Getir) — entegratör (middleware) webhook'u ile
+  platforms_enabled: '0',
+  platform_secret: '',             // gelen siparişlerin imzası ve giden bildirimlerin imzası (HMAC-SHA256)
+  platform_callback_url: '',       // durum bildirimlerinin (kabul/ret/hazır/yolda/teslim) gönderileceği adres
+  platform_auto_accept: '0',       // gelen siparişi otomatik kabul et ve mutfağa gönder
+  platform_prep_minutes: '20',     // kabulde platforma bildirilen hazırlanma süresi
   setup_done: '0',
   crm_enabled: '0',
   crm_base_url: '',
