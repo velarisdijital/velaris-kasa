@@ -10,11 +10,15 @@ import { bad, h, int, notFound, num, str } from '../util.js';
 
 const remaining = (i) => round3(i.qty - i.paid_qty);
 
+export const KIND_LABELS = { delivery: 'Paket', takeaway: 'Gel-al' };
+export const ticketLabel = (t) => t.table_name || `${KIND_LABELS[t.kind] || 'Adisyon'} #${t.order_no ?? t.id}`;
+
 export function loadTicket(db, id) {
-  const t = db.prepare(`SELECT t.*, d.name AS table_name, d.zone, u.name AS user_name, c.name AS customer_name FROM tickets t
-    JOIN dining_tables d ON d.id = t.table_id LEFT JOIN users u ON u.id = t.user_id LEFT JOIN customers c ON c.id = t.customer_id
+  const t = db.prepare(`SELECT t.*, d.name AS table_name, d.zone, u.name AS user_name, COALESCE(c.name, t.customer_name) AS customer_name FROM tickets t
+    LEFT JOIN dining_tables d ON d.id = t.table_id LEFT JOIN users u ON u.id = t.user_id LEFT JOIN customers c ON c.id = t.customer_id
     WHERE t.id = ?`).get(id);
   if (!t) return null;
+  t.table_name = ticketLabel(t);
   t.items = db.prepare(`SELECT i.*, u.name AS user_name FROM ticket_items i LEFT JOIN users u ON u.id = i.user_id
     WHERE i.ticket_id = ? ORDER BY i.id`).all(id).map((i) => ({ ...i, remaining_qty: i.void_at ? 0 : remaining(i) }));
   const live = t.items.filter((i) => !i.void_at);
@@ -48,6 +52,34 @@ export function applyTicketPayment(db, ticketId, lines, saleId, saleTotal) {
     db.prepare("UPDATE tickets SET status = 'closed', closed_at = datetime('now','localtime') WHERE id = ?").run(t.id);
     // Masa kapandı: bekleyen "hesap istiyor / garson çağırıyor" istekleri de kapanır
     db.prepare("UPDATE table_requests SET status = 'done', handled_at = datetime('now','localtime') WHERE table_id = ? AND status = 'new' AND type IN ('bill','waiter')").run(t.table_id);
+  }
+}
+
+/**
+ * Adisyona kalem ekler. items: [{ product_id?, name?, qty, unit_price?, vat_rate?, note? }].
+ * Mutfağa henüz gitmemiş, aynı ürün/not/fiyattaki satır varsa miktarı artırır.
+ */
+export function addTicketItems(db, ticketId, items, userId, { sent = false } = {}) {
+  const getP = db.prepare('SELECT * FROM products WHERE id = ? AND active = 1');
+  const same = db.prepare(`SELECT id FROM ticket_items WHERE ticket_id = ? AND product_id = ? AND sent_at IS NULL AND void_at IS NULL
+    AND paid_qty = 0 AND unit_price = ? AND COALESCE(note, '') = COALESCE(?, '')`);
+  const inc = db.prepare('UPDATE ticket_items SET qty = qty + ? WHERE id = ?');
+  const ins = db.prepare(`INSERT INTO ticket_items (ticket_id, product_id, name, qty, unit, unit_price, vat_rate, note, user_id, sent_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${sent ? "datetime('now','localtime')" : 'NULL'})`);
+  const defaultVat = num(getSetting(db, 'default_vat'), 20);
+  for (const it of items) {
+    const p = it.product_id ? getP.get(int(it.product_id)) : null;
+    if (it.product_id && !p) throw bad(`Ürün bulunamadı (#${it.product_id})`);
+    const name = p?.name || str(it.name);
+    if (!name) throw bad('Ürün gerekli');
+    const qty = round3(num(it.qty, 1));
+    if (!(qty > 0)) throw bad(`${name}: miktar geçersiz`);
+    const price = it.unit_price != null && it.unit_price !== '' ? int(it.unit_price) : p?.sell_price ?? 0;
+    if (price < 0) throw bad(`${name}: fiyat geçersiz`);
+    const note = str(it.note);
+    const row = !sent && p && same.get(ticketId, p.id, price, note);
+    if (row) inc.run(qty, row.id);
+    else ins.run(ticketId, p?.id ?? null, name, qty, p?.unit || 'adet', price, p ? p.vat_rate : num(it.vat_rate, defaultVat), note, userId);
   }
 }
 
@@ -140,30 +172,7 @@ export default function tableRoutes(db) {
     res.json(loadTicket(db, t.id));
   }));
 
-  function addItems(ticketId, items, userId) {
-    const getP = db.prepare('SELECT * FROM products WHERE id = ? AND active = 1');
-    // Mutfağa henüz gitmemiş, aynı ürün/not/fiyattaki satır varsa miktarı artır
-    const same = db.prepare(`SELECT id FROM ticket_items WHERE ticket_id = ? AND product_id = ? AND sent_at IS NULL AND void_at IS NULL
-      AND paid_qty = 0 AND unit_price = ? AND COALESCE(note, '') = COALESCE(?, '')`);
-    const inc = db.prepare('UPDATE ticket_items SET qty = qty + ? WHERE id = ?');
-    const ins = db.prepare(`INSERT INTO ticket_items (ticket_id, product_id, name, qty, unit, unit_price, vat_rate, note, user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    const defaultVat = num(getSetting(db, 'default_vat'), 20);
-    for (const it of items) {
-      const p = it.product_id ? getP.get(int(it.product_id)) : null;
-      if (it.product_id && !p) throw bad(`Ürün bulunamadı (#${it.product_id})`);
-      const name = p?.name || str(it.name);
-      if (!name) throw bad('Ürün gerekli');
-      const qty = round3(num(it.qty, 1));
-      if (!(qty > 0)) throw bad(`${name}: miktar geçersiz`);
-      const price = it.unit_price != null && it.unit_price !== '' ? int(it.unit_price) : p?.sell_price ?? 0;
-      if (price < 0) throw bad(`${name}: fiyat geçersiz`);
-      const note = str(it.note);
-      const row = p && same.get(ticketId, p.id, price, note);
-      if (row) inc.run(qty, row.id);
-      else ins.run(ticketId, p?.id ?? null, name, qty, p?.unit || 'adet', price, p ? p.vat_rate : num(it.vat_rate, defaultVat), note, userId);
-    }
-  }
+  const addItems = (ticketId, items, userId) => addTicketItems(db, ticketId, items, userId);
 
   /** Sipariş ekle. body: { items: [{ product_id, qty, note?, unit_price? }] } */
   r.post('/tickets/:id/items', h((req, res) => {
@@ -228,12 +237,14 @@ export default function tableRoutes(db) {
     db.prepare('UPDATE ticket_items SET sent_at = ? WHERE ticket_id = ? AND sent_at IS NULL AND void_at IS NULL').run(now, t.id);
     const ticket = loadTicket(db, t.id);
     res.json({ ticket, kitchen: { table_name: ticket.table_name, zone: ticket.zone, waiter: req.user.name, sent_at: now, guest_count: ticket.guest_count,
+      kind: ticket.kind, note: ticket.delivery_note, due_at: ticket.due_at,
       items: items.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, note: i.note })) } });
   }));
 
   /** Masayı taşı; hedef masada açık adisyon varsa birleştirir. body: { table_id } */
   r.post('/tickets/:id/move', h((req, res) => {
     const t = openTicket(req.params.id);
+    if (!t.table_id) throw bad('Paket / gel-al siparişi masaya taşınamaz');
     const target = db.prepare('SELECT * FROM dining_tables WHERE id = ? AND active = 1').get(int(req.body?.table_id));
     if (!target) throw bad('Hedef masa bulunamadı');
     if (target.id === t.table_id) throw bad('Adisyon zaten bu masada');
@@ -257,6 +268,7 @@ export default function tableRoutes(db) {
   /** Seçili kalemleri başka masaya aktar. body: { table_id, items: [{ id, qty }] } */
   r.post('/tickets/:id/transfer', h((req, res) => {
     const t = openTicket(req.params.id);
+    if (!t.table_id) throw bad('Paket / gel-al siparişinden masaya aktarma yapılamaz');
     const target = db.prepare('SELECT * FROM dining_tables WHERE id = ? AND active = 1').get(int(req.body?.table_id));
     if (!target || target.id === t.table_id) throw bad('Hedef masa geçersiz');
     const lines = Array.isArray(req.body?.items) ? req.body.items : [];
@@ -375,20 +387,26 @@ export default function tableRoutes(db) {
       FROM tickets WHERE status = 'closed' AND closed_at BETWEEN @from AND @to`).get(p);
     tickets.avg_minutes = Math.round(tickets.avg_minutes);
     tickets.avg_total = tickets.count ? Math.round(tickets.total / tickets.count) : 0;
-    const voids = db.prepare(`SELECT i.id, i.name, i.qty, i.unit_price, i.void_reason, i.void_at, i.sent_at, d.name AS table_name,
+    const voids = db.prepare(`SELECT i.id, i.name, i.qty, i.unit_price, i.void_reason, i.void_at, i.sent_at, COALESCE(d.name, CASE t.kind WHEN 'delivery' THEN 'Paket' ELSE 'Gel-al' END || ' #' || COALESCE(t.order_no, t.id)) AS table_name,
         u.name AS void_user_name, w.name AS waiter_name
-      FROM ticket_items i JOIN tickets t ON t.id = i.ticket_id JOIN dining_tables d ON d.id = t.table_id
+      FROM ticket_items i JOIN tickets t ON t.id = i.ticket_id LEFT JOIN dining_tables d ON d.id = t.table_id
       LEFT JOIN users u ON u.id = i.void_user_id LEFT JOIN users w ON w.id = i.user_id
       WHERE i.void_at BETWEEN @from AND @to ORDER BY i.void_at DESC`).all(p);
-    res.json({ from, to, waiters, tickets, voids });
+    const couriers = db.prepare(`SELECT courier_name AS name, COUNT(*) AS count, COALESCE(SUM(paid_total), 0) AS total,
+        COALESCE(AVG((julianday(status_at) - julianday(opened_at)) * 1440), 0) AS avg_minutes
+      FROM tickets WHERE kind = 'delivery' AND delivery_status = 'delivered' AND courier_name IS NOT NULL AND opened_at BETWEEN @from AND @to
+      GROUP BY courier_name ORDER BY count DESC`).all(p).map((c) => ({ ...c, avg_minutes: Math.round(c.avg_minutes) }));
+    const channels = db.prepare(`SELECT kind, source, COUNT(*) AS count, COALESCE(SUM(paid_total), 0) AS total FROM tickets
+      WHERE kind != 'table' AND status != 'cancelled' AND opened_at BETWEEN @from AND @to GROUP BY kind, source ORDER BY count DESC`).all(p);
+    res.json({ from, to, waiters, tickets, voids, couriers, channels });
   }));
 
   /** İptal / ikram raporu */
   r.get('/tickets-voids', allow(...MANAGERS), h((req, res) => {
     const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : new Date().toLocaleDateString('sv-SE');
     const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || '') ? req.query.to : from;
-    res.json(db.prepare(`SELECT i.*, d.name AS table_name, u.name AS void_user_name FROM ticket_items i JOIN tickets t ON t.id = i.ticket_id
-      JOIN dining_tables d ON d.id = t.table_id LEFT JOIN users u ON u.id = i.void_user_id
+    res.json(db.prepare(`SELECT i.*, COALESCE(d.name, 'Paket #' || COALESCE(t.order_no, t.id)) AS table_name, u.name AS void_user_name FROM ticket_items i JOIN tickets t ON t.id = i.ticket_id
+      LEFT JOIN dining_tables d ON d.id = t.table_id LEFT JOIN users u ON u.id = i.void_user_id
       WHERE i.void_at BETWEEN ? AND ? ORDER BY i.void_at DESC`).all(`${from} 00:00:00`, `${to} 23:59:59`));
   }));
 

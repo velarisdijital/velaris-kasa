@@ -152,7 +152,7 @@ function QrMenuModal({ tables, onClose }) {
 }
 
 // ---------- Adisyon ekranı ----------
-function TicketScreen({ table, tables, onBack, onSwitch }) {
+export function TicketScreen({ table, tables = [], onBack, onSwitch, back = '/masalar' }) {
   const toast = useToast();
   const ask = useConfirm();
   const navigate = useNavigate();
@@ -203,7 +203,7 @@ function TicketScreen({ table, tables, onBack, onSwitch }) {
 
   const checkout = async (lines, partial) => {
     if (ticket.unsent_count && !(await ask('Mutfağa gönderilmemiş sipariş var. Yine de hesaba geçilsin mi?', { ok: 'Devam', danger: false }))) return;
-    navigate('/kasa', { state: { ticket: { id: ticket.id, table_name: ticket.table_name, customer_id: ticket.customer_id, partial,
+    navigate('/kasa', { state: { ticket: { id: ticket.id, table_name: ticket.table_name, customer_id: ticket.customer_id, partial, back,
       items: lines.map(([i, n]) => ({ ticket_item_id: i.id, product_id: i.product_id, name: i.note ? `${i.name} (${i.note})` : i.name, unit: i.unit, qty: n, unit_price: i.unit_price, vat_rate: i.vat_rate })) } } });
   };
 
@@ -227,7 +227,7 @@ function TicketScreen({ table, tables, onBack, onSwitch }) {
     <div className="pos">
       <div className="pos-left">
         <div className="row">
-          <button className="btn" onClick={onBack}>← Masalar</button>
+          <button className="btn" onClick={onBack}>← Geri</button>
           <input className="input" placeholder="Ürün ara…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         {!term && <div className="tabs">{tabs.map((t) => <button key={t.id} className={`tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>{t.name}</button>)}</div>}
@@ -248,9 +248,10 @@ function TicketScreen({ table, tables, onBack, onSwitch }) {
           <div style={{ flex: 1 }}>
             <strong style={{ fontSize: 18 }}>{table.name}</strong>
             {ticket && <div className="muted small-text">{since(ticket.opened_at)} · {ticket.user_name}{ticket.customer_name ? ` · ${ticket.customer_name}` : ''}</div>}
+            {ticket?.kind && ticket.kind !== 'table' && (ticket.address || ticket.phone) && <div className="muted small-text">{[ticket.phone, ticket.address].filter(Boolean).join(' · ')}</div>}
           </div>
-          {ticket && <button className="btn small" onClick={() => setModal({ type: 'guests' })}>{ticket.guest_count ? `${ticket.guest_count} kişi` : 'Kişi'}</button>}
-          {ticket && <button className="btn small" onClick={() => setModal({ type: 'move' })} title="Masayı taşı / birleştir">Taşı</button>}
+          {ticket && ticket.kind === 'table' && <button className="btn small" onClick={() => setModal({ type: 'guests' })}>{ticket.guest_count ? `${ticket.guest_count} kişi` : 'Kişi'}</button>}
+          {ticket && ticket.kind === 'table' && <button className="btn small" onClick={() => setModal({ type: 'move' })} title="Masayı taşı / birleştir">Taşı</button>}
         </div>
 
         <div className="cart-items">
@@ -300,7 +301,7 @@ function TicketScreen({ table, tables, onBack, onSwitch }) {
             {ticket.paid_total > 0 && <div className="line"><span>Ödenen</span><span className="success-text">{money(ticket.paid_total)}</span></div>}
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <button className="btn small ghost" disabled={!live.length} onClick={() => printElement(<Bill ticket={ticket} settings={settings} />)}><Icon name="print" /> Adisyon</button>
-              {selected.length > 0 && <button className="btn small ghost" onClick={() => setModal({ type: 'transfer' })}>Seçileni aktar</button>}
+              {selected.length > 0 && ticket.kind === 'table' && <button className="btn small ghost" onClick={() => setModal({ type: 'transfer' })}>Seçileni aktar</button>}
               {!waiter && <button className="btn small ghost danger-text" onClick={cancelTicket}>İptal</button>}
             </div>
             <div className="total"><span>KALAN</span><span>{money(ticket.remaining_total)}</span></div>

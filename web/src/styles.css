@@ -411,3 +411,13 @@ a.btn.primary { color: var(--bg); }
 .qr-card img { width: 100%; max-width: 50mm; }
 .qr-card .qr-name { font-weight: 800; font-size: 16pt; }
 .qr-card .qr-sub { font-size: 9pt; }
+
+/* Paket servis */
+.kanban { display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 12px; overflow-x: auto; align-items: start; padding-bottom: 8px; }
+.kanban-col { background: var(--panel-2); border-radius: 14px; padding: 10px; min-height: 120px; }
+.kanban-col h3 { margin: 2px 4px 10px; font-size: 14px; }
+.order-card { padding: 12px; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; box-shadow: none; }
+.order-card.late { border-color: var(--danger); box-shadow: 0 0 0 2px var(--danger-soft); }
+.mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; max-height: 260px; overflow: auto; }
+.mini-grid .tile { min-height: 70px; }
+@media (max-width: 760px) { .kanban { grid-template-columns: repeat(5, 80vw); } }

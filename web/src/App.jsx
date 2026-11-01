@@ -12,6 +12,7 @@ import MenuPage from './pages/Menu.jsx';
 import Pos from './pages/Pos.jsx';
 import Purchases from './pages/Purchases.jsx';
 import Tables from './pages/Tables.jsx';
+import Deliveries from './pages/Deliveries.jsx';
 import Products from './pages/Products.jsx';
 import Reports from './pages/Reports.jsx';
 import Sales from './pages/Sales.jsx';
@@ -115,6 +116,7 @@ function Root() {
 
   const appointmentsOn = settings.modules_appointments === '1' && !!license?.features?.includes('appointments');
   const tablesOn = settings.modules_tables === '1' && !!license?.features?.includes('tables');
+  const deliveryOn = settings.modules_delivery === '1' && !!license?.features?.includes('tables');
   // Garson modu: masa modülü açıkken "Personel" rolü yalnızca masaları (ve varsa randevuları) görür, ödeme kasada alınır
   const waiter = tablesOn && user.role === 'staff';
   if (waiter) {
@@ -147,6 +149,7 @@ function Root() {
           <div className="logo"><img src={logo} alt="VelarisKasa" /></div>
           <NavItem to="/kasa" icon="pos" label="Kasa" />
           {tablesOn && <NavItem to="/masalar" icon="table" label="Masalar" />}
+          {deliveryOn && <NavItem to="/paket" icon="bag" label="Paket" />}
           {appointmentsOn && <NavItem to="/randevu" icon="calendar" label="Randevu" />}
           <NavItem to="/urunler" icon="box" label="Stok" />
           {isManager(user) && <NavItem to="/alis" icon="truck" label="Alış" />}
@@ -166,6 +169,7 @@ function Root() {
           <Routes>
             <Route path="/kasa" element={<Pos />} />
             {tablesOn && <Route path="/masalar" element={<Tables />} />}
+            {deliveryOn && <Route path="/paket" element={<Deliveries />} />}
             {appointmentsOn && <Route path="/randevu" element={<Appointments />} />}
             <Route path="/urunler" element={<Products />} />
             {isManager(user) && <Route path="/alis" element={<Purchases />} />}

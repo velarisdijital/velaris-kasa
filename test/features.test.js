@@ -826,3 +826,51 @@ test('garson: hesap bildirimi, ödeme sonrası istek kapanır, masa/garson rapor
   assert.ok(rep.tickets.count >= 1);
   assert.ok(rep.voids.some((v) => v.void_reason === 'İkram' && v.table_name === 'Rapor Masa'));
 });
+
+test('paket servis: sipariş, ücret, durumlar, kurye, ödeme ve kurye raporu; gel-al', async () => {
+  await call('PUT', '/api/settings', { modules_delivery: '1', delivery_fee: '1500', delivery_couriers: 'Ahmet, Mehmet' });
+  const doner = (await call('POST', '/api/products', { name: 'Paket Döner', sell_price: 15000, track_stock: 0 })).body;
+  const cust = (await call('POST', '/api/customers', { name: 'Paket Müşteri', phone: '0532 999 88 77', address: 'Moda Cad. 5' })).body;
+  assert.equal((await call('POST', '/api/deliveries', { kind: 'delivery', customer_name: 'X', items: [{ product_id: doner.id, qty: 1 }] })).status, 400); // adres yok
+  // Telefonla müşteri bulma
+  const found = (await call('GET', '/api/deliveries/customer?phone=05329998877')).body;
+  assert.equal(found.customer.id, cust.id);
+  let d = (await call('POST', '/api/deliveries', { kind: 'delivery', source: 'phone', customer_id: cust.id, address: 'Moda Cad. 5 D:3',
+    delivery_note: 'Zil bozuk', items: [{ product_id: doner.id, qty: 2 }], delivery_fee: 1500, payment_hint: 'Kapıda nakit' })).body;
+  assert.equal(d.kind, 'delivery');
+  assert.equal(d.table_name, `Paket #${d.order_no}`);
+  assert.equal(d.customer_name, 'Paket Müşteri');
+  assert.equal(d.total, 31500);
+  assert.equal(d.delivery_status, 'new');
+  assert.equal(d.source, 'phone');
+  // Mutfak fişinde not
+  const k = (await call('POST', `/api/tickets/${d.id}/kitchen`)).body.kitchen;
+  assert.equal(k.note, 'Zil bozuk');
+  // Masaya taşınamaz
+  const [m] = (await call('POST', '/api/tables', { name: 'Paket Test Masa' })).body;
+  assert.equal((await call('POST', `/api/tickets/${d.id}/move`, { table_id: m.id })).status, 400);
+  // Kuryesiz yola çıkamaz
+  assert.equal((await call('PUT', `/api/deliveries/${d.id}`, { delivery_status: 'on_way' })).status, 400);
+  d = (await call('PUT', `/api/deliveries/${d.id}`, { delivery_status: 'on_way', courier_name: 'Ahmet' })).body;
+  assert.equal(d.courier_name, 'Ahmet');
+  let active = (await call('GET', '/api/deliveries')).body;
+  assert.ok(active.some((x) => x.id === d.id));
+  // Teslim edildi ama ödenmedi → hâlâ listede; ödeme alınınca düşer
+  await call('PUT', `/api/deliveries/${d.id}`, { delivery_status: 'delivered' });
+  assert.ok((await call('GET', '/api/deliveries')).body.some((x) => x.id === d.id));
+  const r = await call('POST', '/api/sales', { register_name: 'Kasa 1', ticket_id: d.id,
+    items: d.items.map((i) => ({ product_id: i.product_id, name: i.name, unit_price: i.unit_price, vat_rate: i.vat_rate, qty: i.qty, ticket_item_id: i.id })),
+    payments: [{ method: 'cash', amount: 31500 }] });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.ok(!(await call('GET', '/api/deliveries')).body.some((x) => x.id === d.id));
+  assert.ok((await call('GET', '/api/deliveries?all=1')).body.some((x) => x.id === d.id));
+  const rep = (await call('GET', '/api/reports/tables')).body;
+  assert.equal(rep.couriers.find((c) => c.name === 'Ahmet').count, 1);
+  assert.ok(rep.channels.some((c) => c.kind === 'delivery' && c.source === 'phone'));
+  // Gel-al: adres gerekmez, servis ücreti eklenmez
+  const g = (await call('POST', '/api/deliveries', { kind: 'takeaway', customer_name: 'Ayşe', items: [{ product_id: doner.id, qty: 1 }], delivery_fee: 1500 })).body;
+  assert.equal(g.total, 15000);
+  assert.equal(g.table_name, `Gel-al #${g.order_no}`);
+  assert.equal(g.order_no, d.order_no + 1);
+  assert.equal((await call('GET', '/api/deliveries/settings')).body.couriers.join('|'), 'Ahmet|Mehmet');
+});

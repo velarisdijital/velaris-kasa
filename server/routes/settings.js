@@ -38,7 +38,7 @@ export default function settingsRoutes(db) {
     const ON = { fiscal_driver: ['fiscal', (v) => v && v !== 'none'], invoice_provider: ['invoice', (v) => v && v !== 'none'],
       notify_provider: ['sms', (v) => v && v !== 'none'], loyalty_enabled: ['loyalty', (v) => String(v) === '1'],
       booking_enabled: ['booking', (v) => String(v) === '1'], reminder_enabled: ['reminders', (v) => String(v) === '1'],
-      crm_enabled: ['crm', (v) => String(v) === '1'], iys_enabled: ['sms', (v) => String(v) === '1'], modules_appointments: ['appointments', (v) => String(v) === '1'], modules_tables: ['tables', (v) => String(v) === '1'] };
+      crm_enabled: ['crm', (v) => String(v) === '1'], iys_enabled: ['sms', (v) => String(v) === '1'], modules_appointments: ['appointments', (v) => String(v) === '1'], modules_tables: ['tables', (v) => String(v) === '1'], modules_delivery: ['tables', (v) => String(v) === '1'] };
     const before = getSettings(db);
     for (const [k, [feat, isOn]] of Object.entries(ON)) if (k in values && isOn(values[k]) && !isOn(before[k])) requireFeature(db, feat);
     delete values.parasut_access_token;

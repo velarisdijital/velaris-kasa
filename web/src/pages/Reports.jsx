@@ -3,6 +3,7 @@ import { get } from '../api.js';
 import { useCan, useSession } from '../App.jsx';
 import { useLoad } from '../components/ui.jsx';
 import { METHOD_LABELS, money, qty, today } from '../format.js';
+import { SOURCE_LABELS } from './Deliveries.jsx';
 
 const addDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toLocaleDateString('sv-SE'); };
 const monthStart = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toLocaleDateString('sv-SE'); };
@@ -161,6 +162,24 @@ function TablesReport({ from, to }) {
           {!x.voids.length && <div className="empty">İptal / ikram yok</div>}
         </div>
       </div>
+      {(x.channels.length > 0 || x.couriers.length > 0) && (
+        <div className="grid-2">
+          <div className="card table-wrap">
+            <table className="table">
+              <thead><tr><th>Paket / gel-al kanalı</th><th className="right">Sipariş</th><th className="right">Tahsil edilen</th></tr></thead>
+              <tbody>{x.channels.map((c) => <tr key={`${c.kind}-${c.source}`}><td>{c.kind === 'takeaway' ? 'Gel-al' : 'Paket'} · {SOURCE_LABELS[c.source] || c.source}</td>
+                <td className="right num">{c.count}</td><td className="right num">{money(c.total)}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <div className="card table-wrap">
+            <table className="table">
+              <thead><tr><th>Kurye</th><th className="right">Teslimat</th><th className="right">Ort. süre</th><th className="right">Tutar</th></tr></thead>
+              <tbody>{x.couriers.map((c) => <tr key={c.name}><td>{c.name}</td><td className="right num">{c.count}</td><td className="right num">{c.avg_minutes} dk</td><td className="right num">{money(c.total)}</td></tr>)}</tbody>
+            </table>
+            {!x.couriers.length && <div className="empty">Teslimat yok</div>}
+          </div>
+        </div>
+      )}
     </>
   );
 }

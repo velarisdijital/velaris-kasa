@@ -255,15 +255,61 @@ const MIGRATIONS = [
   );
   CREATE INDEX idx_table_requests_status ON table_requests(status);
   `,
+  // 11: Paket servis / gel-al — adisyon masasız da olabilir; teslimat bilgileri ve platform siparişleri
+  `
+  CREATE TABLE tickets_new (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    table_id        INTEGER REFERENCES dining_tables(id),
+    kind            TEXT NOT NULL DEFAULT 'table' CHECK (kind IN ('table','delivery','takeaway')),
+    status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','cancelled')),
+    guest_count     INTEGER,
+    customer_id     INTEGER REFERENCES customers(id),
+    note            TEXT,
+    user_id         INTEGER,
+    paid_total      INTEGER NOT NULL DEFAULT 0,
+    cancel_reason   TEXT,
+    opened_at       TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    closed_at       TEXT,
+    -- Paket servis
+    order_no        INTEGER,
+    source          TEXT NOT NULL DEFAULT 'pos',     -- pos | phone | qr | yemeksepeti | getir | trendyol
+    external_id     TEXT,                            -- platformdaki sipariş numarası
+    external_status TEXT,
+    customer_name   TEXT,
+    phone           TEXT,
+    address         TEXT,
+    delivery_note   TEXT,
+    courier_name    TEXT,
+    delivery_status TEXT CHECK (delivery_status IN ('new','preparing','ready','on_way','delivered')),
+    payment_hint    TEXT,                            -- kapıda nakit / kapıda kart / online ödendi
+    prepaid         INTEGER NOT NULL DEFAULT 0,      -- platformda online ödendi
+    due_at          TEXT,                            -- ileri saatli sipariş
+    status_at       TEXT
+  );
+  INSERT INTO tickets_new (id, table_id, status, guest_count, customer_id, note, user_id, paid_total, cancel_reason, opened_at, closed_at)
+    SELECT id, table_id, status, guest_count, customer_id, note, user_id, paid_total, cancel_reason, opened_at, closed_at FROM tickets;
+  DROP TABLE tickets;
+  ALTER TABLE tickets_new RENAME TO tickets;
+  CREATE UNIQUE INDEX idx_tickets_open_table ON tickets(table_id) WHERE status = 'open' AND table_id IS NOT NULL;
+  CREATE INDEX idx_tickets_kind ON tickets(kind, status);
+  CREATE UNIQUE INDEX idx_tickets_external ON tickets(source, external_id) WHERE external_id IS NOT NULL;
+  `,
 ];
 
 export function migrate(db) {
   const current = db.prepare('PRAGMA user_version').get().user_version || 1;
-  for (let v = current + 1; v <= MIGRATIONS.length + 1; v++) {
-    db.transaction(() => {
-      db.exec(MIGRATIONS[v - 2]);
-      db.exec(`PRAGMA user_version = ${v}`);
-    })();
+  if (current >= MIGRATIONS.length + 1) return;
+  // Tablo yeniden kurulan göçler (ör. 11) için yabancı anahtarlar göç süresince kapatılır (SQLite önerisi)
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    for (let v = current + 1; v <= MIGRATIONS.length + 1; v++) {
+      db.transaction(() => {
+        db.exec(MIGRATIONS[v - 2]);
+        db.exec(`PRAGMA user_version = ${v}`);
+      })();
+    }
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
   }
 }
 

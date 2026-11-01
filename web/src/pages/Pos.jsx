@@ -71,7 +71,7 @@ export default function Pos() {
     if (!t) return;
     setCart(t.items.map((i) => ({ key: uuid(), product_id: i.product_id, name: i.name, unit: i.unit, type: 'product', qty: i.qty,
       unit_price: i.unit_price, discount: 0, vat_rate: i.vat_rate, staff_id: null, ticket_item_id: i.ticket_item_id })));
-    setTicket({ id: t.id, table_name: t.table_name, partial: t.partial });
+    setTicket({ id: t.id, table_name: t.table_name, partial: t.partial, back: t.back || '/masalar' });
     setDiscount(0);
     if (t.customer_id) get(`/customers/${t.customer_id}`).then(setCustomer).catch(() => {});
     navigate('.', { replace: true, state: null });
@@ -168,7 +168,7 @@ export default function Pos() {
       const fromTable = ticket;
       clearCart();
       setModal(null);
-      if (fromTable) setTimeout(() => navigate('/masalar', { state: { paid: fromTable.id } }), change > 0 ? 2500 : 600);
+      if (fromTable) setTimeout(() => navigate(fromTable.back || '/masalar', { state: { paid: fromTable.id } }), change > 0 ? 2500 : 600);
       // Stokları güncelle (arka planda)
       if (!sale.offline) loadProducts().then(setProducts).catch(() => {});
       else setProducts((ps) => ps.map((p) => {
@@ -274,7 +274,7 @@ export default function Pos() {
           <div className="ticket-bar">
             <Icon name="table" /><span><b>{ticket.table_name}</b> adisyonu{ticket.partial ? ' · bölünmüş hesap' : ''}</span>
             <div style={{ flex: 1 }} />
-            <button className="btn small ghost" onClick={() => { clearCart(); navigate('/masalar'); }}>Masaya dön</button>
+            <button className="btn small ghost" onClick={() => { const back = ticket.back || '/masalar'; clearCart(); navigate(back); }}>Geri dön</button>
           </div>
         )}
         <div className="cart-items">

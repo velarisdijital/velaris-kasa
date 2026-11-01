@@ -22,6 +22,9 @@ export const DEFAULT_SETTINGS = {
   qrmenu_enabled: '0',             // masadaki QR ile herkese açık menü
   qrmenu_orders: '0',              // QR menüden sipariş isteği (garson onaylar)
   qrmenu_note: '',                 // menü üstünde gösterilen not (Wi-Fi şifresi vb.)
+  modules_delivery: '0',           // paket servis / gel-al
+  delivery_fee: '0',               // varsayılan paket servis ücreti (kuruş)
+  delivery_couriers: '',           // kuryeler, virgülle: "Ahmet, Mehmet"
   setup_done: '0',
   crm_enabled: '0',
   crm_base_url: '',
