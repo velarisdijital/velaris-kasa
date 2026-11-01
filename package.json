@@ -37,6 +37,7 @@
     "build": "vite build",
     "start": "node server/index.js",
     "test": "NODE_ENV=test VK_TEST_DEFAULT_PLAN=pro node --test test/*.test.js",
+    "test:e2e-printer": "node scripts/build-app.mjs && node scripts/e2e/android-printer.e2e.cjs",
     "desktop": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win --publish never",
     "dist:linux": "npm run build && electron-builder --linux --publish never",

@@ -32,7 +32,7 @@ let webChar = null;
 async function ble() {
   const { BleClient } = await import('@capacitor-community/bluetooth-le');
   // Android 12+: konum izni de istenir; yoksa sistem tarama sonuçlarını boş döndürüyor
-  await BleClient.initialize({ androidNeverForLocation: false });
+  await withTimeout(BleClient.initialize({ androidNeverForLocation: false }), 90000, 'Bluetooth izinleri alınamadı');
   return BleClient;
 }
 
@@ -42,13 +42,31 @@ export const looksLikePrinter = (name) => PRINTER_NAME.test(String(name || ''));
 const sortDevices = (list) => [...list].sort((a, b) => Number(looksLikePrinter(b.name)) - Number(looksLikePrinter(a.name)) || String(a.name || '~').localeCompare(String(b.name || '~')));
 
 // Klasik Bluetooth (SPP) eklentisi: android/app/src/main/java/.../ClassicPrinterPlugin.java
-let classicPlugin = null;
-async function classic() {
-  if (!classicPlugin) {
+// DİKKAT: Capacitor eklenti nesnesi bir Proxy'dir ve her alan adına (then dahil) "yerel metot" döndürür.
+// Bu nesne async bir fonksiyondan döndürülür ya da await edilirse JavaScript onu Promise sanıp .then'i çağırır
+// ve çağrı sonsuza kadar bekler. Bu yüzden nesnenin kendisi asla döndürülmez/await edilmez; yalnızca metotları çağrılır.
+const holder = { plugin: null };
+async function loadClassic() {
+  if (!holder.plugin) {
     const { registerPlugin } = await import('@capacitor/core');
-    classicPlugin = registerPlugin('ClassicPrinter');
+    holder.plugin = registerPlugin('ClassicPrinter');
   }
-  return classicPlugin;
+}
+/** Yerel ClassicPrinter metodunu çağırır (zaman aşımıyla: hiçbir çağrı sonsuza kadar beklemez). */
+async function classicCall(method, options = {}, ms = 20000) {
+  await loadClassic();
+  return withTimeout(holder.plugin[method](options), ms, `Bluetooth (${method}) yanıt vermedi`);
+}
+async function classicListen(event, cb) {
+  await loadClassic();
+  return holder.plugin.addListener(event, cb); // Promise<{ remove }>
+}
+export function withTimeout(promise, ms, message) {
+  let t;
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(t)),
+    new Promise((_, reject) => { t = setTimeout(() => reject(new Error(message || 'Zaman aşımı')), ms); }),
+  ]);
 }
 export const BT_TYPES = { 1: 'klasik', 2: 'BLE', 3: 'klasik + BLE' };
 
@@ -56,7 +74,7 @@ export const BT_TYPES = { 1: 'klasik', 2: 'BLE', 3: 'klasik + BLE' };
 export async function pairedDevices() {
   if (!isNative()) return [];
   try {
-    const { devices } = await (await classic()).bonded();
+    const { devices } = await classicCall('bonded', {}, 8000);
     return sortDevices(devices.map((d) => ({ deviceId: d.address, name: d.name || '', paired: true, type: d.type })));
   } catch {
     const B = await ble();
@@ -71,12 +89,12 @@ const transportFor = (d) => (d.paired && d.type !== 2 ? 'spp' : 'ble');
 export async function scanNearby(onFound, ms = 12000) {
   const B = await ble();
   const seen = new Set();
-  await B.requestLEScan({ allowDuplicates: false }, (r) => {
+  await withTimeout(B.requestLEScan({ allowDuplicates: false }, (r) => {
     const id = r.device.deviceId;
     if (seen.has(id)) return;
     seen.add(id);
     onFound({ deviceId: id, name: r.device.name || r.localName || '', rssi: r.rssi });
-  });
+  }), 15000, 'BLE taraması başlamadı');
   let stopped = false;
   const stop = async () => { if (!stopped) { stopped = true; try { await B.stopLEScan(); } catch { /* yok say */ } } };
   setTimeout(stop, ms);
@@ -89,11 +107,10 @@ export async function scanNearby(onFound, ms = 12000) {
  */
 export async function discoverClassic(onFound, ms = 12000) {
   if (!isNative()) return { done: Promise.resolve({ devices: [] }), stop: async () => {} };
-  const c = await classic();
-  const handle = await c.addListener('deviceFound', (d) => onFound({
+  const handle = await classicListen('deviceFound', (d) => onFound({
     deviceId: d.address, name: d.name || '', type: d.type, rssi: d.rssi, classic: true, paired: !!d.bonded,
   }));
-  const done = c.discover({ timeout: ms }).finally(() => handle.remove());
+  const done = classicCall('discover', { timeout: ms }, ms + 30000).finally(() => handle.remove());
   done.catch(() => {});
   return { done, stop: async () => { try { await handle.remove(); } catch { /* yok say */ } } };
 }
@@ -106,12 +123,12 @@ export async function prepareBluetooth() {
 
 /** Tabletin Bluetooth ayarlarını açar (oradan eşleştirilen yazıcı uygulamada "eşleşmiş" listesinde görünür). */
 export async function openBluetoothSettings() {
-  await (await classic()).openSettings();
+  await classicCall('openSettings', {}, 5000);
 }
 
 /** Klasik Bluetooth cihazıyla eşleşir (tablet eşleştirme penceresi açabilir; PIN genelde 0000 ya da 1234). */
 export async function bondDevice(address) {
-  await (await classic()).bond({ address });
+  await classicCall('bond', { address }, 60000);
 }
 
 /** Listeden seçilen cihazı yazıcı olarak kaydeder ve bağlanır. */
@@ -240,7 +257,7 @@ export async function sendBytes(bytes) {
     const errors = [];
     for (const t of order) {
       try {
-        if (t === 'spp') await (await classic()).write({ address: p.deviceId, data: toBase64(bytes) });
+        if (t === 'spp') await classicCall('write', { address: p.deviceId, data: toBase64(bytes) }, 45000);
         else await sendBle(bytes);
         if (t !== p.transport) savePrinter({ transport: t });
         return;

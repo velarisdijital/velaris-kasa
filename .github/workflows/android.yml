@@ -34,6 +34,11 @@ jobs:
         run: |
           node scripts/build-app.mjs
           npx cap sync android
+      - name: Bluetooth yazıcı akışı uçtan uca testi (sahte Android köprüsüyle)
+        run: |
+          npm i --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+          node scripts/e2e/android-printer.e2e.cjs
       - name: APK derle (imzalı)
         working-directory: android
         env:

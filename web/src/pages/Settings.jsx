@@ -568,7 +568,13 @@ function LabelPrinterSettings() {
     } catch (e) { state.scanning = false; setPicker({ ...state }); toast.err(`Tarama başlatılamadı: ${e.message || e}`); }
   };
   const state_error = (p) => (p.error ? <div className="small-text danger-text">{p.error}</div> : null);
-  const pick = (d) => {
+  const pick = (chosen) => {
+    // BLE kaydı seçildiyse ve aynı yazıcının klasik kaydı da varsa klasik Bluetooth tercih edilir (daha kararlı)
+    const base = (n) => String(n || '').replace(/[-_ ]?ble$/i, '').toLowerCase();
+    const twin = !chosen.classic && !chosen.paired && base(chosen.name)
+      ? [...(picker?.paired || []), ...(picker?.classic || [])].find((x) => x.type !== 2 && base(x.name) === base(chosen.name))
+      : null;
+    const d = twin || chosen;
     setPicker(null);
     if (d.classic && !d.paired) toast.ok('Eşleştirme isteniyor… Tablette çıkan pencerede "Eşleştir"e basın (PIN sorarsa 0000 ya da 1234).');
     run(async () => setDiag(await lp.usePrinterDevice(d)), `${d.name || 'Yazıcı'} bağlandı`);
