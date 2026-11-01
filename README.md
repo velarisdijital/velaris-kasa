@@ -79,6 +79,12 @@ Program bir bulut sunucusuna da kurulabilir; o zaman her şube internetten bağl
 `npm run dist:win` ile üretilen `release/VelarisKasa Setup x.y.z.exe` dosyasını çalıştırın.
 GitHub'a `v1.0.0` gibi bir etiket gönderildiğinde Actions bu dosyayı otomatik üretir.
 
+### Android tablet / telefon (APK)
+[VelarisKasa.apk](https://github.com/velarisdijital/velaris-kasa/releases/download/android-latest/VelarisKasa.apk) dosyasını
+tablette indirip açın ("bilinmeyen kaynaklardan yükleme"ye izin verin). Uygulama sunucusuz, internetsiz çalışır; veriler
+tablette saklanır. Kamera ile barkod okur; Bluetooth/USB barkod okuyucu klavye gibi bağlanır.
+Her `main` güncellemesinde GitHub Actions yeni APK üretir (`.github/workflows/android.yml`); yerelde `npm run android:sync`.
+
 ### Sunucu / geliştirme
 Node.js 20+ gerekir.
 
