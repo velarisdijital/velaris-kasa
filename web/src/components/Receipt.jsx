@@ -72,4 +72,25 @@ export function printElement(element, pageCss = null) {
   else window.print();
 }
 
-export const printReceipt = (sale, settings, change = 0) => printElement(<Receipt sale={sale} settings={settings} change={change} />);
+const notify = (type, message) => window.dispatchEvent(new CustomEvent('vk-toast', { detail: { type, message } }));
+
+/**
+ * Fişi yazdırır. Android uygulamasında Bluetooth yazıcı seçiliyse fiş oraya gider
+ * (Ayarlar → Bu cihaz → "Fişleri bu yazıcıdan bas"); aksi hâlde sistemin yazdırma penceresi.
+ */
+export async function printReceipt(sale, settings, change = 0) {
+  try {
+    const lp = await import('../printing/labelPrinter.js');
+    const cfg = lp.getPrinter();
+    if (lp.isNative() && cfg.deviceId && cfg.receiptVia !== 'system') {
+      const { printReceiptBluetooth } = await import('../printing/receiptBitmap.js');
+      const pages = await printReceiptBluetooth(sale, settings, change);
+      notify('success', pages > 1 ? `Fiş yazıcıya gönderildi (${pages} etiket)` : 'Fiş yazıcıya gönderildi');
+      return;
+    }
+  } catch (e) {
+    notify('error', `Fiş basılamadı: ${e.message || e}. Yazıcının açık olduğundan emin olun.`);
+    return;
+  }
+  printElement(<Receipt sale={sale} settings={settings} change={change} />);
+}

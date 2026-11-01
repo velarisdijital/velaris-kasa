@@ -11,6 +11,12 @@ export function ToastProvider({ children }) {
     setItems((xs) => [...xs, { id, message, type }]);
     setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), type === 'error' ? 5000 : 2800);
   }, []);
+  // Bileşen dışından bildirim: window.dispatchEvent(new CustomEvent('vk-toast', { detail: { type, message } }))
+  useEffect(() => {
+    const on = (e) => push(e.detail?.message, e.detail?.type || 'info');
+    window.addEventListener('vk-toast', on);
+    return () => window.removeEventListener('vk-toast', on);
+  }, [push]);
   const api = useMemo(() => Object.assign((m) => push(m), {
     ok: (m) => push(m, 'success'),
     err: (e) => push(typeof e === 'string' ? e : e?.message || 'Hata', 'error'),

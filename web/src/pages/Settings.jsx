@@ -605,6 +605,7 @@ function LabelPrinterSettings() {
             <button type="button" className="btn small" disabled={busy} onClick={openPicker}>{cfg.deviceId ? 'Değiştir' : 'Yazıcı ara'}</button>
             {cfg.deviceId && !cfg.characteristic && <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => setDiag(await lp.connectPrinter()), 'Yazıcı bağlandı')}>Bağlan</button>}
             {cfg.deviceId && <button type="button" className="btn small primary" disabled={busy} onClick={() => run(() => lp.printTest(settings.business_name), 'Deneme etiketi gönderildi')}>Deneme etiketi bas</button>}
+            {cfg.deviceId && lp.isNative() && cfg.receiptVia !== 'system' && <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => { const r = await import('../printing/receiptBitmap.js'); await r.printReceiptBluetooth(r.SAMPLE_SALE, settings, 1010); }, 'Deneme fişi gönderildi')}>Deneme fişi bas</button>}
             {cfg.deviceId && <button type="button" className="btn small ghost danger-text" onClick={() => { lp.forgetPrinter(); setCfg(lp.getPrinter()); setDiag(null); }}>Unut</button>}
           </div>
           {picker && (
@@ -636,6 +637,16 @@ function LabelPrinterSettings() {
               </select>
             </Field>
             <label className="check" style={{ alignSelf: 'end', paddingBottom: 10 }}><input type="checkbox" checked={!!cfg.invert} onChange={(e) => set('invert', e.target.checked)} /> Ters renk (etiket siyah çıkıyorsa)</label>
+            {lp.isNative() && (
+              <Field label="Satış fişi">
+                <select className="input" value={cfg.receiptVia === 'system' ? 'system' : cfg.receiptPaper === 'continuous' ? 'continuous' : 'label'}
+                  onChange={(e) => { const v = e.target.value; const n = { ...cfg, receiptVia: v === 'system' ? 'system' : 'bt', receiptPaper: v === 'continuous' ? 'continuous' : 'label' }; setCfg(n); lp.savePrinter({ receiptVia: n.receiptVia, receiptPaper: n.receiptPaper }); }}>
+                  <option value="label">Bu yazıcıdan bas · etiket rulosu (fiş etiketlere bölünür)</option>
+                  <option value="continuous">Bu yazıcıdan bas · sürekli rulo (fiş kâğıdı)</option>
+                  <option value="system">Bu yazıcıdan basma</option>
+                </select>
+              </Field>
+            )}
           </div>
           <small className="muted">Piranha 5510 ve TSPL uyumlu mini etiket yazıcıları için. Yazıcıyı tabletin Bluetooth ayarlarından eşleştirdiyseniz kendiliğinden seçilir; değilse "Yazıcı ara"dan listeden seçin (ör. "5510-…-BLE"). Etiket boşa kayıyorsa boşluğu 2-3 mm deneyin.</small>
           {diag && (

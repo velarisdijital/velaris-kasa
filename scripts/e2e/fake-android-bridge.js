@@ -34,7 +34,8 @@
         if (!state.bonded.some((d) => d.address === address)) throw new Error('read failed, socket might closed or timeout');
         const n = atob(data).length;
         state.written += n;
-        state.writes.push({ address, bytes: n, head: atob(data).slice(0, 60) });
+        state.writes.push({ address, bytes: n, head: atob(data).slice(0, 60), prints: (atob(data).match(/PRINT 1,/g) || []).length });
+        state.lastData = data;
         return { bytes: n };
       },
       async disconnect() {},

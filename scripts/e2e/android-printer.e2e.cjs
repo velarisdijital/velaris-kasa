@@ -11,6 +11,29 @@ const shots = process.argv[2];
 const fail = (msg) => { console.error('BAŞARISIZ:', msg); process.exitCode = 1; };
 const ok = (msg) => console.log('✓', msg);
 
+/** Son gönderilen TSPL verisindeki her BITMAP'i PNG olarak kaydeder (gözle kontrol için). */
+async function saveTsplPages(p, prefix) {
+  const urls = await p.evaluate(() => {
+    const bin = atob(window.__fake.lastData);
+    const bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+    const out = [];
+    const re = /BITMAP 0,0,(\d+),(\d+),0,/g;
+    let m;
+    while ((m = re.exec(bin))) {
+      const wb = +m[1]; const h = +m[2]; const start = m.index + m[0].length;
+      const c = document.createElement('canvas'); c.width = wb * 8; c.height = h;
+      const x = c.getContext('2d'); const img = x.createImageData(c.width, h);
+      for (let y = 0; y < h; y++) for (let i = 0; i < wb * 8; i++) {
+        const v = ((bytes[start + y * wb + (i >> 3)] >> (7 - (i & 7))) & 1) ? 255 : 0;
+        const k = (y * c.width + i) * 4; img.data[k] = img.data[k + 1] = img.data[k + 2] = v; img.data[k + 3] = 255;
+      }
+      x.putImageData(img, 0, 0); out.push(c.toDataURL());
+    }
+    return out;
+  });
+  urls.forEach((u, i) => fs.writeFileSync(`${prefix}-${i + 1}.png`, Buffer.from(u.split(',')[1], 'base64')));
+}
+
 (async () => {
   const server = http.createServer((req, res) => {
     const f = path.join(root, decodeURIComponent(req.url.split('?')[0]).replace(/^\/$/, '/index.html'));
@@ -82,6 +105,34 @@ const ok = (msg) => console.log('✓', msg);
     await p.getByRole('button', { name: 'Değiştir' }).click();
     await p.getByRole('button', { name: /^5510-B333\s*yazıcı\s+eşleşmiş/ }).waitFor({ timeout: 10000 });
     ok('Yeniden açılışta yazıcı eşleşmiş listede');
+    await p.getByRole('button', { name: 'Kapat' }).click();
+
+    // Deneme fişi (Ayarlar)
+    let before = await p.evaluate(() => window.__fake.writes.length);
+    await p.getByRole('button', { name: 'Deneme fişi bas' }).click();
+    await p.waitForFunction((n) => window.__fake.writes.length > n, before, { timeout: 15000 });
+    const r1 = await p.evaluate(() => window.__fake.writes.at(-1));
+    if (r1.prints < 2) fail(`deneme fişi etiketlere bölünmedi (${r1.prints})`); else ok(`Deneme fişi gönderildi (${r1.prints} etiket, ${r1.bytes} bayt)`);
+    if (shots) await saveTsplPages(p, path.join(shots, 'fis'));
+
+    // Kasa: satış yap → "Fiş yazdır" Bluetooth yazıcıya gider
+    await p.goto(`${url}#/`);
+    await p.waitForTimeout(1500);
+    const opening = p.getByPlaceholder('0,00').first();
+    if (await p.getByText('Kasadaki nakit').count()) { await opening.fill('0'); await p.keyboard.press('Enter'); await p.waitForTimeout(800); }
+    const search = p.getByLabel('Barkod veya ürün ara');
+    await search.fill('Simit'); await p.keyboard.press('Enter'); await p.waitForTimeout(800);
+    await p.getByRole('button', { name: /^Nakit/ }).click();
+    await p.getByRole('button', { name: /Satışı tamamla/ }).click();
+    await p.getByRole('button', { name: 'Fiş yazdır' }).waitFor({ timeout: 10000 });
+    before = await p.evaluate(() => window.__fake.writes.length);
+    await p.getByRole('button', { name: 'Fiş yazdır' }).click();
+    await p.waitForFunction((n) => window.__fake.writes.length > n, before, { timeout: 15000 });
+    const r2 = await p.evaluate(() => window.__fake.writes.at(-1));
+    ok(`Satış fişi Bluetooth yazıcıya gönderildi (${r2.prints} etiket)`);
+    await p.getByText(/Fiş yazıcıya gönderildi/).waitFor({ timeout: 5000 });
+    ok('Kullanıcıya "Fiş yazıcıya gönderildi" bildirimi gösterildi');
+    if (shots) { await saveTsplPages(p, path.join(shots, 'satis-fis')); await shot('4-satis'); }
 
     const calls = await p.evaluate(() => window.__fake.calls);
     if (calls.some((c) => c.endsWith('.then'))) fail('eklenti nesnesi Promise sanıldı (.then çağrıldı)');
