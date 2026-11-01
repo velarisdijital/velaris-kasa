@@ -4,9 +4,9 @@ name: Türkiye ürün kataloğu
 on:
   workflow_dispatch:
     inputs:
-      pages:
-        description: 'Sayfa sayısı (sayfa başına 100 ürün)'
-        default: '40'
+      mode:
+        description: 'dump (toplu veri dosyası, önerilen) ya da sayfa sayısı (arama servisi)'
+        default: 'dump'
   schedule:
     - cron: '17 3 1 * *'   # her ayın 1'i
 
@@ -16,7 +16,7 @@ permissions:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Kodu güncelle (temizlik kuralları değişmiş olabilir)
@@ -24,7 +24,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node scripts/import-off.mjs ${{ github.event.inputs.pages || '40' }}
+      - name: Open Food Facts'ten indir
+        run: |
+          MODE="${{ github.event.inputs.mode || 'dump' }}"
+          if [ "$MODE" = "dump" ]; then node scripts/import-off.mjs --dump; else node scripts/import-off.mjs "$MODE"; fi
       - name: Değişiklik varsa kaydet
         run: |
           git config user.name "Velaris Dijital"
