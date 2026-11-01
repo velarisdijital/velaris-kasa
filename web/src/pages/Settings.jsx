@@ -648,6 +648,13 @@ function LabelPrinterSettings() {
             </Field>
             <label className="check" style={{ alignSelf: 'end', paddingBottom: 10 }}><input type="checkbox" checked={!!cfg.invert} onChange={(e) => set('invert', e.target.checked)} /> Ters renk (etiket siyah çıkıyorsa)</label>
             {lp.isNative() && (
+              <Field label="Gönderim hızı">
+                <select className="input" value={cfg.btSpeed || 'normal'} onChange={(e) => set('btSpeed', e.target.value)}>
+                  {Object.entries(lp.BT_SPEEDS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+              </Field>
+            )}
+            {lp.isNative() && (
               <Field label="Satış fişi">
                 <select className="input" value={cfg.receiptVia === 'system' ? 'system' : cfg.receiptPaper === 'continuous' ? 'continuous' : 'label'}
                   onChange={(e) => { const v = e.target.value; const n = { ...cfg, receiptVia: v === 'system' ? 'system' : 'bt', receiptPaper: v === 'continuous' ? 'continuous' : 'label' }; setCfg(n); lp.savePrinter({ receiptVia: n.receiptVia, receiptPaper: n.receiptPaper }); }}>

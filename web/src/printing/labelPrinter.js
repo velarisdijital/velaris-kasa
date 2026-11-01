@@ -249,6 +249,13 @@ function toBase64(bytes) {
   return btoa(s);
 }
 
+// Klasik Bluetooth gönderim hızı: yazıcının modülü yavaş okur, hızlı gönderilirse etiket boş çıkar ve yazıcı hataya düşer
+export const BT_SPEEDS = {
+  slow: { chunk: 128, delay: 40, label: 'Yavaş (en güvenli)' },
+  normal: { chunk: 256, delay: 30, label: 'Normal' },
+  fast: { chunk: 2048, delay: 20, label: 'Hızlı' },
+};
+
 /** Baytları yazıcıya gönderir. Android'de önce kayıtlı yol, olmazsa diğeri (klasik ↔ BLE) denenir. */
 export async function sendBytes(bytes) {
   const p = getPrinter();
@@ -257,7 +264,10 @@ export async function sendBytes(bytes) {
     const errors = [];
     for (const t of order) {
       try {
-        if (t === 'spp') await classicCall('write', { address: p.deviceId, data: toBase64(bytes) }, 45000);
+        if (t === 'spp') {
+          const { chunk, delay } = BT_SPEEDS[p.btSpeed] || BT_SPEEDS.normal;
+          await classicCall('write', { address: p.deviceId, data: toBase64(bytes), chunk, delay }, 120000);
+        }
         else await sendBle(bytes);
         if (t !== p.transport) savePrinter({ transport: t });
         return;
@@ -275,6 +285,7 @@ async function sendBle(bytes) {
     const B = await ble();
     await connectPrinter({ ble: true }); // uygulama yeniden açıldıysa bağlantı kopmuş olabilir; bağlıysa hemen döner
     const q = getPrinter();
+    const p0 = q;
     let mtu = 23;
     try { mtu = await B.getMtu(q.deviceId); } catch { /* varsayılan */ }
     const size = Math.max(20, Math.min(180, mtu - 3));
@@ -282,7 +293,7 @@ async function sendBle(bytes) {
       const chunk = new DataView(bytes.buffer, bytes.byteOffset + i, Math.min(size, bytes.length - i));
       if (q.noResponse) await B.writeWithoutResponse(q.deviceId, q.service, q.characteristic, chunk);
       else await B.write(q.deviceId, q.service, q.characteristic, chunk);
-      if (q.noResponse && (i / size) % 8 === 7) await sleep(15); // yazıcının arabelleği taşmasın
+      if (q.noResponse) await sleep(p0.btSpeed === 'fast' ? 5 : 20); // yazıcının arabelleği taşmasın
     }
   }
 }
@@ -454,12 +465,24 @@ export async function resetPrinter() {
   await sendBytes(enc('INITIALPRINTER\r\n'));
 }
 
+/**
+ * Etiketleri tek tek gönderir: her etiket ayrı iş, aralarında yazıcının basmasına zaman tanınır.
+ * (Tek seferde büyük veri gönderilince ucuz yazıcıların arabelleği taşıyor.)
+ */
+export async function sendLabels(labels, cfg = getPrinter()) {
+  const jobs = labels.flatMap(({ canvas, copies = 1 }) => [{ canvas, copies }]);
+  for (let i = 0; i < jobs.length; i++) {
+    await sendBytes(buildTspl([jobs[i]], cfg));
+    if (i < jobs.length - 1) await sleep(1200);
+  }
+}
+
 /** Ürün etiketlerini Bluetooth yazıcıya basar. */
 export async function printLabels(products, { copies = 1, business = '', kind } = {}) {
   const cfg = { ...getPrinter(), ...(kind ? { kind } : {}) };
   if (document.fonts?.ready) await document.fonts.ready;
   const labels = products.map((p) => ({ canvas: drawLabel(p, cfg, business), copies }));
-  await sendBytes(buildTspl(labels, cfg));
+  await sendLabels(labels, cfg);
 }
 
 /** Deneme etiketi */

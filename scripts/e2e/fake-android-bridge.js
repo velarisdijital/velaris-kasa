@@ -30,7 +30,8 @@
         return { bonded: true };
       },
       async openSettings() { state.settingsOpened = true; },
-      async write({ address, data }) {
+      async write({ address, data, chunk, delay }) {
+        state.pacing = { chunk, delay };
         if (!state.bonded.some((d) => d.address === address)) throw new Error('read failed, socket might closed or timeout');
         const n = atob(data).length;
         state.written += n;

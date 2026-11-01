@@ -108,15 +108,18 @@ public class ClassicPrinterPlugin extends Plugin {
         final String address = call.getString("address");
         final String data = call.getString("data");
         if (address == null || data == null) { call.reject("Adres ve veri gerekli"); return; }
+        // Ucuz yazıcıların Bluetooth modülü veriyi yavaş okur (çoğu ~115200 baud ≈ 11 KB/sn) ve akış kontrolü yoktur;
+        // hızlı gönderilirse arabellek taşar, resim bozulur (boş etiket) ve yazıcı hataya düşer. Bu yüzden yavaş ve parça parça.
+        final int chunk = Math.max(20, call.getInt("chunk", 256));
+        final int delay = Math.max(0, call.getInt("delay", 30));
         new Thread(() -> {
             try {
                 byte[] bytes = Base64.decode(data, Base64.DEFAULT);
                 OutputStream out = connect(address).getOutputStream();
-                int chunk = 2048;
                 for (int i = 0; i < bytes.length; i += chunk) {
                     out.write(bytes, i, Math.min(chunk, bytes.length - i));
                     out.flush();
-                    Thread.sleep(20);
+                    if (delay > 0) Thread.sleep(delay);
                 }
                 JSObject r = new JSObject();
                 r.put("bytes", bytes.length);

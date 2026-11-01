@@ -110,9 +110,10 @@ async function saveTsplPages(p, prefix) {
     // Deneme fişi (Ayarlar)
     let before = await p.evaluate(() => window.__fake.writes.length);
     await p.getByRole('button', { name: 'Deneme fişi bas' }).click();
-    await p.waitForFunction((n) => window.__fake.writes.length > n, before, { timeout: 15000 });
-    const r1 = await p.evaluate(() => window.__fake.writes.at(-1));
-    if (r1.prints < 2) fail(`deneme fişi etiketlere bölünmedi (${r1.prints})`); else ok(`Deneme fişi gönderildi (${r1.prints} etiket, ${r1.bytes} bayt)`);
+    await p.getByText('Deneme fişi gönderildi').waitFor({ timeout: 20000 });
+    const r1 = await p.evaluate((n) => window.__fake.writes.slice(n), before);
+    if (r1.length < 2 || r1.some((w) => w.prints !== 1)) fail(`deneme fişi etiket etiket gönderilmedi (${JSON.stringify(r1.map((w) => w.prints))})`);
+    else ok(`Deneme fişi ${r1.length} etiket olarak tek tek gönderildi (${r1.map((w) => w.bytes).join(' + ')} bayt)`);
     if (shots) await saveTsplPages(p, path.join(shots, 'fis'));
 
     // Kırmızı ışık: durum sorgusu ve kalibrasyon
@@ -135,13 +136,15 @@ async function saveTsplPages(p, prefix) {
     await p.getByRole('button', { name: 'Fiş yazdır' }).waitFor({ timeout: 10000 });
     before = await p.evaluate(() => window.__fake.writes.length);
     await p.getByRole('button', { name: 'Fiş yazdır' }).click();
-    await p.waitForFunction((n) => window.__fake.writes.length > n, before, { timeout: 15000 });
-    const r2 = await p.evaluate(() => window.__fake.writes.at(-1));
-    ok(`Satış fişi Bluetooth yazıcıya gönderildi (${r2.prints} etiket)`);
-    await p.getByText(/Fiş yazıcıya gönderildi/).waitFor({ timeout: 5000 });
+    await p.getByText(/Fiş yazıcıya gönderildi/).waitFor({ timeout: 20000 });
+    const r2 = await p.evaluate((n) => window.__fake.writes.slice(n), before);
+    ok(`Satış fişi Bluetooth yazıcıya gönderildi (${r2.length} etiket)`);
     ok('Kullanıcıya "Fiş yazıcıya gönderildi" bildirimi gösterildi');
     if (shots) { await saveTsplPages(p, path.join(shots, 'satis-fis')); await shot('4-satis'); }
 
+    const pacing = await p.evaluate(() => window.__fake.pacing);
+    if (!pacing || pacing.chunk > 512) fail(`klasik Bluetooth gönderimi yavaşlatılmamış: ${JSON.stringify(pacing)}`);
+    else ok(`Gönderim parça parça: ${pacing.chunk} bayt / ${pacing.delay} ms`);
     const calls = await p.evaluate(() => window.__fake.calls);
     if (calls.some((c) => c.endsWith('.then'))) fail('eklenti nesnesi Promise sanıldı (.then çağrıldı)');
     if (errors.length) fail(`sayfa hataları: ${errors.join(' | ')}`);

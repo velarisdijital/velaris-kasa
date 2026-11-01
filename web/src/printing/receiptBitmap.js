@@ -1,7 +1,7 @@
 // Satış fişini Bluetooth (TSPL) yazıcıya basar: fiş resim olarak çizilir (Türkçe karakterler sorunsuz).
 // Etiket rulosunda fiş, etiket boyunda sayfalara bölünür; sürekli rulo (fiş kâğıdı) seçiliyse tek parça basılır.
 import { dt, METHOD_LABELS, plain, qty } from '../format.js';
-import { buildTspl, getPrinter, sendBytes } from './labelPrinter.js';
+import { getPrinter, sendLabels } from './labelPrinter.js';
 
 const DOTS_PER_MM = 8;
 const font = (w, s) => `${w} ${s}px Archivo, "Helvetica Neue", Arial, sans-serif`;
@@ -123,7 +123,7 @@ export function drawReceipt(sale, settings, change = 0, cfg = getPrinter()) {
 export async function printReceiptBluetooth(sale, settings, change = 0) {
   if (document.fonts?.ready) await document.fonts.ready;
   const { pages, cfg } = drawReceipt(sale, settings, change);
-  await sendBytes(buildTspl(pages.map((canvas) => ({ canvas, copies: 1 })), cfg));
+  await sendLabels(pages.map((canvas) => ({ canvas, copies: 1 })), cfg);
   return pages.length;
 }
 
