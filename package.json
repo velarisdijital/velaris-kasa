@@ -15,6 +15,9 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
     "@vitejs/plugin-react": "^6.1.2",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
@@ -38,7 +41,9 @@
     "dist:linux": "npm run build && electron-builder --linux --publish never",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "demo:build": "node scripts/build-demo.mjs",
-    "license:issue": "node scripts/license.mjs issue"
+    "license:issue": "node scripts/license.mjs issue",
+    "app:build": "node scripts/build-app.mjs",
+    "android:sync": "node scripts/build-app.mjs && npx cap sync android"
   },
   "build": {
     "appId": "com.velarisdijital.velariskasa",

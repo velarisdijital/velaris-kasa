@@ -31,7 +31,7 @@ export default function App() {
     <ToastProvider>
       <ConfirmProvider>
         <HashRouter>
-          {import.meta.env.VITE_DEMO && <DemoBar />}
+          {import.meta.env.VITE_DEMO && !import.meta.env.VITE_APP && <DemoBar />}
           <Gate />
         </HashRouter>
       </ConfirmProvider>

@@ -7,3 +7,4 @@ data
 .git
 .license
 server/data/off-raw.json
+android/

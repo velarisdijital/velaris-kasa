@@ -18,7 +18,12 @@ const render = () => root.render(
   </StrictMode>,
 );
 
-if (import.meta.env.VITE_DEMO) {
+if (import.meta.env.VITE_APP) {
+  root.render(<div className="center-screen muted">VelarisKasa açılıyor…</div>);
+  import('./demo/backend.js').then((m) => m.ensureApp()).then(render, (e) => {
+    root.render(<div className="center-screen danger-text">Uygulama başlatılamadı: {String(e?.message || e)}</div>);
+  });
+} else if (import.meta.env.VITE_DEMO) {
   root.render(<div className="center-screen muted">Demo hazırlanıyor, örnek satışlar oluşturuluyor…</div>);
   import('./demo/backend.js').then((m) => m.ensureDemo()).then(render, (e) => {
     root.render(<div className="center-screen danger-text">Demo başlatılamadı: {String(e?.message || e)}</div>);

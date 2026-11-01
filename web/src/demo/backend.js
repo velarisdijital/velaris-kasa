@@ -4,7 +4,9 @@ import initSqlJs from 'sql.js/dist/sql-wasm-inline.js';
 import { useSqlJs } from './shims/better-sqlite3.js';
 import { Router } from './shims/express.js';
 
-const STORE_KEY = 'vk_demo_db';
+// Android uygulamasında (VITE_APP) veriler ayrı anahtarla tutulur; demo örnek verisiyle karışmaz
+const STORE_KEY = import.meta.env.VITE_APP ? 'vk_app_db' : 'vk_demo_db';
+let hadSaved = false;
 let ready = null;
 let db = null;
 let handler = null;
@@ -17,11 +19,45 @@ const b64encode = (bytes) => {
 };
 const b64decode = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
-function loadSaved() {
+// Kalıcı depolama: IndexedDB (büyük veri; uygulama ve demo). Açılamazsa localStorage (~5 MB sınırı).
+const IDB_NAME = 'velariskasa';
+function idb() {
+  return new Promise((resolve, reject) => {
+    if (!globalThis.indexedDB) return reject(new Error('IndexedDB yok'));
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function idbOp(mode, fn) {
+  const d = await idb();
+  return new Promise((resolve, reject) => {
+    const tx = d.transaction('kv', mode);
+    const req = fn(tx.objectStore('kv'));
+    tx.oncomplete = () => resolve(req?.result);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function loadSaved() {
+  try {
+    const bytes = await idbOp('readonly', (s) => s.get(STORE_KEY));
+    if (bytes) return new Uint8Array(bytes);
+  } catch { /* IndexedDB yoksa localStorage */ }
   try { const s = localStorage.getItem(STORE_KEY); return s ? b64decode(s) : null; } catch { return null; }
 }
+let saving = Promise.resolve();
 function persist() {
-  try { localStorage.setItem(STORE_KEY, b64encode(db.export())); } catch { /* depolama kapalıysa veriler yalnızca bu sekmede yaşar */ }
+  const bytes = db.export();
+  // Yazmalar sırayla yapılır; IndexedDB başarılıysa eski localStorage kopyası silinir
+  saving = saving.then(() => idbOp('readwrite', (s) => s.put(bytes, STORE_KEY))
+    .then(() => { try { localStorage.removeItem(STORE_KEY); } catch { /* yok say */ } })
+    .catch(() => { try { localStorage.setItem(STORE_KEY, b64encode(bytes)); } catch { /* depolama kapalı */ } }));
+  return saving;
+}
+async function clearSaved() {
+  try { await idbOp('readwrite', (s) => s.delete(STORE_KEY)); } catch { /* yok say */ }
+  try { localStorage.removeItem(STORE_KEY); } catch { /* yok say */ }
 }
 
 async function boot(bytes) {
@@ -51,7 +87,7 @@ async function boot(bytes) {
   handler = api;
 }
 
-const start = () => (ready ??= boot(loadSaved()));
+const start = () => (ready ??= loadSaved().then((bytes) => { hadSaved = !!bytes; return boot(bytes); }));
 
 /** fetch() yerine geçer: './api/...' isteklerini tarayıcıdaki sunucuya yönlendirir. */
 export async function demoFetch(url, init = {}) {
@@ -94,17 +130,25 @@ export async function demoFetch(url, init = {}) {
 
 /** Tüm verileri silip seçilen işletme türüyle örnek verilerle (ya da boş) yeniden başlatır. */
 export async function resetDemo(type) {
-  try { localStorage.removeItem(STORE_KEY); localStorage.removeItem('vk_token'); localStorage.removeItem('vk_products_cache'); } catch { /* yok say */ }
+  await clearSaved();
+  try { localStorage.removeItem('vk_token'); localStorage.removeItem('vk_products_cache'); } catch { /* yok say */ }
   ready = boot(null);
   await ready;
   if (type) await seed(type);
-  persist();
+  await persist();
 }
 
 export async function ensureDemo() {
   await start();
   const status = await (await demoFetch('./api/setup/status')).json();
-  if (!status.setup_done && !loadSaved()) { await seed('market'); persist(); }
+  if (!status.setup_done && !hadSaved) { await seed('market'); await persist(); }
+}
+
+/** Android uygulaması: örnek veri yok, ilk açılışta kurulum sihirbazı. */
+export async function ensureApp() {
+  await start();
+  // Tarayıcı depolamayı "kalıcı" işaretlesin (yer azalınca silinmesin)
+  try { await navigator.storage?.persist?.(); } catch { /* yok say */ }
 }
 
 async function call(method, path, body, token) {

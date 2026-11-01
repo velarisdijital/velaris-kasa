@@ -1,0 +1,61 @@
+name: Android APK
+
+# Tablet / telefon uygulaması: web arayüzü + cihazda çalışan sunucu (sql.js), internetsiz.
+# Çıktı: GitHub Releases → "android-latest" → VelarisKasa.apk  (ve iş eki olarak)
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', 'server/**', 'android/**', 'capacitor.config.json', 'vite.*.js', 'scripts/build-app.mjs', 'package*.json', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: Web arayüzünü derle ve Android projesine kopyala
+        run: |
+          node scripts/build-app.mjs
+          npx cap sync android
+      - name: APK derle (imzalı)
+        working-directory: android
+        env:
+          VK_BUILD_NUMBER: ${{ github.run_number }}
+          VK_VERSION_NAME: 1.0.${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../VelarisKasa.apk
+          ls -la ../VelarisKasa.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VelarisKasa-apk
+          path: VelarisKasa.apk
+      - name: Yayınla (android-latest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="VelarisKasa Android 1.0.${{ github.run_number }} — tablet ve telefonda internetsiz çalışır. Kurulum: APK'yı indirip açın; \"bilinmeyen kaynaklardan yüklemeye\" izin verin."
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release upload android-latest VelarisKasa.apk --clobber
+            gh release edit android-latest --title "VelarisKasa Android 1.0.${{ github.run_number }}" --notes "$NOTES"
+          else
+            gh release create android-latest VelarisKasa.apk --title "VelarisKasa Android 1.0.${{ github.run_number }}" --notes "$NOTES" --prerelease
+          fi

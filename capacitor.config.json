@@ -1,0 +1,9 @@
+{
+  "appId": "com.velarisdijital.kasa",
+  "appName": "VelarisKasa",
+  "webDir": "dist-app",
+  "android": {
+    "backgroundColor": "#121212",
+    "allowMixedContent": false
+  }
+}

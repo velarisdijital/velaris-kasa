@@ -7,4 +7,5 @@ release/
 *.db-shm
 .DS_Store
 dist-demo/
+dist-app/
 .license/
