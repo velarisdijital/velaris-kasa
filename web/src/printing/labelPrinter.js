@@ -99,7 +99,19 @@ export async function connectPrinter() {
   if (!p.deviceId) throw new Error('Önce yazıcıyı seçin');
   if (isNative()) {
     const B = await ble();
-    try { await B.connect(p.deviceId, () => {}); } catch (e) { if (!/already/i.test(String(e.message))) throw e; }
+    try {
+      await B.connect(p.deviceId, () => {}, { timeout: 12000 });
+    } catch (e) {
+      if (/already/i.test(String(e.message))) { /* zaten bağlı */ } else {
+        // Eşleşmiş adres çoğu zaman yazıcının klasik Bluetooth adresidir; BLE adresi farklıdır.
+        // Yakında aynı adlı (ya da yazıcıya benzeyen) BLE cihazını arayıp ona bağlan.
+        const alt = await findByScan(B, p);
+        if (!alt) throw new Error(`Yazıcıya bağlanılamadı (${e.message || e}). Yazıcının açık olduğundan ve başka bir uygulamaya (yazıcının kendi uygulaması) bağlı olmadığından emin olun; tabletin Konum ayarını açıp tekrar deneyin.`);
+        savePrinter({ deviceId: alt.deviceId, name: alt.name || p.name, service: null, characteristic: null });
+        await B.connect(alt.deviceId, () => {}, { timeout: 12000 });
+        return connectPrinter();
+      }
+    }
     const services = await B.getServices(p.deviceId);
     const list = services.map((s) => ({ uuid: s.uuid, characteristics: s.characteristics.map((c) => ({ uuid: c.uuid, props: Object.keys(c.properties).filter((k) => c.properties[k]) })) }));
     if (!p.characteristic) {
@@ -122,6 +134,22 @@ export async function connectPrinter() {
   webChar = list.flatMap((s) => s.characteristics).find((c) => c.uuid === found.characteristic)?.ref;
   savePrinter(found);
   return list.map((s) => ({ ...s, characteristics: s.characteristics.map(({ ref, ...c }) => c) }));
+}
+
+/** 8 sn BLE taraması: kayıtlı yazıcıyla aynı adlı (yoksa yazıcıya benzeyen) farklı adresli cihazı bulur. */
+async function findByScan(B, p) {
+  const base = String(p.name || '').replace(/[-_ ]?ble$/i, '').toLowerCase();
+  let best = null;
+  await B.requestLEScan({ allowDuplicates: false }, (r) => {
+    const name = r.device.name || r.localName || '';
+    if (r.device.deviceId === p.deviceId || !name) return;
+    const n = name.toLowerCase();
+    const score = (base && (n === String(p.name).toLowerCase() ? 3 : n.includes(base) || base.includes(n.replace(/[-_ ]?ble$/i, '')) ? 2 : 0)) || (looksLikePrinter(name) ? 1 : 0);
+    if (score && (!best || score > best.score)) best = { deviceId: r.device.deviceId, name, score };
+  });
+  await sleep(8000);
+  try { await B.stopLEScan(); } catch { /* yok say */ }
+  return best;
 }
 
 function findWritable(list) {
