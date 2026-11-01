@@ -556,7 +556,7 @@ function LabelPrinterSettings() {
   const DeviceRow = ({ d }) => (
     <button type="button" className="dropdown-item" onClick={() => pick(d)} style={{ border: '1px solid var(--border)', marginBottom: 6, background: lp.looksLikePrinter(d.name) ? 'var(--primary-soft)' : 'var(--panel)' }}>
       <span><b>{d.name || 'İsimsiz cihaz'}</b>{lp.looksLikePrinter(d.name) && <span className="badge blue" style={{ marginLeft: 6 }}>yazıcı</span>}</span>
-      <span className="muted small-text">{d.paired ? 'eşleşmiş' : d.rssi ? `sinyal ${d.rssi}` : ''} · {d.deviceId}</span>
+      <span className="muted small-text">{d.paired ? `eşleşmiş${d.type ? ` · ${lp.BT_TYPES[d.type] || ''}` : ''}` : d.rssi ? `BLE · sinyal ${d.rssi}` : 'BLE'} · {d.deviceId}</span>
     </button>
   );
   const set = (k, v) => { const n = { ...cfg, [k]: v }; setCfg(n); lp.savePrinter({ [k]: v }); };
@@ -575,7 +575,7 @@ function LabelPrinterSettings() {
       ) : (
         <>
           <div className="row wrap">
-            <span style={{ flex: 1 }}>{cfg.deviceId ? <>Seçili: <b>{cfg.name}</b>{cfg.characteristic ? ' · bağlantı hazır' : ''}</> : 'Yazıcı seçilmedi'}</span>
+            <span style={{ flex: 1 }}>{cfg.deviceId ? <>Seçili: <b>{cfg.name}</b> · {cfg.transport === 'spp' ? 'klasik Bluetooth' : 'BLE'}{cfg.transport !== 'spp' && cfg.characteristic ? ' · bağlantı hazır' : ''}</> : 'Yazıcı seçilmedi'}</span>
             <button type="button" className="btn small" disabled={busy} onClick={openPicker}>{cfg.deviceId ? 'Değiştir' : 'Yazıcı ara'}</button>
             {cfg.deviceId && !cfg.characteristic && <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => setDiag(await lp.connectPrinter()), 'Yazıcı bağlandı')}>Bağlan</button>}
             {cfg.deviceId && <button type="button" className="btn small primary" disabled={busy} onClick={() => run(() => lp.printTest(settings.business_name), 'Deneme etiketi gönderildi')}>Deneme etiketi bas</button>}

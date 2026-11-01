@@ -1,6 +1,7 @@
 // Bluetooth (BLE) etiket yazıcısı: TSPL komut dili (Piranha 5510, Xprinter, HPRT, TSC uyumlu mini etiket yazıcıları).
 // Etiket tarayıcıda resim olarak çizilir (Türkçe karakterler yazıcı yazı tipine bağlı kalmaz) ve BITMAP komutuyla gönderilir.
-// Bağlantı: Android uygulamasında @capacitor-community/bluetooth-le, tarayıcıda (Chrome) Web Bluetooth.
+// Bağlantı: Android uygulamasında önce klasik Bluetooth (SPP, eşleşmiş yazıcılar; ClassicPrinterPlugin.java),
+// olmazsa BLE (@capacitor-community/bluetooth-le); tarayıcıda (Chrome) Web Bluetooth.
 import JsBarcode from 'jsbarcode';
 import { storage } from '../api.js';
 import { money } from '../format.js';
@@ -39,13 +40,31 @@ const PRINTER_NAME = /5510|piranha|print|label|etiket|xp-|hprt|tsc|niimbot|phome
 export const looksLikePrinter = (name) => PRINTER_NAME.test(String(name || ''));
 const sortDevices = (list) => [...list].sort((a, b) => Number(looksLikePrinter(b.name)) - Number(looksLikePrinter(a.name)) || String(a.name || '~').localeCompare(String(b.name || '~')));
 
-/** Tabletle eşleşmiş (Bluetooth ayarlarından bağlanmış) cihazlar. Yalnızca Android uygulamasında. */
+// Klasik Bluetooth (SPP) eklentisi: android/app/src/main/java/.../ClassicPrinterPlugin.java
+let classicPlugin = null;
+async function classic() {
+  if (!classicPlugin) {
+    const { registerPlugin } = await import('@capacitor/core');
+    classicPlugin = registerPlugin('ClassicPrinter');
+  }
+  return classicPlugin;
+}
+export const BT_TYPES = { 1: 'klasik', 2: 'BLE', 3: 'klasik + BLE' };
+
+/** Tabletle eşleşmiş (Bluetooth ayarlarından bağlanmış) cihazlar, türüyle. Yalnızca Android uygulamasında. */
 export async function pairedDevices() {
   if (!isNative()) return [];
-  const B = await ble();
-  const list = await B.getBondedDevices();
-  return sortDevices(list.map((d) => ({ deviceId: d.deviceId, name: d.name || '', paired: true })));
+  try {
+    const { devices } = await (await classic()).bonded();
+    return sortDevices(devices.map((d) => ({ deviceId: d.address, name: d.name || '', paired: true, type: d.type })));
+  } catch {
+    const B = await ble();
+    const list = await B.getBondedDevices();
+    return sortDevices(list.map((d) => ({ deviceId: d.deviceId, name: d.name || '', paired: true })));
+  }
 }
+// Eşleşmiş cihaz yalnızca BLE değilse önce klasik Bluetooth denenir
+const transportFor = (d) => (d.paired && d.type !== 2 ? 'spp' : 'ble');
 
 /** Yakındaki BLE cihazlarını tarar; her bulunan için onFound çağrılır. stop() fonksiyonu döner. */
 export async function scanNearby(onFound, ms = 12000) {
@@ -65,7 +84,8 @@ export async function scanNearby(onFound, ms = 12000) {
 
 /** Listeden seçilen cihazı yazıcı olarak kaydeder ve bağlanır. */
 export async function usePrinterDevice(dev) {
-  savePrinter({ deviceId: dev.deviceId, name: dev.name || dev.deviceId, service: null, characteristic: null, noResponse: false });
+  savePrinter({ deviceId: dev.deviceId, name: dev.name || dev.deviceId, service: null, characteristic: null, noResponse: false,
+    transport: transportFor(dev), paired: !!dev.paired, btType: dev.type ?? null });
   return connectPrinter();
 }
 
@@ -74,7 +94,8 @@ export async function autoDetectPrinter() {
   if (!isNative() || getPrinter().deviceId) return null;
   const printers = (await pairedDevices()).filter((d) => looksLikePrinter(d.name));
   if (printers.length !== 1) return null;
-  savePrinter({ deviceId: printers[0].deviceId, name: printers[0].name, service: null, characteristic: null });
+  savePrinter({ deviceId: printers[0].deviceId, name: printers[0].name, service: null, characteristic: null,
+    transport: transportFor(printers[0]), paired: true, btType: printers[0].type ?? null });
   return printers[0];
 }
 
@@ -94,9 +115,13 @@ export async function choosePrinter() {
 }
 
 /** Bağlanır, yazılabilir karakteristiği bulur. Dönüş: tanılama için servis listesi. */
-export async function connectPrinter() {
+export async function connectPrinter({ ble: forceBle = false } = {}) {
   const p = getPrinter();
   if (!p.deviceId) throw new Error('Önce yazıcıyı seçin');
+  if (isNative() && p.transport === 'spp' && !forceBle) {
+    // Klasik Bluetooth bağlantısı baskı sırasında kurulur
+    return [{ uuid: `Klasik Bluetooth (SPP) · ${p.deviceId}${p.btType ? ` · tür: ${BT_TYPES[p.btType] || p.btType}` : ''}`, characteristics: [] }];
+  }
   if (isNative()) {
     const B = await ble();
     try {
@@ -107,9 +132,9 @@ export async function connectPrinter() {
         // Yakında aynı adlı (ya da yazıcıya benzeyen) BLE cihazını arayıp ona bağlan.
         const alt = await findByScan(B, p);
         if (!alt) throw new Error(`Yazıcıya bağlanılamadı (${e.message || e}). Yazıcının açık olduğundan ve başka bir uygulamaya (yazıcının kendi uygulaması) bağlı olmadığından emin olun; tabletin Konum ayarını açıp tekrar deneyin.`);
-        savePrinter({ deviceId: alt.deviceId, name: alt.name || p.name, service: null, characteristic: null });
+        savePrinter({ deviceId: alt.deviceId, name: alt.name || p.name, service: null, characteristic: null, transport: 'ble', paired: false });
         await B.connect(alt.deviceId, () => {}, { timeout: 12000 });
-        return connectPrinter();
+        return connectPrinter({ ble: true });
       }
     }
     const services = await B.getServices(p.deviceId);
@@ -165,12 +190,37 @@ function findWritable(list) {
   return cands[0] || null;
 }
 
-/** Baytları parça parça gönderir. */
+function toBase64(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+/** Baytları yazıcıya gönderir. Android'de önce kayıtlı yol, olmazsa diğeri (klasik ↔ BLE) denenir. */
 export async function sendBytes(bytes) {
   const p = getPrinter();
   if (isNative()) {
+    const order = p.transport === 'spp' ? ['spp', 'ble'] : p.paired ? ['ble', 'spp'] : ['ble'];
+    const errors = [];
+    for (const t of order) {
+      try {
+        if (t === 'spp') await (await classic()).write({ address: p.deviceId, data: toBase64(bytes) });
+        else await sendBle(bytes);
+        if (t !== p.transport) savePrinter({ transport: t });
+        return;
+      } catch (e) {
+        errors.push(`${t === 'spp' ? 'Klasik Bluetooth' : 'BLE'}: ${e.message || e}`);
+      }
+    }
+    throw new Error(errors.join(' · '));
+  }
+  return sendWeb(bytes);
+}
+
+async function sendBle(bytes) {
+  {
     const B = await ble();
-    await connectPrinter(); // uygulama yeniden açıldıysa bağlantı kopmuş olabilir; bağlıysa hemen döner
+    await connectPrinter({ ble: true }); // uygulama yeniden açıldıysa bağlantı kopmuş olabilir; bağlıysa hemen döner
     const q = getPrinter();
     let mtu = 23;
     try { mtu = await B.getMtu(q.deviceId); } catch { /* varsayılan */ }
@@ -181,8 +231,10 @@ export async function sendBytes(bytes) {
       else await B.write(q.deviceId, q.service, q.characteristic, chunk);
       if (q.noResponse && (i / size) % 8 === 7) await sleep(15); // yazıcının arabelleği taşmasın
     }
-    return;
   }
+}
+
+async function sendWeb(bytes) {
   if (!webChar) await connectPrinter();
   const size = 180;
   for (let i = 0; i < bytes.length; i += size) {
