@@ -1018,3 +1018,28 @@ test('yetkiler: kasiyer indirim sınırı, fiyat değiştirme, iade; tedarikçi 
   assert.equal(pb.min_net, 5000);
   assert.equal(pb.purchase_count, 2);
 });
+
+test('yerel Türkiye barkod listesi (internetsiz) ve hazır katalog', async () => {
+  const file = path.join(dataDir, 'tr-barcodes.json');
+  fs.writeFileSync(file, JSON.stringify({ '8691234500017': 'Örnek Marka Süzme Yoğurt 500 g' }));
+  process.env.VK_BARCODE_DB = file;
+  const r = await call('GET', '/api/products/lookup/8691234500017');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.source, 'local');
+  assert.equal(r.body.name, 'Örnek Marka Süzme Yoğurt 500 g');
+  delete process.env.VK_BARCODE_DB;
+  const { CATALOG } = await import('../server/catalog.js');
+  assert.ok(CATALOG.market.products.length >= 150);
+  for (const [type, c] of Object.entries(CATALOG)) {
+    const names = c.products.map((p) => p[0]);
+    assert.equal(new Set(names).size, names.length, `${type}: aynı ad iki kez`);
+    for (const p of c.products) assert.ok(c.categories.some(([n]) => n === p[1]), `${type}: ${p[0]} kategorisi yok`);
+  }
+  // Mağaza içi barkodlar geçerli EAN-13
+  for (const p of CATALOG.market.products) {
+    const b = p[6].barcode;
+    if (!b || b.length !== 13) continue;
+    const sum = [...b.slice(0, 12)].reduce((a, d, i) => a + Number(d) * (i % 2 ? 3 : 1), 0);
+    assert.equal((10 - (sum % 10)) % 10, Number(b[12]), `${p[0]} kontrol hanesi`);
+  }
+});

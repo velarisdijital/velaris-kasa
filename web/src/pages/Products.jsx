@@ -11,7 +11,7 @@ const UNITS = ['adet', 'kg', 'lt', 'm', 'paket', 'kutu'];
 const MOVE_LABELS = { in: 'Giriş', out: 'Çıkış', sale: 'Satış', refund: 'İade', adjust: 'Düzeltme', count: 'Sayım' };
 
 export default function Products() {
-  const { user } = useSession();
+  const { user, settings } = useSession();
   const toast = useToast();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
@@ -101,7 +101,7 @@ export default function Products() {
                 </td>
                 <td className="right" onClick={(e) => e.stopPropagation()}>
                   {p.track_stock ? <button className="btn small" onClick={() => setModal({ type: 'stock', product: p })}>Stok</button> : null}
-                  {manager && p.type === 'product' && <button className={`btn small ${p.recipe_count ? '' : 'ghost'}`} style={{ marginLeft: 4 }} onClick={() => setModal({ type: 'recipe', product: p })}>Reçete</button>}
+                  {manager && p.type === 'product' && (p.recipe_count > 0 || settings.modules_tables === '1') && <button className={`btn small ${p.recipe_count ? '' : 'ghost'}`} style={{ marginLeft: 4 }} onClick={() => setModal({ type: 'recipe', product: p })}>Reçete</button>}
                 </td>
               </tr>
             ))}

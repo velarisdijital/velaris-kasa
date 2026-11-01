@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Router } from 'express';
 import { allow, MANAGERS, requirePerm } from '../auth.js';
 import { emitEvent, getSetting } from '../db.js';
@@ -37,6 +40,20 @@ function normalizeProduct(body, existing = {}) {
   if (p.sell_price < 0 || p.buy_price < 0) throw bad('Fiyat negatif olamaz');
   if (![0, 1, 8, 10, 18, 20].includes(p.vat_rate) && (p.vat_rate < 0 || p.vat_rate > 100)) throw bad('Geçersiz KDV oranı');
   return p;
+}
+
+/** Yerel Türkiye barkod listesi (Open Food Facts'ten, scripts/import-off.mjs). Yoksa boş; VK_BARCODE_DB ile başka dosya. */
+let barcodeCache = null;
+export function localBarcodes() {
+  if (barcodeCache) return barcodeCache;
+  try {
+    const file = process.env.VK_BARCODE_DB || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'tr-barcodes.json');
+    if (!fs.existsSync(file)) return {};
+    barcodeCache = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return {};
+  }
+  return barcodeCache;
 }
 
 /** Terazi barkodu: PP + 5 hane PLU + 5 hane gram + kontrol hanesi (EAN-13). */
@@ -213,6 +230,9 @@ export default function productRoutes(db) {
   r.get('/products/lookup/:code', h(async (req, res) => {
     const code = String(req.params.code);
     if (!/^\d{8,14}$/.test(code)) throw bad('Barkod geçersiz');
+    // Önce yerel Türkiye barkod listesi (internetsiz): scripts/import-off.mjs ile üretilir
+    const local = localBarcodes()[code];
+    if (local) return res.json({ barcode: code, name: local, source: 'local' });
     if (getSetting(db, 'product_lookup') !== '1') throw notFound('İnternetten ürün arama kapalı');
     if (!lookupCache.has(code)) {
       const ctrl = new AbortController();
