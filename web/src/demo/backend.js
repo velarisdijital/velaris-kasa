@@ -160,7 +160,7 @@ async function seedData(type) {
       { name: 'Ayçiçek Yağı 1 L', barcode: '8690000000024', category_id: cat('Gıda'), buy_price: 7200, sell_price: 9500, vat_rate: 1, stock: 4, min_stock: 6 },
       { name: 'Beyaz Peynir (terazi)', barcode: '2700123', category_id: cat('Süt Ürünleri'), unit: 'kg', buy_price: 22000, sell_price: 32000, vat_rate: 1, stock: 8.5, min_stock: 2 },
       { name: 'Sigara', barcode: '8690000000031', category_id: cat('Tütün'), buy_price: 8500, sell_price: 9500, vat_rate: 0, stock: 60, min_stock: 20, favorite: 1 },
-    ]) await call('POST', '/products', p, T);
+    ]) await call('POST', '/products', p, T).catch(() => {}); // gerçek katalogda aynı barkod varsa atla
   }
   const customers = [];
   for (const c of [['Mehmet Kaya', '0532 111 22 33', 1], ['Fatma Demir', '0544 222 33 44', 1], ['Hüseyin Çelik', '0505 333 44 55', 0], ['Zeynep Arslan', '0555 444 55 66', 1]]) {

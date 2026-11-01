@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Kodu güncelle (temizlik kuralları değişmiş olabilir)
+        run: git pull --ff-only origin main || true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -27,7 +29,7 @@ jobs:
         run: |
           git config user.name "Velaris Dijital"
           git config user.email "velarisdijital@gmail.com"
-          git add server/data/tr-barcodes.json server/data/tr-products.json
+          git add server/data/off-raw.json server/data/tr-barcodes.json server/data/tr-products.json
           if git diff --cached --quiet; then echo "Değişiklik yok"; exit 0; fi
           git commit -m "Türkiye ürün kataloğu güncellendi (Open Food Facts, ODbL)"
           git push
