@@ -84,7 +84,7 @@ export default function Deliveries() {
                   <div className="small-text muted">{d.items.filter((i) => !i.void_at).map((i) => `${fmtQty(i.qty)}× ${i.name}`).join(', ')}</div>
                   <div className="row">
                     <strong style={{ flex: 1 }}>{money(d.total)}</strong>
-                    <span className="muted small-text">{mins(d.opened_at)} dk{d.payment_hint ? ` · ${d.payment_hint}` : ''}{d.prepaid ? ' · online ödendi' : ''}</span>
+                    <span className="muted small-text">{mins(d.opened_at)} dk{d.payment_hint ? ` · ${d.payment_hint}` : d.prepaid ? ' · online ödendi' : ''}</span>
                   </div>
                   {d.kind === 'delivery' && ['ready', 'on_way'].includes(st) && (
                     <select className="input" value={d.courier_name || ''} onChange={(e) => update(d, { courier_name: e.target.value })} aria-label="Kurye">
@@ -105,7 +105,7 @@ export default function Deliveries() {
                       <button className="btn small primary" onClick={() => update(d, { delivery_status: NEXT[st][0] })}>{NEXT[st][1]}</button>
                     )}
                     {st === 'ready' && d.kind === 'takeaway' && <button className="btn small primary" onClick={() => update(d, { delivery_status: 'delivered' })}>Teslim edildi</button>}
-                    {d.status === 'open' && d.remaining_total > 0 && <button className="btn small success" onClick={() => pay(d)}>Ödeme al</button>}
+                    {d.status === 'open' && d.remaining_total > 0 && d.external_status !== 'pending' && <button className="btn small success" onClick={() => pay(d)}>{d.prepaid ? 'Kapat' : 'Ödeme al'}</button>}
                   </div>
                 </div>
               ))}

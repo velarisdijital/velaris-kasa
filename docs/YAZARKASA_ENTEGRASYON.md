@@ -67,6 +67,7 @@ Hata: HTTP 4xx/5xx ve `{ "ok": false, "error": "Kağıt bitti" }`. Hata metni ka
 | `transfer` | Havale/EFT (diğer ödeme tipi) |
 | `credit` | Açık hesap / cari (veresiye) |
 | `points` | Fiş altı indirim ya da "diğer" ödeme tipi (işletmenin mali müşavirine göre) |
+| `online` | Yemek platformunda online ödenmiş sipariş: "diğer" ödeme tipi (`DIGER`) |
 
 Fiş geneli indirim (`discount`) satırlara dağıtılmadan fiş altı indirim olarak gönderilir.
 

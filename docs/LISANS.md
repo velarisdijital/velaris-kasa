@@ -5,8 +5,8 @@
 | Aylık (KDV hariç) | 0 ₺ | 599 ₺ | 799 ₺ | 1.290 ₺ |
 | Aynı anda açık kasa | 1 | 3 | 3 | Sınırsız |
 | Kullanıcı | 1 | Sınırsız | Sınırsız | Sınırsız |
-| Satış, stok, alış/tedarikçi, veresiye, gün sonu, raporlar | ✓ | ✓ | ✓ | ✓ |
-| Yazarkasa, e-Arşiv, puan, SMS/WhatsApp, masa/adisyon | | ✓ | ✓ | ✓ |
+| Satış, stok, reçete, alış/tedarikçi, veresiye, gün sonu, raporlar, yetkiler | ✓ | ✓ | ✓ | ✓ |
+| Yazarkasa, e-Arşiv, puan, SMS/WhatsApp, masa/adisyon, QR menü, paket servis, yemek platformları | | ✓ | ✓ | ✓ |
 | Randevu, online randevu, otomatik hatırlatma | | | ✓ | ✓ |
 | Toplu kampanya, Velaris CRM, şube bazlı stok, API | | | | ✓ |
 

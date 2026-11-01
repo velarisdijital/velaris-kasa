@@ -28,12 +28,13 @@ async function boot(bytes) {
   globalThis.__VK_DEMO__ = true; // demoda tüm paket özellikleri açık
   const SQL = await initSqlJs();
   useSqlJs(SQL, bytes);
-  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR, purchaseR, tableR, qrR, deliveryR] = await Promise.all([
+  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR, purchaseR, tableR, qrR, deliveryR, platformR] = await Promise.all([
     import('../../../server/db.js'), import('../../../server/auth.js'), import('../../../server/routes/auth.js'),
     import('../../../server/routes/products.js'), import('../../../server/routes/customers.js'), import('../../../server/routes/shifts.js'),
     import('../../../server/routes/sales.js'), import('../../../server/routes/appointments.js'), import('../../../server/routes/reports.js'),
     import('../../../server/routes/settings.js'), import('../../../server/routes/notify.js'), import('../../../server/routes/booking.js'), import('../../../server/routes/branches.js'), import('../../../server/routes/purchases.js'), import('../../../server/routes/tables.js'),
     import('../../../server/routes/qrmenu.js'), import('../../../server/routes/deliveries.js'),
+    import('../../../server/routes/platforms.js'),
   ]);
   db = openDatabase('/demo');
   if (!getSetting(db, 'install_id')) setSettings(db, { install_id: crypto.randomUUID() });
@@ -46,7 +47,7 @@ async function boot(bytes) {
   api.use(qrR.default(db));
   api.use(authenticate(db));
   api.use(authR.sessionRoutes(db));
-  for (const m of [productR, branchR, purchaseR, tableR, deliveryR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));
+  for (const m of [productR, branchR, purchaseR, tableR, deliveryR, platformR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));
   handler = api;
 }
 
@@ -238,13 +239,43 @@ async function seedData(type) {
         items: lines.filter(([n]) => byName(n)).map(([n, q]) => ({ product_id: byName(n).id, qty: q })) }, T);
       if (sent) await call('POST', `/tickets/${t.id}/kitchen`, {}, T);
     }
-    db.exec(`UPDATE tickets SET opened_at = datetime('now','localtime', '-' || (id * 17) || ' minutes');
+    db.exec(`UPDATE tickets SET opened_at = datetime('now','localtime', '-' || (id * 17) || ' minutes') WHERE kind = 'table';
              UPDATE ticket_items SET created_at = (SELECT opened_at FROM tickets WHERE tickets.id = ticket_id),
                sent_at = CASE WHEN sent_at IS NULL THEN NULL ELSE datetime((SELECT opened_at FROM tickets WHERE tickets.id = ticket_id), '+4 minutes') END;`);
     const t7 = await call('GET', `/tickets/${(await call('GET', '/tables', null, T))[6].ticket_id}`, null, T);
     const tost = t7.items.find((i) => i.name === 'Tost');
     if (tost) await call('POST', '/sales', { register_name: 'Kasa 1', ticket_id: t7.id, items: [{ product_id: tost.product_id, qty: 2, ticket_item_id: tost.id }],
       payments: [{ method: 'card', amount: tost.unit_price * 2 }] }, T);
+
+    // Garson (Personel rolü masalar açıkken garson modunda açılır), QR menü, paket servis, yemek platformları
+    await call('POST', '/users', { name: 'Burak', role: 'staff', pin: '2222', color: '#7B5CFF' }, T);
+    await call('PUT', '/settings', { qrmenu_enabled: '1', qrmenu_orders: '1', qrmenu_note: 'Wi-Fi: KoseKahve · şifre: kahve2026',
+      modules_delivery: '1', delivery_fee: '1500', delivery_couriers: 'Murat, Deniz', platforms_enabled: '1', platform_prep_minutes: '20' }, T);
+    // Reçete: tost satılınca ekmek ve kaşar düşer
+    const ekmek = await call('POST', '/products', { name: 'Tost Ekmeği', unit: 'adet', buy_price: 300, sell_price: 0, stock: 40, min_stock: 10, menu_hidden: 1 }, T);
+    const kasar = await call('POST', '/products', { name: 'Kaşar Peyniri', unit: 'kg', buy_price: 42000, sell_price: 0, stock: 2.4, min_stock: 1, menu_hidden: 1 }, T);
+    if (byName('Tost')) await call('PUT', `/products/${byName('Tost').id}/recipe`, { items: [{ component_id: ekmek.id, qty: 2 }, { component_id: kasar.id, qty: 0.06 }] }, T);
+    for (const [n, d] of [['Türk Kahvesi', 'Közde, lokum ile'], ['Filtre Kahve', 'Günün çekirdeği'], ['Cheesecake', 'Frambuaz soslu, ev yapımı']]) {
+      const p = byName(n);
+      if (p) await call('PUT', `/products/${p.id}`, { ...p, menu_description: d }, T);
+    }
+    // Masalardan QR istekleri
+    const qrTables = await call('GET', '/tables', null, T);
+    await call('POST', '/public/menu/request', { t: qrTables[1].qr_token, type: 'waiter' });
+    if (byName('Türk Kahvesi')) await call('POST', '/public/menu/request', { t: qrTables[4].qr_token, type: 'order', items: [{ product_id: byName('Türk Kahvesi').id, qty: 2, note: 'orta şekerli' }] });
+    // Paket: telefonla gelen (yolda), gel-al (hazır), Yemeksepeti siparişi (kabul bekliyor)
+    const p1 = await call('POST', '/deliveries', { kind: 'delivery', source: 'phone', customer_name: 'Mehmet Kaya', phone: '0532 111 22 33',
+      address: 'Moda Cad. 45 D:3, Kadıköy', delivery_note: 'Zil bozuk, arayın', payment_hint: 'Kapıda kart', delivery_fee: 1500,
+      items: [{ product_id: byName('Tost').id, qty: 2 }, { product_id: byName('Ayran').id, qty: 2 }] }, T);
+    await call('POST', `/tickets/${p1.id}/kitchen`, {}, T);
+    await call('PUT', `/deliveries/${p1.id}`, { delivery_status: 'preparing' }, T);
+    await call('PUT', `/deliveries/${p1.id}`, { delivery_status: 'ready' }, T);
+    await call('PUT', `/deliveries/${p1.id}`, { delivery_status: 'on_way', courier_name: 'Murat' }, T);
+    const p2 = await call('POST', '/deliveries', { kind: 'takeaway', customer_name: 'Zeynep', phone: '0555 444 55 66',
+      items: [{ product_id: byName('Filtre Kahve').id, qty: 2 }, { product_id: byName('Cheesecake').id, qty: 1 }] }, T);
+    await call('POST', `/tickets/${p2.id}/kitchen`, {}, T);
+    await call('PUT', `/deliveries/${p2.id}`, { delivery_status: 'ready' }, T);
+    await call('POST', '/platforms/simulate', { platform: 'yemeksepeti' }, T);
   }
   if (type === 'market') {
     const debtor = (await call('GET', '/customers?debt=1', null, T))[0];
