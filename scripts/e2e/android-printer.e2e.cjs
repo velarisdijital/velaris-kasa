@@ -142,8 +142,22 @@ async function saveTsplPages(p, prefix) {
     const opening = p.getByPlaceholder('0,00').first();
     if (await p.getByText('Kasadaki nakit').count()) { await opening.fill('0'); await p.keyboard.press('Enter'); await p.waitForTimeout(800); }
     const search = p.getByLabel('Barkod veya ürün ara');
+    // Kasa modu: barkod kutusu seçili ama ekran klavyesi kapalı (inputmode=none); dokununca açılır
+    const scanState = () => search.evaluate((el) => ({ focused: document.activeElement === el, mode: el.getAttribute('inputmode') }));
+    let st = await scanState();
+    if (!st.focused || st.mode !== 'none') fail(`barkod kutusu kasa modunda değil: ${JSON.stringify(st)}`);
+    else ok('Barkod kutusu seçili, ekran klavyesi kapalı (inputmode=none)');
+    await search.tap().catch(() => search.click());
+    await p.waitForTimeout(100);
+    st = await scanState();
+    if (!st.focused || st.mode === 'none') fail(`dokununca klavye açılmıyor: ${JSON.stringify(st)}`);
+    else ok('Barkod kutusuna dokununca ekran klavyesi açılabiliyor');
     await search.fill('Simit'); await p.keyboard.press('Enter'); await p.waitForTimeout(800);
     await p.getByRole('button', { name: /^Nakit/ }).click();
+    const given = p.locator('.modal input.input').first();
+    const gm = await given.evaluate((el) => ({ focused: document.activeElement === el, mode: el.getAttribute('inputmode') }));
+    if (!gm.focused || gm.mode !== 'none') fail(`nakit penceresindeki kutu klavye açıyor: ${JSON.stringify(gm)}`);
+    else ok('Nakit penceresinde tutar kutusu seçili, klavye kendiliğinden açılmıyor');
     await p.getByRole('button', { name: /Satışı tamamla/ }).click();
     await p.getByRole('button', { name: 'Fiş yazdır' }).waitFor({ timeout: 10000 });
     before = await p.evaluate(() => window.__fake.writes.length);

@@ -9,7 +9,11 @@ import '@fontsource/archivo/latin-ext-600.css';
 import '@fontsource/archivo/latin-700.css';
 import '@fontsource/archivo/latin-ext-700.css';
 import App from './App.jsx';
+import { installSoftKeyboardGuard } from './softKeyboard.js';
 import './styles.css';
+
+// Tablette ekran klavyesi yalnızca yazı kutusuna dokununca açılsın (Ayarlar → Bu cihaz)
+installSoftKeyboardGuard();
 
 const root = createRoot(document.getElementById('root'));
 const render = () => root.render(

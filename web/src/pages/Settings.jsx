@@ -3,6 +3,7 @@ import { api, del, get, post, put, registerName, setRegisterName, storage } from
 import { useCan, useSession } from '../App.jsx';
 import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { d, dt, ROLE_LABELS } from '../format.js';
+import { getSoftKeyboardMode, setSoftKeyboardMode } from '../softKeyboard.js';
 
 const TABS = [['plan', 'Paket'], ['business', 'İşletme'], ['device', 'Bu cihaz'], ['users', 'Kullanıcılar'], ['branches', 'Şubeler'], ['fiscal', 'Yazarkasa'], ['loyalty', 'Puan'], ['sms', 'SMS & WhatsApp'], ['booking', 'Online randevu'], ['invoice', 'e-Fatura'], ['crm', 'Velaris CRM'], ['backup', 'Yedekleme']];
 
@@ -497,10 +498,12 @@ function Device() {
   const toast = useToast();
   const [name, setName] = useState(registerName());
   const [autoprint, setAutoprint] = useState(storage.get('vk_autoprint', false));
+  const [softKb, setSoftKb] = useState(getSoftKeyboardMode());
   const save = (e) => {
     e.preventDefault();
     setRegisterName(name.trim());
     storage.set('vk_autoprint', autoprint);
+    setSoftKeyboardMode(softKb);
     toast.ok('Cihaz ayarları kaydedildi');
   };
   return (
@@ -508,6 +511,7 @@ function Device() {
       <p className="muted">Bu ayarlar yalnızca bu bilgisayar/tablet için geçerlidir. Birden fazla kasanız varsa her cihaza farklı bir kasa adı verin.</p>
       <Field label="Kasa adı"><input className="input" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Kasa 1" /></Field>
       <label className="check"><input type="checkbox" checked={autoprint} onChange={(e) => setAutoprint(e.target.checked)} /> Her satıştan sonra fişi otomatik yazdır</label>
+      <label className="check"><input type="checkbox" checked={softKb === 'tap'} onChange={(e) => setSoftKb(e.target.checked ? 'tap' : 'auto')} /> Ekran klavyesi yalnızca yazı kutusuna dokununca açılsın (tablet / kasa modu)</label>
       <div className="muted small-text">
         <b>Barkod okuyucu:</b> USB/Bluetooth okuyucular klavye gibi çalışır, ek ayar gerekmez (okuyucunun sonuna "Enter" eklemesi açık olmalı).<br />
         <b>Fiş yazıcı:</b> 80 mm termal yazıcıyı bilgisayarın varsayılan yazıcısı yapın; masaüstü uygulamasında fiş doğrudan basılır.
