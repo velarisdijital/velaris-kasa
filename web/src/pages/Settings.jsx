@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, del, get, post, put, registerName, setRegisterName, storage } from '../api.js';
 import { useCan, useSession } from '../App.jsx';
 import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
@@ -513,7 +513,65 @@ function Device() {
         <b>Fiş yazıcı:</b> 80 mm termal yazıcıyı bilgisayarın varsayılan yazıcısı yapın; masaüstü uygulamasında fiş doğrudan basılır.
       </div>
       <div><button className="btn primary">Kaydet</button></div>
+      <LabelPrinterSettings />
     </form>
+  );
+}
+
+/** Bluetooth etiket yazıcısı (TSPL): seç, bağlan, deneme etiketi, boyut ve koyuluk. */
+function LabelPrinterSettings() {
+  const toast = useToast();
+  const { settings } = useSession();
+  const [lp, setLp] = useState(null);
+  const [cfg, setCfg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [diag, setDiag] = useState(null);
+  useEffect(() => { import('../printing/labelPrinter.js').then((m) => { setLp(m); setCfg(m.getPrinter()); }); }, []);
+  if (!lp || !cfg) return null;
+  const set = (k, v) => { const n = { ...cfg, [k]: v }; setCfg(n); lp.savePrinter({ [k]: v }); };
+  const run = async (fn, ok) => {
+    setBusy(true);
+    try { await fn(); if (ok) toast.ok(ok); } catch (e) {
+      if (e.services) setDiag(e.services);
+      toast.err(e.message || String(e));
+    } finally { setBusy(false); setCfg(lp.getPrinter()); }
+  };
+  return (
+    <div className="card card-pad stack" style={{ background: 'var(--panel-2)', boxShadow: 'none' }} onClick={(e) => e.stopPropagation()}>
+      <strong>Bluetooth etiket yazıcısı</strong>
+      {!lp.bleSupported() ? (
+        <div className="muted small-text">Bu cihazda Bluetooth yazıcı kullanılamıyor. Android uygulamasında ya da Chrome tarayıcısında çalışır.</div>
+      ) : (
+        <>
+          <div className="row wrap">
+            <span style={{ flex: 1 }}>{cfg.deviceId ? <>Seçili: <b>{cfg.name}</b>{cfg.characteristic ? ' · bağlantı hazır' : ''}</> : 'Yazıcı seçilmedi'}</span>
+            <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => { await lp.choosePrinter(); setDiag(await lp.connectPrinter()); }, 'Yazıcı bağlandı')}>Yazıcı ara</button>
+            {cfg.deviceId && <button type="button" className="btn small primary" disabled={busy} onClick={() => run(() => lp.printTest(settings.business_name), 'Deneme etiketi gönderildi')}>Deneme etiketi bas</button>}
+            {cfg.deviceId && <button type="button" className="btn small ghost danger-text" onClick={() => { lp.forgetPrinter(); setCfg(lp.getPrinter()); setDiag(null); }}>Unut</button>}
+          </div>
+          <div className="grid-3">
+            <Field label="Etiket eni (mm)"><input className="input" inputMode="numeric" value={cfg.width} onChange={(e) => set('width', Number(e.target.value) || 50)} /></Field>
+            <Field label="Etiket boyu (mm)"><input className="input" inputMode="numeric" value={cfg.height} onChange={(e) => set('height', Number(e.target.value) || 30)} /></Field>
+            <Field label="Etiket arası boşluk (mm)"><input className="input" inputMode="numeric" value={cfg.gap} onChange={(e) => set('gap', Number(e.target.value))} /></Field>
+            <Field label="Koyuluk (0-15)"><input className="input" inputMode="numeric" value={cfg.density} onChange={(e) => set('density', Math.max(0, Math.min(15, Number(e.target.value) || 8)))} /></Field>
+            <Field label="Etiket türü">
+              <select className="input" value={cfg.kind} onChange={(e) => set('kind', e.target.value)}>
+                <option value="shelf">Raf / fiyat etiketi</option><option value="sticker">Barkod etiketi</option>
+              </select>
+            </Field>
+            <label className="check" style={{ alignSelf: 'end', paddingBottom: 10 }}><input type="checkbox" checked={!!cfg.invert} onChange={(e) => set('invert', e.target.checked)} /> Ters renk (etiket siyah çıkıyorsa)</label>
+          </div>
+          <small className="muted">Piranha 5510 ve TSPL uyumlu mini etiket yazıcıları için. Yazıcıyı açın, "Yazıcı ara"ya basıp listeden seçin (ör. "5510-…-BLE"). Etiket boşa kayıyorsa boşluğu 2-3 mm deneyin.</small>
+          {diag && (
+            <details>
+              <summary className="small-text muted">Bağlantı ayrıntıları (destek için)</summary>
+              <pre className="small-text" style={{ whiteSpace: 'pre-wrap' }}>{diag.map((s) => `${s.uuid}\n${s.characteristics.map((c) => `  ${c.uuid} [${c.props.join(', ')}]`).join('\n')}`).join('\n')}
+{`\nSeçilen: ${cfg.service || '-'} / ${cfg.characteristic || '-'}${cfg.noResponse ? ' (yanıtsız)' : ''}`}</pre>
+            </details>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

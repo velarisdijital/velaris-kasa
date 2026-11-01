@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { del, get, post, put } from '../api.js';
 import { isManager, useCan, useSession } from '../App.jsx';
 import CameraScanner, { cameraSupported } from '../components/CameraScanner.jsx';
@@ -384,14 +384,30 @@ function LabelModal({ selected, onClose, onPrinted }) {
   const [layout, setLayout] = useState('a4-shelf');
   const [copies, setCopies] = useState(1);
   const items = source === 'selected' ? selected : due.data || [];
+  const markPrinted = async () => {
+    try { await post('/products/labels-printed', { ids: items.map((p) => p.id) }); onPrinted?.(); } catch { /* işaretleme başarısızsa etiket yine basıldı */ }
+  };
   const print = async () => {
     printElement(<LabelSheet products={items} layout={layout} copies={Number(copies) || 1} business={settings.business_name} />, LABEL_LAYOUTS[layout].page);
-    try { await post('/products/labels-printed', { ids: items.map((p) => p.id) }); onPrinted?.(); } catch { /* işaretleme başarısızsa etiket yine basıldı */ }
+    await markPrinted();
+  };
+  // Bluetooth etiket yazıcısı (Ayarlar → Bu cihaz) seçiliyse doğrudan basılır
+  const [bt, setBt] = useState(null);
+  const [btBusy, setBtBusy] = useState(false);
+  useEffect(() => { import('../printing/labelPrinter.js').then((m) => setBt(m.bleSupported() && m.getPrinter().deviceId ? m : null)); }, []);
+  const printBt = async () => {
+    setBtBusy(true);
+    try {
+      await bt.printLabels(items, { copies: Number(copies) || 1, business: settings.business_name, kind: LABEL_LAYOUTS[layout].kind });
+      toast.ok(`${items.length * (Number(copies) || 1)} etiket yazıcıya gönderildi`);
+      await markPrinted();
+    } catch (e) { toast.err(e.message || String(e)); } finally { setBtBusy(false); }
   };
   return (
     <Modal title="Etiket yazdır" onClose={onClose} wide
       footer={<><span className="muted small-text" style={{ flex: 1 }}>{items.length} ürün × {copies} kopya</span>
-        <button className="btn primary" disabled={!items.length} onClick={print}>Yazdır</button></>}>
+        {bt && <button className="btn primary" disabled={!items.length || btBusy} onClick={printBt}>{btBusy ? 'Gönderiliyor…' : `${bt.getPrinter().name || 'Bluetooth'} yazıcıya bas`}</button>}
+        <button className={`btn ${bt ? '' : 'primary'}`} disabled={!items.length} onClick={print}>Yazdır</button></>}>
       <div className="stack">
         <div className="tabs">
           <button className={`tab ${source === 'selected' ? 'active' : ''}`} disabled={!selected.length} onClick={() => setSource('selected')}>Seçili ürünler ({selected.length})</button>
