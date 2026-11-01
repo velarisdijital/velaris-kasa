@@ -5,7 +5,7 @@ name: Android APK
 on:
   push:
     branches: [main]
-    paths: ['web/**', 'server/**', 'android/**', 'capacitor.config.json', 'vite.*.js', 'scripts/build-app.mjs', 'package*.json', '.github/workflows/android.yml']
+    paths: ['web/**', 'server/**', 'android/**', 'capacitor.config.json', 'vite.*.js', 'scripts/build-app.mjs', 'scripts/e2e/**', 'package*.json', '.github/workflows/android.yml']
   workflow_dispatch:
 
 permissions:

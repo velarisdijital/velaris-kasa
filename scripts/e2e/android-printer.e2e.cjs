@@ -183,6 +183,10 @@ async function saveTsplPages(p, prefix) {
     ok('Kullanıcıya "Fiş yazıcıya gönderildi" bildirimi gösterildi');
     if (shots) { await saveTsplPages(p, path.join(shots, 'satis-fis')); await shot('4-satis'); }
 
+    const pacing = await p.evaluate(() => window.__fake.pacing);
+    if (!pacing || pacing.chunk > 512) fail(`klasik Bluetooth gönderimi yavaşlatılmamış: ${JSON.stringify(pacing)}`);
+    else ok(`Gönderim parça parça: ${pacing.chunk} bayt / ${pacing.delay} ms`);
+
     // ---- Gün sonu: Z raporu Bluetooth yazıcıdan ----
     await p.goto(`${url}#/gun-sonu`);
     await p.getByRole('button', { name: /Günü kapat/ }).click();
@@ -242,9 +246,6 @@ async function saveTsplPages(p, prefix) {
     const nameAfter = await p.getByLabel('İşletme adı').inputValue({ timeout: 15000 });
     if (nameAfter !== 'Deneme Market') fail(`geri yüklemeden sonra işletme adı ${nameAfter}`); else ok('Yedek geri yüklendi: sonradan yapılan değişiklik geri alındı, veriler yedekteki hâlinde');
 
-    const pacing = await p.evaluate(() => window.__fake.pacing);
-    if (!pacing || pacing.chunk > 512) fail(`klasik Bluetooth gönderimi yavaşlatılmamış: ${JSON.stringify(pacing)}`);
-    else ok(`Gönderim parça parça: ${pacing.chunk} bayt / ${pacing.delay} ms`);
     const calls = await p.evaluate(() => window.__fake.calls);
     if (calls.some((c) => c.endsWith('.then'))) fail('eklenti nesnesi Promise sanıldı (.then çağrıldı)');
     if (errors.length) fail(`sayfa hataları: ${errors.join(' | ')}`);
