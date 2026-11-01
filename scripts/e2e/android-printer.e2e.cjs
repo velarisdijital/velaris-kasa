@@ -152,6 +152,18 @@ async function saveTsplPages(p, prefix) {
     st = await scanState();
     if (!st.focused || st.mode === 'none') fail(`dokununca klavye açılmıyor: ${JSON.stringify(st)}`);
     else ok('Barkod kutusuna dokununca ekran klavyesi açılabiliyor');
+    // Barkod kutusu seçili değilken (ekrana dokunuldu) okuyucu yine çalışmalı
+    await search.fill('Ayran 250');
+    const barcode = (await p.locator('.suggest small').first().innerText()).trim();
+    await search.fill('');
+    await p.locator('h1, .page-head, body').first().click({ position: { x: 5, y: 5 } }).catch(() => {});
+    await p.evaluate(() => document.activeElement?.blur());
+    const focusedTag = await p.evaluate(() => document.activeElement?.tagName);
+    await p.keyboard.type(barcode, { delay: 5 }); // okuyucu hızı
+    await p.keyboard.press('Enter');
+    await p.getByText('Ayran 250 ml').first().waitFor({ timeout: 5000 }).then(
+      () => ok(`Barkod kutusu seçili değilken (${focusedTag}) okutulan barkod sepete eklendi (${barcode})`),
+      () => fail(`seçili kutu yokken okutulan barkod sepete eklenmedi (${barcode})`));
     await search.fill('Simit'); await p.keyboard.press('Enter'); await p.waitForTimeout(800);
     await p.getByRole('button', { name: /^Nakit/ }).click();
     const given = p.locator('.modal input.input').first();

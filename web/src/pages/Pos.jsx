@@ -35,6 +35,8 @@ export default function Pos() {
   const [lastSale, setLastSale] = useState(null);
   const [busy, setBusy] = useState(false);
   const scanRef = useRef(null);
+  const typeRef = useRef(null); // ScanBox'a dışarıdan yazı ekler
+  const scanBuf = useRef({ text: '', timer: null }); // hiçbir kutu seçili değilken gelen okuyucu tuşları
 
   const subtotal = cart.reduce((a, l) => a + lineTotal(l), 0);
   const total = Math.max(0, subtotal - discount);
@@ -207,6 +209,23 @@ export default function Pos() {
         e.preventDefault();
         const l = cart.find((x) => x.key === sel);
         if (l) { const n = l.qty + (key === '+' ? 1 : -1); if (n <= 0) removeLine(sel); else updateLine(sel, { qty: n }); }
+      } else if (!isEditable(e.target)) {
+        // Barkod kutusu seçili değil (ekrana dokunuldu, uygulama yeni açıldı): okuyucu tuşlarını yine yakala.
+        // Okuyucu rakamları çok hızlı gönderip Enter'a basar → barkod; yavaş yazılan harfler arama kutusuna aktarılır.
+        const b = scanBuf.current;
+        if (key === 'Enter' && b.text) {
+          e.preventDefault();
+          clearTimeout(b.timer);
+          const code = b.text;
+          b.text = '';
+          onScan(code).then((handled) => { if (!handled) typeRef.current?.(code); });
+          focusScan();
+        } else if (key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          b.text += key;
+          clearTimeout(b.timer);
+          b.timer = setTimeout(() => { const t = b.text; b.text = ''; if (t) { typeRef.current?.(t); focusScan(); } }, 300);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -240,7 +259,7 @@ export default function Pos() {
   return (
     <div className="pos">
       <div className="pos-left">
-        <ScanBox inputRef={scanRef} products={products} onScan={onScan} onPick={(p) => { addProduct(p); focusScan(); }} />
+        <ScanBox inputRef={scanRef} typeRef={typeRef} products={products} onScan={onScan} onPick={(p) => { addProduct(p); focusScan(); }} />
         <div className="tabs">
           {tabs.map((t) => <button key={t.id} className={`tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>{t.name}</button>)}
         </div>
@@ -440,8 +459,11 @@ export function FiscalLine({ sale, onUpdate }) {
   );
 }
 
-function ScanBox({ inputRef, products, onScan, onPick }) {
+const isEditable = (el) => !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+
+function ScanBox({ inputRef, typeRef, products, onScan, onPick }) {
   const [text, setText] = useState('');
+  if (typeRef) typeRef.current = (s) => setText((t) => t + s);
   const [hl, setHl] = useState(0);
   const [camera, setCamera] = useState(false);
   const q = text.trim().toLocaleLowerCase('tr');
