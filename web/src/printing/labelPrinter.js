@@ -34,7 +34,51 @@ async function ble() {
   return BleClient;
 }
 
-/** Yazıcıyı seçtirir. Dönüş: { deviceId, name } */
+// Yazıcıya benzeyen cihaz adları (listede üste alınır, tek eşleşen varsa otomatik seçilir)
+const PRINTER_NAME = /5510|piranha|print|label|etiket|xp-|hprt|tsc|niimbot|phomemo|marklife|gprinter|-ble\b/i;
+export const looksLikePrinter = (name) => PRINTER_NAME.test(String(name || ''));
+const sortDevices = (list) => [...list].sort((a, b) => Number(looksLikePrinter(b.name)) - Number(looksLikePrinter(a.name)) || String(a.name || '~').localeCompare(String(b.name || '~')));
+
+/** Tabletle eşleşmiş (Bluetooth ayarlarından bağlanmış) cihazlar. Yalnızca Android uygulamasında. */
+export async function pairedDevices() {
+  if (!isNative()) return [];
+  const B = await ble();
+  const list = await B.getBondedDevices();
+  return sortDevices(list.map((d) => ({ deviceId: d.deviceId, name: d.name || '', paired: true })));
+}
+
+/** Yakındaki BLE cihazlarını tarar; her bulunan için onFound çağrılır. stop() fonksiyonu döner. */
+export async function scanNearby(onFound, ms = 12000) {
+  const B = await ble();
+  const seen = new Set();
+  await B.requestLEScan({ allowDuplicates: false }, (r) => {
+    const id = r.device.deviceId;
+    if (seen.has(id)) return;
+    seen.add(id);
+    onFound({ deviceId: id, name: r.device.name || r.localName || '', rssi: r.rssi });
+  });
+  let stopped = false;
+  const stop = async () => { if (!stopped) { stopped = true; try { await B.stopLEScan(); } catch { /* yok say */ } } };
+  setTimeout(stop, ms);
+  return stop;
+}
+
+/** Listeden seçilen cihazı yazıcı olarak kaydeder ve bağlanır. */
+export async function usePrinterDevice(dev) {
+  savePrinter({ deviceId: dev.deviceId, name: dev.name || dev.deviceId, service: null, characteristic: null, noResponse: false });
+  return connectPrinter();
+}
+
+/** Kayıtlı yazıcı yoksa: eşleşmiş cihazlar arasında tek bir yazıcı varsa onu seçer. Dönüş: seçilen cihaz ya da null. */
+export async function autoDetectPrinter() {
+  if (!isNative() || getPrinter().deviceId) return null;
+  const printers = (await pairedDevices()).filter((d) => looksLikePrinter(d.name));
+  if (printers.length !== 1) return null;
+  savePrinter({ deviceId: printers[0].deviceId, name: printers[0].name, service: null, characteristic: null });
+  return printers[0];
+}
+
+/** Tarayıcıda (Chrome) yazıcı seçimi: tarayıcının kendi listesi. */
 export async function choosePrinter() {
   if (isNative()) {
     const B = await ble();
@@ -98,7 +142,7 @@ export async function sendBytes(bytes) {
   const p = getPrinter();
   if (isNative()) {
     const B = await ble();
-    if (!p.characteristic) await connectPrinter();
+    await connectPrinter(); // uygulama yeniden açıldıysa bağlantı kopmuş olabilir; bağlıysa hemen döner
     const q = getPrinter();
     let mtu = 23;
     try { mtu = await B.getMtu(q.deviceId); } catch { /* varsayılan */ }

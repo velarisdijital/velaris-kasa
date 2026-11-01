@@ -526,8 +526,39 @@ function LabelPrinterSettings() {
   const [cfg, setCfg] = useState(null);
   const [busy, setBusy] = useState(false);
   const [diag, setDiag] = useState(null);
-  useEffect(() => { import('../printing/labelPrinter.js').then((m) => { setLp(m); setCfg(m.getPrinter()); }); }, []);
+  const [picker, setPicker] = useState(null); // { paired: [], nearby: [], scanning }
+  useEffect(() => {
+    import('../printing/labelPrinter.js').then(async (m) => {
+      setLp(m); setCfg(m.getPrinter());
+      // Tabletle eşleşmiş tek bir yazıcı varsa kendiliğinden seçilir
+      try {
+        const found = await m.autoDetectPrinter();
+        if (found) { setCfg(m.getPrinter()); toast.ok(`Eşleşmiş yazıcı bulundu: ${found.name}`); }
+      } catch { /* Bluetooth kapalı ya da izin yok */ }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!lp || !cfg) return null;
+  const openPicker = async () => {
+    if (!lp.isNative()) return run(async () => { await lp.choosePrinter(); setDiag(await lp.connectPrinter()); }, 'Yazıcı bağlandı');
+    const state = { paired: [], nearby: [], scanning: true };
+    setPicker({ ...state });
+    try { state.paired = await lp.pairedDevices(); setPicker({ ...state }); } catch (e) { toast.err(e.message || String(e)); }
+    try {
+      const stop = await lp.scanNearby((d) => {
+        if (state.paired.some((x) => x.deviceId === d.deviceId) || state.nearby.some((x) => x.deviceId === d.deviceId)) return;
+        state.nearby = [...state.nearby, d].sort((a, b) => Number(lp.looksLikePrinter(b.name)) - Number(lp.looksLikePrinter(a.name)) || (b.rssi || -999) - (a.rssi || -999));
+        setPicker({ ...state });
+      });
+      setTimeout(() => { state.scanning = false; setPicker((p) => (p ? { ...state } : p)); stop(); }, 12000);
+    } catch (e) { state.scanning = false; setPicker({ ...state }); toast.err(`Tarama başlatılamadı: ${e.message || e}`); }
+  };
+  const pick = (d) => { setPicker(null); run(async () => setDiag(await lp.usePrinterDevice(d)), `${d.name || 'Yazıcı'} bağlandı`); };
+  const DeviceRow = ({ d }) => (
+    <button type="button" className="dropdown-item" onClick={() => pick(d)} style={{ border: '1px solid var(--border)', marginBottom: 6, background: lp.looksLikePrinter(d.name) ? 'var(--primary-soft)' : 'var(--panel)' }}>
+      <span><b>{d.name || 'İsimsiz cihaz'}</b>{lp.looksLikePrinter(d.name) && <span className="badge blue" style={{ marginLeft: 6 }}>yazıcı</span>}</span>
+      <span className="muted small-text">{d.paired ? 'eşleşmiş' : d.rssi ? `sinyal ${d.rssi}` : ''} · {d.deviceId}</span>
+    </button>
+  );
   const set = (k, v) => { const n = { ...cfg, [k]: v }; setCfg(n); lp.savePrinter({ [k]: v }); };
   const run = async (fn, ok) => {
     setBusy(true);
@@ -545,10 +576,21 @@ function LabelPrinterSettings() {
         <>
           <div className="row wrap">
             <span style={{ flex: 1 }}>{cfg.deviceId ? <>Seçili: <b>{cfg.name}</b>{cfg.characteristic ? ' · bağlantı hazır' : ''}</> : 'Yazıcı seçilmedi'}</span>
-            <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => { await lp.choosePrinter(); setDiag(await lp.connectPrinter()); }, 'Yazıcı bağlandı')}>Yazıcı ara</button>
+            <button type="button" className="btn small" disabled={busy} onClick={openPicker}>{cfg.deviceId ? 'Değiştir' : 'Yazıcı ara'}</button>
+            {cfg.deviceId && !cfg.characteristic && <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => setDiag(await lp.connectPrinter()), 'Yazıcı bağlandı')}>Bağlan</button>}
             {cfg.deviceId && <button type="button" className="btn small primary" disabled={busy} onClick={() => run(() => lp.printTest(settings.business_name), 'Deneme etiketi gönderildi')}>Deneme etiketi bas</button>}
             {cfg.deviceId && <button type="button" className="btn small ghost danger-text" onClick={() => { lp.forgetPrinter(); setCfg(lp.getPrinter()); setDiag(null); }}>Unut</button>}
           </div>
+          {picker && (
+            <div className="card card-pad stack" style={{ gap: 6 }}>
+              <div className="row"><strong style={{ flex: 1 }}>Yazıcıyı seçin</strong>{picker.scanning && <span className="muted small-text">aranıyor…</span>}
+                <button type="button" className="btn small ghost" onClick={() => setPicker(null)}>Kapat</button></div>
+              <div className="muted small-text">Tabletle eşleşmiş cihazlar</div>
+              {picker.paired.length ? picker.paired.map((d) => <DeviceRow key={d.deviceId} d={d} />) : <div className="muted small-text">Eşleşmiş cihaz yok</div>}
+              <div className="muted small-text" style={{ marginTop: 6 }}>Yakındaki cihazlar</div>
+              {picker.nearby.length ? picker.nearby.map((d) => <DeviceRow key={d.deviceId} d={d} />) : <div className="muted small-text">{picker.scanning ? 'Aranıyor… Yazıcının açık olduğundan emin olun.' : 'Bulunamadı. Yazıcıyı kapatıp açın; tabletin Konum ayarı kapalıysa açın.'}</div>}
+            </div>
+          )}
           <div className="grid-3">
             <Field label="Etiket eni (mm)"><input className="input" inputMode="numeric" value={cfg.width} onChange={(e) => set('width', Number(e.target.value) || 50)} /></Field>
             <Field label="Etiket boyu (mm)"><input className="input" inputMode="numeric" value={cfg.height} onChange={(e) => set('height', Number(e.target.value) || 30)} /></Field>
@@ -561,7 +603,7 @@ function LabelPrinterSettings() {
             </Field>
             <label className="check" style={{ alignSelf: 'end', paddingBottom: 10 }}><input type="checkbox" checked={!!cfg.invert} onChange={(e) => set('invert', e.target.checked)} /> Ters renk (etiket siyah çıkıyorsa)</label>
           </div>
-          <small className="muted">Piranha 5510 ve TSPL uyumlu mini etiket yazıcıları için. Yazıcıyı açın, "Yazıcı ara"ya basıp listeden seçin (ör. "5510-…-BLE"). Etiket boşa kayıyorsa boşluğu 2-3 mm deneyin.</small>
+          <small className="muted">Piranha 5510 ve TSPL uyumlu mini etiket yazıcıları için. Yazıcıyı tabletin Bluetooth ayarlarından eşleştirdiyseniz kendiliğinden seçilir; değilse "Yazıcı ara"dan listeden seçin (ör. "5510-…-BLE"). Etiket boşa kayıyorsa boşluğu 2-3 mm deneyin.</small>
           {diag && (
             <details>
               <summary className="small-text muted">Bağlantı ayrıntıları (destek için)</summary>

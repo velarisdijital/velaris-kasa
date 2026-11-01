@@ -394,7 +394,12 @@ function LabelModal({ selected, onClose, onPrinted }) {
   // Bluetooth etiket yazıcısı (Ayarlar → Bu cihaz) seçiliyse doğrudan basılır
   const [bt, setBt] = useState(null);
   const [btBusy, setBtBusy] = useState(false);
-  useEffect(() => { import('../printing/labelPrinter.js').then((m) => setBt(m.bleSupported() && m.getPrinter().deviceId ? m : null)); }, []);
+  useEffect(() => {
+    import('../printing/labelPrinter.js').then(async (m) => {
+      try { await m.autoDetectPrinter(); } catch { /* Bluetooth kapalı */ }
+      setBt(m.bleSupported() && m.getPrinter().deviceId ? m : null);
+    });
+  }, []);
   const printBt = async () => {
     setBtBusy(true);
     try {
