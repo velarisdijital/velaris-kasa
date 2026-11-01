@@ -124,6 +124,18 @@ async function saveTsplPages(p, prefix) {
     await p.getByText(/Yazıcı durumu: Hazır/).waitFor({ timeout: 15000 });
     ok('Kalibre et → GAPDETECT gönderildi, yazıcı hazır');
 
+    // Düz fiş kâğıdı (56 mm) takıldı: yazıcı sürekli kâğıda alınır, fiş tek parça 48 mm basılır
+    await p.getByLabel('Yazıcıda takılı rulo').selectOption('roll');
+    await p.waitForFunction(() => /GAP 0 mm,0 mm/.test(atob(window.__fake.lastData)), null, { timeout: 10000 });
+    ok('Düz fiş kâğıdı seçildi → yazıcıya GAP 0 (sürekli kâğıt) gönderildi');
+    before = await p.evaluate(() => window.__fake.writes.length);
+    await p.getByRole('button', { name: 'Deneme fişi bas' }).click();
+    await p.getByText('Deneme fişi gönderildi').last().waitFor({ timeout: 20000 });
+    const r3 = await p.evaluate((n) => window.__fake.writes.slice(n), before);
+    if (r3.length !== 1 || !/^SIZE 48 mm,\d+ mm\r\nGAP 0 mm,0 mm/.test(r3[0].head)) fail(`düz kâğıt fişi beklenmiyor: ${JSON.stringify(r3.map((w) => w.head))}`);
+    else ok(`Deneme fişi düz kâğıda tek parça gönderildi (${r3[0].head.split('\r\n').slice(0, 2).join(' · ')})`);
+    if (shots) await saveTsplPages(p, path.join(shots, 'rulo-fis'));
+
     // Kasa: satış yap → "Fiş yazdır" Bluetooth yazıcıya gider
     await p.goto(`${url}#/`);
     await p.waitForTimeout(1500);

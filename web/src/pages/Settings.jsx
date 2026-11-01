@@ -636,6 +636,17 @@ function LabelPrinterSettings() {
               {picker.nearby.length ? picker.nearby.map((d) => <DeviceRow key={d.deviceId} d={d} />) : <div className="muted small-text">{picker.scanning ? 'Aranıyor… Yazıcının açık olduğundan emin olun.' : 'Bulunamadı. Yazıcıyı kapatıp açın; tabletin Konum ayarı kapalıysa açın.'}</div>}
             </div>
           )}
+          <Field label="Yazıcıda takılı rulo">
+            <select className="input" value={cfg.media === 'roll' ? 'roll' : 'label'} onChange={(e) => {
+              const media = e.target.value;
+              set('media', media);
+              // Yazıcıya hemen bildir: düz kâğıtta etiket aralığı aramayı bıraksın (kırmızı ışık), etikette aralığı ölçsün
+              if (cfg.deviceId) run(() => lp.calibratePrinter({ ...lp.getPrinter(), media }), media === 'roll' ? 'Yazıcı düz fiş kâğıdına ayarlandı' : 'Yazıcı etiket rulosuna ayarlandı');
+            }}>
+              <option value="label">Etiket rulosu (aralıklı etiketler, ör. 50×30)</option>
+              <option value="roll">Düz fiş kâğıdı (ör. 56 mm rulo)</option>
+            </select>
+          </Field>
           <div className="grid-3">
             <Field label="Etiket eni (mm)"><input className="input" inputMode="numeric" value={cfg.width} onChange={(e) => set('width', Number(e.target.value) || 50)} /></Field>
             <Field label="Etiket boyu (mm)"><input className="input" inputMode="numeric" value={cfg.height} onChange={(e) => set('height', Number(e.target.value) || 30)} /></Field>
@@ -656,13 +667,14 @@ function LabelPrinterSettings() {
             )}
             {lp.isNative() && (
               <Field label="Satış fişi">
-                <select className="input" value={cfg.receiptVia === 'system' ? 'system' : cfg.receiptPaper === 'continuous' ? 'continuous' : 'label'}
-                  onChange={(e) => { const v = e.target.value; const n = { ...cfg, receiptVia: v === 'system' ? 'system' : 'bt', receiptPaper: v === 'continuous' ? 'continuous' : 'label' }; setCfg(n); lp.savePrinter({ receiptVia: n.receiptVia, receiptPaper: n.receiptPaper }); }}>
-                  <option value="label">Bu yazıcıdan bas · etiket rulosu (fiş etiketlere bölünür)</option>
-                  <option value="continuous">Bu yazıcıdan bas · sürekli rulo (fiş kâğıdı)</option>
+                <select className="input" value={cfg.receiptVia === 'system' ? 'system' : 'bt'} onChange={(e) => set('receiptVia', e.target.value)}>
+                  <option value="bt">Bu yazıcıdan bas</option>
                   <option value="system">Bu yazıcıdan basma</option>
                 </select>
               </Field>
+            )}
+            {cfg.media === 'roll' && (
+              <Field label="Fiş kâğıdı eni (mm)"><input className="input" inputMode="numeric" value={cfg.receiptWidth} onChange={(e) => set('receiptWidth', Number(e.target.value) || 56)} /></Field>
             )}
           </div>
           <small className="muted">Piranha 5510 ve TSPL uyumlu mini etiket yazıcıları için. Yazıcıyı tabletin Bluetooth ayarlarından eşleştirdiyseniz kendiliğinden seçilir; değilse "Yazıcı ara"dan listeden seçin (ör. "5510-…-BLE"). Etiket boşa kayıyorsa boşluğu 2-3 mm deneyin.</small>

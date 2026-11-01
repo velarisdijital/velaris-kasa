@@ -8,7 +8,11 @@ import { money } from '../format.js';
 
 const KEY = 'vk_label_printer';
 const DOTS_PER_MM = 8; // 203 dpi
-export const DEFAULT_PRINTER = { width: 50, height: 30, gap: 2, density: 8, speed: 4, invert: false, kind: 'shelf' };
+// media: yazıcıda takılı rulo — 'label' (aralıklı etiket, ör. 50×30) | 'roll' (düz fiş kâğıdı, ör. 56 mm)
+export const DEFAULT_PRINTER = { width: 50, height: 30, gap: 2, density: 8, speed: 4, invert: false, kind: 'shelf', media: 'label', receiptWidth: 56 };
+export const isRoll = (cfg) => cfg.media === 'roll';
+/** Fiş kâğıdı eninden basılabilir en (mm): 56–58 mm rulo → 48 mm (yazıcı kafası), 80 mm rulo → 72 mm */
+export const receiptPrintWidth = (paperMm) => { const w = Number(paperMm) || 56; return w >= 76 ? 72 : Math.min(48, Math.max(30, w - 8)); };
 
 // Yazıcıların yazma karakteristiği bulunan bilinen BLE servisleri (Web Bluetooth bunları önceden bildirmek ister)
 const KNOWN_SERVICES = [
@@ -420,7 +424,7 @@ function concat(parts) {
 
 /** Etiketler için TSPL komutları. labels: [{ canvas, copies }] */
 export function buildTspl(labels, cfg = getPrinter()) {
-  const parts = [enc(`SIZE ${cfg.width} mm,${cfg.height} mm\r\nGAP ${cfg.gap} mm,0 mm\r\nDIRECTION 1,0\r\nREFERENCE 0,0\r\nDENSITY ${cfg.density}\r\nSPEED ${cfg.speed}\r\nSET TEAR ON\r\n`)];
+  const parts = [enc(`SIZE ${cfg.width} mm,${cfg.height} mm\r\nGAP ${isRoll(cfg) ? 0 : cfg.gap} mm,0 mm\r\nDIRECTION 1,0\r\nREFERENCE 0,0\r\nDENSITY ${cfg.density}\r\nSPEED ${cfg.speed}\r\nSET TEAR ON\r\n`)];
   for (const { canvas, copies = 1 } of labels) {
     const { wb, H, out } = bitmapBytes(canvas, !!cfg.invert);
     parts.push(enc(`CLS\r\nBITMAP 0,0,${wb},${H},0,`), out, enc(`\r\nPRINT 1,${Math.max(1, copies | 0)}\r\n`));
@@ -456,8 +460,10 @@ export async function printerStatus() {
 }
 
 /** Yazıcıya etiket boyunu ve aralığını yeniden ölçtürür (GAPDETECT). */
+// Düz fiş kâğıdında GAP 0 (sürekli kâğıt): yazıcı etiket aralığı aramaz. Etiket rulosunda GAPDETECT ile ölçer.
 export async function calibratePrinter(cfg = getPrinter()) {
-  await sendBytes(enc(`SIZE ${cfg.width} mm,${cfg.height} mm\r\nGAP ${cfg.gap} mm,0 mm\r\nGAPDETECT\r\n`));
+  if (isRoll(cfg)) await sendBytes(enc(`SIZE ${receiptPrintWidth(cfg.receiptWidth)} mm,40 mm\r\nGAP 0 mm,0 mm\r\n`));
+  else await sendBytes(enc(`SIZE ${cfg.width} mm,${cfg.height} mm\r\nGAP ${cfg.gap} mm,0 mm\r\nGAPDETECT\r\n`));
 }
 
 /** Yazıcının kendi ayarlarını fabrika değerlerine döndürür (INITIALPRINTER). */

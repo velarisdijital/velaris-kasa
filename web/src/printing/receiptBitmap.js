@@ -1,7 +1,7 @@
 // Satış fişini Bluetooth (TSPL) yazıcıya basar: fiş resim olarak çizilir (Türkçe karakterler sorunsuz).
 // Etiket rulosunda fiş, etiket boyunda sayfalara bölünür; sürekli rulo (fiş kâğıdı) seçiliyse tek parça basılır.
 import { dt, METHOD_LABELS, plain, qty } from '../format.js';
-import { getPrinter, sendLabels } from './labelPrinter.js';
+import { getPrinter, isRoll, receiptPrintWidth, sendLabels } from './labelPrinter.js';
 
 const DOTS_PER_MM = 8;
 const font = (w, s) => `${w} ${s}px Archivo, "Helvetica Neue", Arial, sans-serif`;
@@ -93,13 +93,17 @@ function paint(rows, W, H, top) {
  * paper: 'label' (etiket rulosu: etiket boyunda sayfalar) | 'continuous' (fiş kâğıdı: tek uzun sayfa)
  */
 export function drawReceipt(sale, settings, change = 0, cfg = getPrinter()) {
+  const margin = 10;
+  if (isRoll(cfg)) {
+    // Düz fiş kâğıdı: 56 mm kâğıtta 48 mm basılır; fiş tek parça, içeriği kadar uzun
+    const mm = receiptPrintWidth(cfg.receiptWidth);
+    const W = mm * DOTS_PER_MM;
+    const rows = receiptRows(sale, settings, change, W);
+    const H = rows.reduce((a, r) => a + r.h, 0) + margin * 2 + 80; // sonda yırtma payı
+    return { pages: [paint(rows, W, H, margin)], cfg: { ...cfg, width: mm, height: Math.ceil(H / DOTS_PER_MM), gap: 0 } };
+  }
   const W = Math.round(cfg.width * DOTS_PER_MM);
   const rows = receiptRows(sale, settings, change, W);
-  const margin = 10;
-  if (cfg.receiptPaper === 'continuous') {
-    const H = rows.reduce((a, r) => a + r.h, 0) + margin * 2 + 40;
-    return { pages: [paint(rows, W, H, margin)], cfg: { ...cfg, height: Math.ceil(H / DOTS_PER_MM), gap: 0 } };
-  }
   const H = Math.round(cfg.height * DOTS_PER_MM);
   const pages = [];
   let cur = [];
