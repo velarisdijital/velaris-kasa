@@ -23,8 +23,9 @@ Tek başına çalışır; istenirse **Velaris CRM** ile entegre olur.
 - **Yemek platformları:** Yemeksepeti, Trendyol Go / Yemek, Migros, Getir siparişleri imzalı webhook ile; ürün eşleme,
   kabul / ret, otomatik kabul, durumlar platforma geri bildirilir, online ödeme. Bkz. [docs/YEMEK_PLATFORMLARI.md](docs/YEMEK_PLATFORMLARI.md)
 - **Hazır Türkiye kataloğu:** kurulumda işletme türüne göre hazır ürünler (market ~160, restoran ~55, kafe ~40,
-  berber ~30, genel ~35) ve reçeteler. Gerçek barkod listesi için `node scripts/import-off.mjs` (Open Food Facts, ODbL):
-  kasada bulunamayan barkod önce bu listede internetsiz aranır
+  berber ~30, genel ~35) ve reçeteler. Market kataloğuna Open Food Facts'ten Türkiye'de satılan gerçek barkodlu ürünler
+  eklenir (GitHub Actions → "Türkiye ürün kataloğu", aylık güncellenir; yerelde `node scripts/import-off.mjs`).
+  Kasada bulunamayan barkod önce bu listede internetsiz aranır. Ürün verisi © Open Food Facts katkıcıları, ODbL lisanslı
 - **Reçeteli stok:** ürün satılınca malzemelerin stoğu düşer, maliyet reçeteden hesaplanır
 - **Yetkiler:** kasiyer ve personel için indirim sınırı, fiyat değiştirme, iade, veresiye, iptal/ikram, stok ve gün sonu yetkileri
 - **Müşteri & veresiye:** müşteri kartı, veresiye defteri, limit, tahsilat, bakiye düzeltme

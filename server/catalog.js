@@ -7,6 +7,8 @@
 // Seçenekler (virgülle): st=40 (açılış stoğu), min=10 (kritik stok), fav (hızlı tuş), nostock (stok takibi yok),
 //                        svc=30 (hizmet, dakika), desc=… (QR menü açıklaması)
 
+import OFF_PRODUCTS from './data/tr-products.json' with { type: 'json' };
+
 function ean13(base12) {
   const sum = [...base12].reduce((a, d, i) => a + Number(d) * (i % 2 ? 3 : 1), 0);
   return base12 + ((10 - (sum % 10)) % 10);
@@ -403,8 +405,16 @@ const COLORS = {
   Saç: '#3b82f6', Sakal: '#f59e0b', Bakım: '#ec4899', 'Ürün Satışı': '#22c55e',
 };
 
+// Open Food Facts'ten indirilen gerçek barkodlu ürünler (scripts/import-off.mjs, ODbL). Fiyatlar kategoriye göre yaklaşıktır.
+const marketNames = new Set(MARKET.map((p) => p[0].toLocaleLowerCase('tr')));
+const OFF_MARKET = (Array.isArray(OFF_PRODUCTS) ? OFF_PRODUCTS : [])
+  .filter((p) => p.code && p.name && !marketNames.has(p.name.toLocaleLowerCase('tr')))
+  .map((p) => [p.name, p.category, 'adet', Math.round(p.sell * 0.72), p.sell, p.vat, {
+    barcode: p.code, stock: 6 + (Number(p.code.slice(-2)) % 30), min_stock: 3,
+  }]);
+
 export const CATALOG = {
-  market: { categories: [...cats(MARKET, COLORS), ['Tütün', '#64748b']], products: MARKET },
+  market: { categories: [...cats([...MARKET, ...OFF_MARKET], COLORS), ['Tütün', '#64748b']], products: [...MARKET, ...OFF_MARKET] },
   restoran: { categories: cats(RESTORAN, COLORS), products: RESTORAN, recipes: RESTORAN_RECIPES },
   kafe: { categories: cats(KAFE, COLORS), products: KAFE },
   berber: { categories: cats(BERBER, COLORS), products: BERBER },

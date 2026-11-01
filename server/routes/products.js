@@ -43,17 +43,17 @@ function normalizeProduct(body, existing = {}) {
 }
 
 /** Yerel Türkiye barkod listesi (Open Food Facts'ten, scripts/import-off.mjs). Yoksa boş; VK_BARCODE_DB ile başka dosya. */
-let barcodeCache = null;
+const barcodeCache = new Map();
 export function localBarcodes() {
-  if (barcodeCache) return barcodeCache;
+  const file = process.env.VK_BARCODE_DB || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'tr-barcodes.json');
+  if (barcodeCache.has(file)) return barcodeCache.get(file);
   try {
-    const file = process.env.VK_BARCODE_DB || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'tr-barcodes.json');
     if (!fs.existsSync(file)) return {};
-    barcodeCache = JSON.parse(fs.readFileSync(file, 'utf8'));
+    barcodeCache.set(file, JSON.parse(fs.readFileSync(file, 'utf8')));
   } catch {
     return {};
   }
-  return barcodeCache;
+  return barcodeCache.get(file);
 }
 
 /** Terazi barkodu: PP + 5 hane PLU + 5 hane gram + kontrol hanesi (EAN-13). */
