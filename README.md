@@ -25,7 +25,8 @@ Tek başına çalışır; istenirse **Velaris CRM** ile entegre olur.
 - **Hazır Türkiye kataloğu:** kurulumda işletme türüne göre hazır ürünler (market ~160, restoran ~55, kafe ~40,
   berber ~30, genel ~35) ve reçeteler. Market kataloğuna Open Food Facts'ten Türkiye'de satılan gerçek barkodlu ürünler
   eklenir (GitHub Actions → "Türkiye ürün kataloğu", aylık güncellenir; yerelde `node scripts/import-off.mjs`).
-  Kasada bulunamayan barkod önce bu listede internetsiz aranır. Ürün verisi © Open Food Facts katkıcıları, ODbL lisanslı
+  Kasada bulunamayan barkod önce bu listede internetsiz aranır (şu an ~18.000 Türkiye barkodu, 500 ürünlük hazır vitrin;
+  fiyatlar gramaja göre tahmindir). Ürün verisi © Open Food Facts katkıcıları, ODbL lisanslı
 - **Reçeteli stok:** ürün satılınca malzemelerin stoğu düşer, maliyet reçeteden hesaplanır
 - **Yetkiler:** kasiyer ve personel için indirim sınırı, fiyat değiştirme, iade, veresiye, iptal/ikram, stok ve gün sonu yetkileri
 - **Müşteri & veresiye:** müşteri kartı, veresiye defteri, limit, tahsilat, bakiye düzeltme

@@ -6,3 +6,4 @@ data
 *.db*
 .git
 .license
+server/data/off-raw.json

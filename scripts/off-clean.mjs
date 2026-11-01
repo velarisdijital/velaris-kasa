@@ -34,7 +34,9 @@ function tidy(s) {
   return t;
 }
 function cleanBrand(brands) {
-  const b = tidy(String(brands || '').split(',')[0]);
+  let b = tidy(String(brands || '').split(',')[0]);
+  if (b.length >= 2 && b === b.toLocaleUpperCase('tr')) b = titleCaseTr(b);
+  if (b) b = b[0].toLocaleUpperCase('tr') + b.slice(1);
   if (!b || b.length > 18 || CORP.test(b)) return null;
   return b;
 }
@@ -64,11 +66,44 @@ export function category(r) {
   return CATEGORY_MAP.find(([re]) => re.test(tags))?.[1] || null;
 }
 
+// Vitrin kataloğu Türkçe adlı ürünlerden oluşur (barkod aramasında tüm kayıtlar kullanılır)
+const TR_WORDS = /\b(süt|sut|yoğurt|yogurt|ayran|kefir|peynir|kaşar|tereyağ|krema|su|maden|gazoz|soda|çay|cay|kahve|meyve|suyu|nektar|limonata|bisküvi|biskuvi|kraker|gofret|çikolata|cikolata|kek|cips|çubuk|lokum|helva|sakız|şeker|seker|makarna|spagetti|erişte|şehriye|pirinç|bulgur|un|tuz|salça|salca|ketçap|mayonez|sirke|zeytin|reçel|recel|bal|pekmez|tahin|krem|sucuk|salam|sosis|yumurta|ekmek|lavaş|simit|mercimek|fasulye|nohut|yağ|yag|dondurma|mantı|börek|pul|biber|baharat|kekik|nane|turşu|fındık|fıstık|ceviz|badem|leblebi|kuruyemiş|mısır)\b/i;
+const FOREIGN_WORDS = /\b(with|and|the|flavou?r|getrocknet|grüne|mildes|ohne|mit|und|de|la|le|aux|goût|sans|confiture|chewing|wafers?|cookies?|cream|milk|chocolate|cake|oat|bar)\b/i;
+export const turkishName = (s) => (/[çğıöşüÇĞİÖŞÜ]/.test(s) || TR_WORDS.test(s)) && !FOREIGN_WORDS.test(s);
+
+// Gramaja göre yaklaşık fiyat (TL, 2026; kg ya da litre başına). Yalnızca örnek kurulum ve demo içindir.
+// Anahtar kelime kelimenin başında aranır ("Çikolata" içindeki "kola" eşleşmesin)
+const w = (alts) => new RegExp(`(?<![\\p{L}])(${alts})`, 'iu');
+const PER_KG = [
+  [w('kaşar|tulum|lor|labne|krem peynir|peynir'), 420], [w('tereyağ'), 650], [w('yoğurt|yogurt|ayran|kefir'), 85], [w('süt|sut'), 48],
+  [w('bal(?![\\p{L}])'), 550], [w('zeytin'), 260], [w('reçel|marmelat'), 210], [w('tahin|pekmez'), 280], [w('fındık kreması|kakaolu fındık'), 380],
+  [w('sucuk|salam|sosis|pastırma'), 600], [w('çikolata|cikolata'), 650], [w('bisküvi|biskuvi|kraker|gofret|kurabiye|kek(?![\\p{L}])'), 280],
+  [w('cips|çubuk'), 380], [w('lokum|helva'), 300], [w('fıstık|fındık|badem|ceviz|leblebi'), 600],
+  [w('maden suyu|soda'), 70], [w('su(?![\\p{L}])|kaynak suyu'), 18], [w('meyve suyu|nektar|meyveli'), 60], [w('kola(?![\\p{L}])|gazoz|gazlı'), 45],
+  [w('çay(?![\\p{L}])|cay(?![\\p{L}])'), 380], [w('kahve'), 900],
+  [w('makarna|spagetti|erişte|şehriye'), 58], [w('bulgur|pirinç|mercimek|fasulye|nohut'), 75], [w('salça|salca'), 110],
+  [w('ketçap|mayonez|hardal'), 150], [w('yağ(?![\\p{L}])|yag(?![\\p{L}])|ayçiçek'), 120], [w('un(?![\\p{L}])'), 35],
+];
+const DEFAULT_PER_KG = { 'Süt Ürünleri': 120, Kahvaltılık: 300, İçecek: 45, Atıştırmalık: 350, Gıda: 90, Fırın: 80, Dondurulmuş: 180, Manav: 50, Bebek: 600 };
+export function estimatePrice(name, cat) {
+  const m = name.match(/(\d+(?:[.,]\d+)?)\s?(?:x\s?(\d+(?:[.,]\d+)?)\s?)?(kg|g|gr|l|lt|ml|cl)\b/i);
+  if (!m) return PRICE[cat];
+  const n = (s) => Number(String(s).replace(',', '.'));
+  let qty = m[2] ? n(m[1]) * n(m[2]) : n(m[1]);
+  const unit = m[3].toLowerCase();
+  qty = unit === 'kg' || unit === 'l' || unit === 'lt' ? qty : unit === 'cl' ? qty / 100 : qty / 1000;
+  if (!(qty > 0) || qty > 20) return PRICE[cat];
+  const perKg = PER_KG.find(([re]) => re.test(name))?.[1] ?? DEFAULT_PER_KG[cat] ?? 150;
+  return Math.max(5, Math.round(perKg * qty)) - 0.1; // 34,90 gibi
+}
+const CAP = { Atıştırmalık: 140, İçecek: 110, 'Süt Ürünleri': 90, Kahvaltılık: 70, Gıda: 90, Fırın: 30, Dondurulmuş: 30, Manav: 20, Bebek: 20 };
+
 /** Ham kayıtlar (okutulma sırasıyla) → { barcodes, products } */
 export function clean(rawList, { top = 500 } = {}) {
   const barcodes = {};
   const products = [];
   const seen = new Set();
+  const perCat = {};
   for (const r of rawList) {
     const code = String(r.code || '');
     if (!/^\d{8,14}$/.test(code) || !isTurkish(r)) continue;
@@ -77,9 +112,10 @@ export function clean(rawList, { top = 500 } = {}) {
     barcodes[code] = name;
     const cat = category(r);
     const key = lowerTr(name);
-    if (cat && products.length < top && !seen.has(key)) {
+    if (cat && products.length < top && !seen.has(key) && turkishName(name) && (perCat[cat] || 0) < (CAP[cat] ?? 50)) {
       seen.add(key);
-      products.push({ code, name, category: cat, sell: PRICE[cat], vat: VAT[cat] ?? 1 });
+      perCat[cat] = (perCat[cat] || 0) + 1;
+      products.push({ code, name, category: cat, sell: estimatePrice(name, cat), vat: VAT[cat] ?? 1 });
     }
   }
   return { barcodes, products };

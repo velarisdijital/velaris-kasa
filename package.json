@@ -52,7 +52,8 @@
       "server/**",
       "electron/**",
       "package.json",
-      "!**/*.map"
+      "!**/*.map",
+      "!server/data/off-raw.json"
     ],
     "asarUnpack": [
       "node_modules/better-sqlite3/**"
