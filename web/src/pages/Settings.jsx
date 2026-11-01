@@ -130,7 +130,7 @@ function Business() {
         <Field label="İşletme adı"><input className="input" required value={f.business_name} onChange={set('business_name')} /></Field>
         <Field label="İşletme türü">
           <select className="input" value={f.business_type} onChange={set('business_type')}>
-            <option value="market">Market / Bakkal</option><option value="berber">Berber / Kuaför</option><option value="kafe">Kafe / Büfe</option><option value="genel">Genel</option>
+            <option value="market">Market / Bakkal</option><option value="berber">Berber / Kuaför</option><option value="kafe">Kafe / Büfe</option><option value="restoran">Restoran / Lokanta</option><option value="genel">Genel</option>
           </select>
         </Field>
         <Field label="Telefon"><input className="input" value={f.business_phone} onChange={set('business_phone')} /></Field>

@@ -6,7 +6,8 @@ import { Field, useToast } from '../components/ui.jsx';
 const TYPES = [
   { id: 'market', label: 'Market / Bakkal', desc: 'Barkodlu ürünler, terazi, stok takibi' },
   { id: 'berber', label: 'Berber / Kuaför', desc: 'Hizmetler, randevu, personel primi' },
-  { id: 'kafe', label: 'Kafe / Büfe', desc: 'Hızlı tuşlar, stoksuz ürünler' },
+  { id: 'kafe', label: 'Kafe / Büfe', desc: 'Masalar, QR menü, hızlı tuşlar' },
+  { id: 'restoran', label: 'Restoran / Lokanta', desc: 'Masa ve garson, paket servis, reçeteli stok' },
   { id: 'genel', label: 'Genel', desc: 'Diğer tüm işletmeler' },
 ];
 

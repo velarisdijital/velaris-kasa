@@ -1,3 +1,5 @@
+import { refreshRecipeCosts } from './stock.js';
+
 // İşletme türüne göre ilk kurulumda eklenen kategori ve örnek ürünler.
 // Fiyatlar TL cinsindendir, kayıt sırasında kuruşa çevrilir.
 
@@ -5,6 +7,7 @@ export const BUSINESS_TYPES = {
   market: { label: 'Market / Bakkal', appointments: false },
   berber: { label: 'Berber / Kuaför / Güzellik', appointments: true },
   kafe: { label: 'Kafe / Büfe', appointments: false, tables: true },
+  restoran: { label: 'Restoran / Lokanta', appointments: false, tables: true, tableLayout: [['Salon', 8], ['Bahçe', 4]], delivery: true },
   genel: { label: 'Genel Perakende', appointments: false },
 };
 
@@ -50,6 +53,41 @@ export const PRESETS = {
       ['Cheesecake', 'Tatlı', 'adet', 40, 120, 10, { stock: 8, min_stock: 2 }],
     ],
   },
+  restoran: {
+    categories: [['Çorbalar', '#d97706'], ['Izgaralar', '#dc2626'], ['Ana Yemekler', '#b45309'], ['Salata & Meze', '#16a34a'],
+      ['Tatlılar', '#db2777'], ['İçecekler', '#3b82f6'], ['Malzeme', '#64748b']],
+    products: [
+      ['Mercimek Çorbası', 'Çorbalar', 'adet', 18, 90, 10, { track_stock: 0, favorite: 1 }],
+      ['Ezogelin Çorbası', 'Çorbalar', 'adet', 18, 90, 10, { track_stock: 0 }],
+      ['Adana Kebap', 'Izgaralar', 'adet', 0, 380, 10, { favorite: 1 }],
+      ['Urfa Kebap', 'Izgaralar', 'adet', 0, 380, 10, {}],
+      ['Tavuk Şiş', 'Izgaralar', 'adet', 0, 300, 10, { favorite: 1 }],
+      ['Izgara Köfte', 'Izgaralar', 'adet', 0, 320, 10, { favorite: 1 }],
+      ['Kuru Fasulye', 'Ana Yemekler', 'adet', 45, 180, 10, { track_stock: 0 }],
+      ['Pilav', 'Ana Yemekler', 'adet', 0, 80, 10, { favorite: 1 }],
+      ['Çoban Salata', 'Salata & Meze', 'adet', 25, 110, 10, { track_stock: 0 }],
+      ['Humus', 'Salata & Meze', 'adet', 30, 120, 10, { track_stock: 0 }],
+      ['Künefe', 'Tatlılar', 'adet', 70, 220, 10, { stock: 20, min_stock: 5, favorite: 1 }],
+      ['Sütlaç', 'Tatlılar', 'adet', 30, 120, 10, { stock: 15, min_stock: 4 }],
+      ['Ayran', 'İçecekler', 'adet', 12, 40, 10, { stock: 60, min_stock: 12, favorite: 1 }],
+      ['Kola 330 ml', 'İçecekler', 'adet', 25, 60, 20, { stock: 48, min_stock: 12 }],
+      ['Su 500 ml', 'İçecekler', 'adet', 5, 20, 10, { stock: 80, min_stock: 24 }],
+      ['Çay', 'İçecekler', 'adet', 2, 25, 10, { track_stock: 0, favorite: 1 }],
+      // Malzemeler (satılmaz; reçetelerle stoktan düşer)
+      ['Kıyma', 'Malzeme', 'kg', 650, 0, 1, { stock: 12, min_stock: 3 }],
+      ['Tavuk But', 'Malzeme', 'kg', 280, 0, 1, { stock: 10, min_stock: 3 }],
+      ['Lavaş', 'Malzeme', 'adet', 5, 0, 1, { stock: 200, min_stock: 40 }],
+      ['Pirinç', 'Malzeme', 'kg', 70, 0, 1, { stock: 15, min_stock: 4 }],
+    ],
+    // Reçeteler: 1 porsiyon için malzeme miktarı
+    recipes: [
+      ['Adana Kebap', [['Kıyma', 0.18], ['Lavaş', 2]]],
+      ['Urfa Kebap', [['Kıyma', 0.18], ['Lavaş', 2]]],
+      ['Tavuk Şiş', [['Tavuk But', 0.2], ['Lavaş', 1]]],
+      ['Izgara Köfte', [['Kıyma', 0.15], ['Lavaş', 1]]],
+      ['Pilav', [['Pirinç', 0.1]]],
+    ],
+  },
   genel: {
     categories: [['Genel', '#3b82f6'], ['Hizmet', '#22c55e']],
     products: [
@@ -83,5 +121,20 @@ export function seedPreset(db, type) {
       track_stock: isService ? 0 : (extra.track_stock ?? 1),
       duration_min: extra.duration_min ?? null, favorite: extra.favorite ?? 0,
     });
+  }
+  // Açılış stokları Merkez şubesine de yazılır (şube stoğu toplamla tutarlı olsun)
+  db.prepare(`INSERT OR REPLACE INTO branch_stock (product_id, branch_id, stock)
+    SELECT id, 1, stock FROM products WHERE track_stock = 1 AND stock != 0`).run();
+  // Reçeteler
+  const byName = (n) => db.prepare('SELECT * FROM products WHERE name = ?').get(n);
+  if (preset.recipes) {
+    const ins = db.prepare('INSERT INTO recipe_items (product_id, component_id, qty) VALUES (?, ?, ?)');
+    for (const [name, parts] of preset.recipes) {
+      const p = byName(name);
+      if (!p) continue;
+      for (const [c, q] of parts) { const comp = byName(c); if (comp) ins.run(p.id, comp.id, q); }
+      db.prepare('UPDATE products SET track_stock = 0 WHERE id = ?').run(p.id);
+    }
+    refreshRecipeCosts(db);
   }
 }

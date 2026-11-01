@@ -131,9 +131,10 @@ async function seedData(type) {
   seedN = 7;
   const berber = type === 'berber';
   const kafe = type === 'kafe';
+  const resto = type === 'restoran';
   const { token } = await call('POST', '/setup', {
-    business_name: berber ? 'Makas Erkek Kuaförü' : kafe ? 'Köşe Kahve' : 'Yıldız Market', business_type: type,
-    admin_name: berber ? 'Hasan Usta' : kafe ? 'Selin Aydın' : 'Ali Yıldız', admin_pin: '1234', seed_samples: true,
+    business_name: berber ? 'Makas Erkek Kuaförü' : kafe ? 'Köşe Kahve' : resto ? 'Lezzet Sofrası' : 'Yıldız Market', business_type: type,
+    admin_name: berber ? 'Hasan Usta' : kafe ? 'Selin Aydın' : resto ? 'Mert Demir' : 'Ali Yıldız', admin_pin: '1234', seed_samples: true,
     business_phone: '0212 555 00 00',
   });
   const T = token;
@@ -277,6 +278,7 @@ async function seedData(type) {
     await call('PUT', `/deliveries/${p2.id}`, { delivery_status: 'ready' }, T);
     await call('POST', '/platforms/simulate', { platform: 'yemeksepeti' }, T);
   }
+  if (resto) await seedRestaurant(T, products);
   if (type === 'market') {
     const debtor = (await call('GET', '/customers?debt=1', null, T))[0];
     if (debtor) await call('POST', `/customers/${debtor.id}/payment`, { amount: Math.min(debtor.balance, 10000), method: 'cash', register_name: 'Kasa 1' }, T);
@@ -309,4 +311,68 @@ async function seedData(type) {
     }
   }
   await call('POST', '/auth/logout', {}, T);
+}
+
+
+/**
+ * Restoran örneği: iki garson (Burak PIN 2222, Elif PIN 3333) masalarda sipariş alıyor; dolu ve kapanmış masalar,
+ * ikram, hesap isteği, QR menü istekleri, paket servis ve kabul bekleyen Trendyol Go siparişi.
+ */
+async function seedRestaurant(T, products) {
+  const byName = (n) => products.find((x) => x.name === n);
+  const item = (n, qty, note) => ({ product_id: byName(n).id, qty, note });
+  await call('PUT', '/settings', { qrmenu_enabled: '1', qrmenu_orders: '1', qrmenu_note: 'Afiyet olsun! Wi-Fi: LezzetSofrasi · şifre: sofra2026',
+    delivery_fee: '2000', delivery_couriers: 'Murat, Deniz', platforms_enabled: '1', platform_prep_minutes: '25' }, T);
+  for (const [n, d] of [['Adana Kebap', 'Zırh kıyması, közlenmiş biber ve domatesle'], ['Urfa Kebap', 'Acısız, közlenmiş sebzeyle'],
+    ['Tavuk Şiş', 'Marine tavuk but, bulgur pilavıyla'], ['Izgara Köfte', 'Piyaz ve közlenmiş biberle'], ['Künefe', 'Hatay usulü, sıcak servis'],
+    ['Mercimek Çorbası', 'Limon ve kıtır ekmekle']]) {
+    const p = byName(n);
+    if (p) await call('PUT', `/products/${p.id}`, { ...p, menu_description: d }, T);
+  }
+  // Garsonlar
+  const garson = {};
+  for (const [name, pin, color] of [['Burak', '2222', '#7B5CFF'], ['Elif', '3333', '#20C4A0']]) {
+    const u = await call('POST', '/users', { name, role: 'staff', pin, color }, T);
+    garson[name] = (await call('POST', '/auth/login', { user_id: u.id, pin })).token;
+  }
+  const tables = await call('GET', '/tables', null, T);
+  const open = async (who, ti, guests, lines, send = true) => {
+    const t = await call('POST', `/tables/${tables[ti].id}/ticket`, { guest_count: guests, items: lines }, garson[who]);
+    if (send) await call('POST', `/tickets/${t.id}/kitchen`, {}, garson[who]);
+    return t;
+  };
+  // Bugün kapanmış masalar (garson raporu için)
+  const pay = async (t, method) => {
+    const full = await call('GET', `/tickets/${t.id}`, null, T);
+    const live = full.items.filter((i) => !i.void_at);
+    await call('POST', '/sales', { register_name: 'Kasa 1', ticket_id: t.id,
+      items: live.map((i) => ({ product_id: i.product_id, name: i.name, qty: i.qty, unit_price: i.unit_price, vat_rate: i.vat_rate, ticket_item_id: i.id })),
+      payments: [{ method, amount: method === 'cash' ? Math.ceil(full.total / 10000) * 10000 : full.total }] }, T);
+  };
+  await pay(await open('Burak', 1, 2, [item('Izgara Köfte', 2), item('Pilav', 2), item('Ayran', 2)]), 'card');
+  await pay(await open('Elif', 6, 3, [item('Kuru Fasulye', 3), item('Pilav', 3), item('Çay', 3)]), 'cash');
+  // Dolu masalar
+  const m1 = await open('Burak', 0, 4, [item('Adana Kebap', 2, 'acılı'), item('Mercimek Çorbası', 2), item('Çoban Salata', 1), item('Ayran', 4)]);
+  await call('POST', `/tickets/${m1.id}/items`, { items: [item('Künefe', 2)] }, garson.Burak); // tatlı: henüz mutfağa gitmedi
+  const m3 = await open('Elif', 2, 2, [item('Tavuk Şiş', 1), item('Izgara Köfte', 1), item('Pilav', 2), item('Kola 330 ml', 2)]);
+  await call('POST', `/tickets/${m3.id}/bill-request`, {}, garson.Elif);
+  const m5 = await open('Burak', 4, 6, [item('Urfa Kebap', 3), item('Adana Kebap', 3), item('Humus', 2), item('Ayran', 6)]);
+  const ayran = m5.items.find((i) => i.name === 'Ayran');
+  await call('POST', `/tickets/${m5.id}/items/${ayran.id}/void`, { qty: 1, reason: 'İkram' }, T);
+  await open('Elif', 9, 2, [item('Çay', 2)], false);
+  // Masadan QR ile: garson çağırma ve sipariş isteği
+  await call('POST', '/public/menu/request', { t: tables[5].qr_token, type: 'waiter' });
+  await call('POST', '/public/menu/request', { t: tables[11].qr_token, type: 'order', items: [{ product_id: byName('Mercimek Çorbası').id, qty: 2 }, { product_id: byName('Tavuk Şiş').id, qty: 1, note: 'pilavsız' }] });
+  // Gerçekçi süreler: masalar farklı saatlerde açılmış olsun
+  db.exec(`UPDATE tickets SET opened_at = datetime('now','localtime', '-' || (12 + (id % 5) * 14) || ' minutes') WHERE kind = 'table' AND status = 'open';
+           UPDATE tickets SET opened_at = datetime('now','localtime', '-150 minutes'), closed_at = datetime('now','localtime', '-95 minutes') WHERE kind = 'table' AND status = 'closed';
+           UPDATE ticket_items SET created_at = (SELECT opened_at FROM tickets WHERE tickets.id = ticket_id),
+             sent_at = CASE WHEN sent_at IS NULL THEN NULL ELSE datetime((SELECT opened_at FROM tickets WHERE tickets.id = ticket_id), '+3 minutes') END;`);
+  // Paket servis: telefonla gelen (hazırlanıyor) ve Trendyol Go siparişi (kabul bekliyor)
+  const p1 = await call('POST', '/deliveries', { kind: 'delivery', source: 'phone', customer_name: 'Fatma Demir', phone: '0544 222 33 44',
+    address: 'Caferağa Mah. Moda Cad. 112 D:7, Kadıköy', delivery_note: 'Kapıda kartla ödeyecek', payment_hint: 'Kapıda kart', delivery_fee: 2000,
+    items: [item('Adana Kebap', 2), item('Pilav', 2), item('Ayran', 2)] }, T);
+  await call('POST', `/tickets/${p1.id}/kitchen`, {}, T);
+  await call('PUT', `/deliveries/${p1.id}`, { delivery_status: 'preparing' }, T);
+  await call('POST', '/platforms/simulate', { platform: 'trendyol' }, T);
 }
