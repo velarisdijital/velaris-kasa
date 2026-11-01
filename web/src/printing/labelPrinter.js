@@ -82,8 +82,32 @@ export async function scanNearby(onFound, ms = 12000) {
   return stop;
 }
 
+/**
+ * Yakındaki klasik Bluetooth cihazlarını arar (eşleşmeye açık yazıcılar BLE taramasında görünmeyebilir).
+ * Yalnızca Android uygulamasında. stop() döner; arama ms sonunda kendiliğinden biter.
+ */
+export async function discoverClassic(onFound, ms = 12000) {
+  if (!isNative()) return { done: Promise.resolve({ devices: [] }), stop: async () => {} };
+  const c = await classic();
+  const handle = await c.addListener('deviceFound', (d) => onFound({
+    deviceId: d.address, name: d.name || '', type: d.type, rssi: d.rssi, classic: true, paired: !!d.bonded,
+  }));
+  const done = c.discover({ timeout: ms }).finally(() => handle.remove());
+  done.catch(() => {});
+  return { done, stop: async () => { try { await handle.remove(); } catch { /* yok say */ } } };
+}
+
+/** Klasik Bluetooth cihazıyla eşleşir (tablet eşleştirme penceresi açabilir; PIN genelde 0000 ya da 1234). */
+export async function bondDevice(address) {
+  await (await classic()).bond({ address });
+}
+
 /** Listeden seçilen cihazı yazıcı olarak kaydeder ve bağlanır. */
 export async function usePrinterDevice(dev) {
+  if (dev.classic && !dev.paired && dev.type !== 2) {
+    await bondDevice(dev.deviceId);
+    dev = { ...dev, paired: true };
+  }
   savePrinter({ deviceId: dev.deviceId, name: dev.name || dev.deviceId, service: null, characteristic: null, noResponse: false,
     transport: transportFor(dev), paired: !!dev.paired, btType: dev.type ?? null });
   return connectPrinter();

@@ -540,23 +540,41 @@ function LabelPrinterSettings() {
   if (!lp || !cfg) return null;
   const openPicker = async () => {
     if (!lp.isNative()) return run(async () => { await lp.choosePrinter(); setDiag(await lp.connectPrinter()); }, 'Yazıcı bağlandı');
-    const state = { paired: [], nearby: [], scanning: true };
+    const state = { paired: [], nearby: [], classic: [], scanning: true, classicScanning: true };
     setPicker({ ...state });
     try { state.paired = await lp.pairedDevices(); setPicker({ ...state }); } catch (e) { toast.err(e.message || String(e)); }
+    const sortList = (list) => list.sort((a, b) => Number(lp.looksLikePrinter(b.name)) - Number(lp.looksLikePrinter(a.name)) || (b.rssi || -999) - (a.rssi || -999));
+    // Klasik Bluetooth araması: eşleşmeye açık yazıcılar burada görünür
+    try {
+      const { done } = await lp.discoverClassic((d) => {
+        if (state.paired.some((x) => x.deviceId === d.deviceId)) return;
+        const rest = state.classic.filter((x) => x.deviceId !== d.deviceId);
+        if (!d.name && rest.length !== state.classic.length) return;
+        state.classic = sortList([...rest, d]);
+        setPicker((p) => (p ? { ...state } : p));
+      }, 15000);
+      done.then((r) => { if (!state.classic.length && r && r.locationOn === false) toast.err('Cihaz bulunamadı. Tabletin Konum (GPS) ayarını açıp tekrar arayın.'); })
+        .catch((e) => toast.err(`Klasik Bluetooth araması: ${e.message || e}`))
+        .finally(() => { state.classicScanning = false; setPicker((p) => (p ? { ...state } : p)); });
+    } catch (e) { state.classicScanning = false; setPicker({ ...state }); toast.err(`Klasik Bluetooth araması başlatılamadı: ${e.message || e}`); }
     try {
       const stop = await lp.scanNearby((d) => {
         if (state.paired.some((x) => x.deviceId === d.deviceId) || state.nearby.some((x) => x.deviceId === d.deviceId)) return;
-        state.nearby = [...state.nearby, d].sort((a, b) => Number(lp.looksLikePrinter(b.name)) - Number(lp.looksLikePrinter(a.name)) || (b.rssi || -999) - (a.rssi || -999));
-        setPicker({ ...state });
+        state.nearby = sortList([...state.nearby, d]);
+        setPicker((p) => (p ? { ...state } : p));
       });
       setTimeout(() => { state.scanning = false; setPicker((p) => (p ? { ...state } : p)); stop(); }, 12000);
     } catch (e) { state.scanning = false; setPicker({ ...state }); toast.err(`Tarama başlatılamadı: ${e.message || e}`); }
   };
-  const pick = (d) => { setPicker(null); run(async () => setDiag(await lp.usePrinterDevice(d)), `${d.name || 'Yazıcı'} bağlandı`); };
+  const pick = (d) => {
+    setPicker(null);
+    if (d.classic && !d.paired) toast.ok('Eşleştirme isteniyor… Tablette çıkan pencerede "Eşleştir"e basın (PIN sorarsa 0000 ya da 1234).');
+    run(async () => setDiag(await lp.usePrinterDevice(d)), `${d.name || 'Yazıcı'} bağlandı`);
+  };
   const DeviceRow = ({ d }) => (
     <button type="button" className="dropdown-item" onClick={() => pick(d)} style={{ border: '1px solid var(--border)', marginBottom: 6, background: lp.looksLikePrinter(d.name) ? 'var(--primary-soft)' : 'var(--panel)' }}>
       <span><b>{d.name || 'İsimsiz cihaz'}</b>{lp.looksLikePrinter(d.name) && <span className="badge blue" style={{ marginLeft: 6 }}>yazıcı</span>}</span>
-      <span className="muted small-text">{d.paired ? `eşleşmiş${d.type ? ` · ${lp.BT_TYPES[d.type] || ''}` : ''}` : d.rssi ? `BLE · sinyal ${d.rssi}` : 'BLE'} · {d.deviceId}</span>
+      <span className="muted small-text">{d.paired ? `eşleşmiş${d.type ? ` · ${lp.BT_TYPES[d.type] || ''}` : ''}` : d.classic ? `${lp.BT_TYPES[d.type] || 'klasik'} · dokunun, eşleşsin` : d.rssi ? `BLE · sinyal ${d.rssi}` : 'BLE'} · {d.deviceId}</span>
     </button>
   );
   const set = (k, v) => { const n = { ...cfg, [k]: v }; setCfg(n); lp.savePrinter({ [k]: v }); };
@@ -583,11 +601,13 @@ function LabelPrinterSettings() {
           </div>
           {picker && (
             <div className="card card-pad stack" style={{ gap: 6 }}>
-              <div className="row"><strong style={{ flex: 1 }}>Yazıcıyı seçin</strong>{picker.scanning && <span className="muted small-text">aranıyor…</span>}
+              <div className="row"><strong style={{ flex: 1 }}>Yazıcıyı seçin</strong>{(picker.scanning || picker.classicScanning) && <span className="muted small-text">aranıyor…</span>}
                 <button type="button" className="btn small ghost" onClick={() => setPicker(null)}>Kapat</button></div>
               <div className="muted small-text">Tabletle eşleşmiş cihazlar</div>
               {picker.paired.length ? picker.paired.map((d) => <DeviceRow key={d.deviceId} d={d} />) : <div className="muted small-text">Eşleşmiş cihaz yok</div>}
-              <div className="muted small-text" style={{ marginTop: 6 }}>Yakındaki cihazlar</div>
+              <div className="muted small-text" style={{ marginTop: 6 }}>Eşleşmeye açık cihazlar (klasik Bluetooth)</div>
+              {picker.classic.length ? picker.classic.map((d) => <DeviceRow key={`c-${d.deviceId}`} d={d} />) : <div className="muted small-text">{picker.classicScanning ? 'Aranıyor… Yazıcıyı eşleşme moduna alın.' : 'Bulunamadı.'}</div>}
+              <div className="muted small-text" style={{ marginTop: 6 }}>Yakındaki cihazlar (BLE)</div>
               {picker.nearby.length ? picker.nearby.map((d) => <DeviceRow key={d.deviceId} d={d} />) : <div className="muted small-text">{picker.scanning ? 'Aranıyor… Yazıcının açık olduğundan emin olun.' : 'Bulunamadı. Yazıcıyı kapatıp açın; tabletin Konum ayarı kapalıysa açın.'}</div>}
             </div>
           )}
