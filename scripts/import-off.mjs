@@ -38,14 +38,14 @@ for (let page = 1; page <= pages; page++) {
     + '&fields=code,product_name,product_name_tr,brands,quantity,categories_tags,unique_scans_n'
     + `&page_size=100&page=${page}&sort_by=unique_scans_n`;
   let json;
-  for (let attempt = 1; attempt <= 3 && !json; attempt++) {
+  for (let attempt = 1; attempt <= 4 && !json; attempt++) {
     try {
       const res = await fetch(url, { headers: { 'User-Agent': 'VelarisKasa/1.0 (velarisdijital@gmail.com)' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       json = await res.json();
     } catch (e) {
       console.error(`Sayfa ${page}, deneme ${attempt}: ${e.message}`);
-      await sleep(15000);
+      await sleep(30000 * attempt);
     }
   }
   if (!json) break;

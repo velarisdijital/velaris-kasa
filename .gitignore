@@ -1,7 +1,7 @@
 node_modules/
 dist/
 release/
-data/
+/data/
 *.db
 *.db-wal
 *.db-shm
