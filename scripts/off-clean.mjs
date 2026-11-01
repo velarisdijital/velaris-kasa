@@ -27,8 +27,10 @@ const lowerTr = (s) => s.toLocaleLowerCase('tr');
 function titleCaseTr(s) {
   return lowerTr(s).replace(/(^|[\s(/-])(\p{L})/gu, (m, a, b) => a + b.toLocaleUpperCase('tr'));
 }
+const ENTITIES = { '&quot;': '"', '&amp;': '&', '&#39;': "'", '&apos;': "'", '&lt;': '<', '&gt;': '>', '&nbsp;': ' ' };
+const decode = (s) => String(s || '').replace(/&(quot|amp|#39|apos|lt|gt|nbsp);/g, (m) => ENTITIES[m]).replace(/["“”]/g, '').replace(/\s+/g, ' ');
 function tidy(s) {
-  let t = String(s || '').replace(/\s+/g, ' ').trim();
+  let t = decode(s).trim();
   const letters = t.replace(/[^\p{L}]/gu, '');
   if (letters.length > 4 && letters === letters.toLocaleUpperCase('tr')) t = titleCaseTr(t);
   return t;
