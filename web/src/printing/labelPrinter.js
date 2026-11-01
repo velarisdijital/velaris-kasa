@@ -417,6 +417,43 @@ export function buildTspl(labels, cfg = getPrinter()) {
   return concat(parts);
 }
 
+// TSPL durum baytı (ESC ! ?): her bit bir hata
+const STATUS_BITS = [
+  [0x01, 'Kafa/kapak açık: kapağı "klik" sesi gelene kadar bastırarak kapatın'],
+  [0x02, 'Kâğıt sıkışması ya da etiket aralığı bulunamıyor: ruloyu yeniden takıp "Kalibre et"e basın'],
+  [0x04, 'Kâğıt yok ya da etiket algılanamıyor: ruloyu yeniden takıp "Kalibre et"e basın'],
+  [0x08, 'Ribon yok'],
+  [0x10, 'Yazıcı duraklatılmış (pause): yazıcının tuşuna bir kez basın'],
+  [0x20, 'Yazdırıyor'],
+  [0x80, 'Diğer hata (pil zayıf ya da kafa çok ısındı olabilir)'],
+];
+export function decodeStatus(byte) {
+  if (byte === 0) return { ok: true, text: 'Hazır (hata yok)' };
+  const list = STATUS_BITS.filter(([b]) => byte & b).map(([, t]) => t);
+  return { ok: byte === 0x20, text: list.join(' · ') || `Bilinmeyen durum (${byte})` };
+}
+
+/** Yazıcının durumunu sorar (yalnızca Android uygulamasında, klasik Bluetooth bağlantısında). */
+export async function printerStatus() {
+  const p = getPrinter();
+  if (!p.deviceId) throw new Error('Önce yazıcıyı seçin');
+  if (!isNative() || p.transport !== 'spp') throw new Error('Durum sorgusu yalnızca klasik Bluetooth bağlantısında çalışır');
+  const r = await classicCall('transact', { address: p.deviceId, data: toBase64(new Uint8Array([0x1b, 0x21, 0x3f])), timeout: 2500 }, 20000);
+  if (!r.bytes) return { ok: null, code: null, text: 'Yazıcı durum bilgisi göndermedi (bu model desteklemiyor olabilir)' };
+  const byte = atob(r.data).charCodeAt(0);
+  return { code: byte, ...decodeStatus(byte) };
+}
+
+/** Yazıcıya etiket boyunu ve aralığını yeniden ölçtürür (GAPDETECT). */
+export async function calibratePrinter(cfg = getPrinter()) {
+  await sendBytes(enc(`SIZE ${cfg.width} mm,${cfg.height} mm\r\nGAP ${cfg.gap} mm,0 mm\r\nGAPDETECT\r\n`));
+}
+
+/** Yazıcının kendi ayarlarını fabrika değerlerine döndürür (INITIALPRINTER). */
+export async function resetPrinter() {
+  await sendBytes(enc('INITIALPRINTER\r\n'));
+}
+
 /** Ürün etiketlerini Bluetooth yazıcıya basar. */
 export async function printLabels(products, { copies = 1, business = '', kind } = {}) {
   const cfg = { ...getPrinter(), ...(kind ? { kind } : {}) };

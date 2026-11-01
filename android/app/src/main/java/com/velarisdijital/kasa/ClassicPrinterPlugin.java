@@ -128,6 +128,59 @@ public class ClassicPrinterPlugin extends Plugin {
         }).start();
     }
 
+    /** Yazıcıya komut gönderir ve yanıtını okur (ör. TSPL durum sorgusu ESC ! ?). */
+    @PluginMethod
+    public void transact(PluginCall call) {
+        if (needsPermission()) { requestPermissionForAlias("bt", call, "btPermsTransact"); return; }
+        doTransact(call);
+    }
+
+    @PermissionCallback
+    private void btPermsTransact(PluginCall call) {
+        if (needsPermission()) { call.reject("Bluetooth izni verilmedi"); return; }
+        doTransact(call);
+    }
+
+    private void doTransact(PluginCall call) {
+        final String address = call.getString("address");
+        final String data = call.getString("data");
+        final int wait = call.getInt("timeout", 2000);
+        if (address == null || data == null) { call.reject("Adres ve veri gerekli"); return; }
+        new Thread(() -> {
+            try {
+                BluetoothSocket s = connect(address);
+                java.io.InputStream in = s.getInputStream();
+                while (in.available() > 0) in.read(new byte[in.available()]); // eski yanıtları at
+                OutputStream out = s.getOutputStream();
+                out.write(Base64.decode(data, Base64.DEFAULT));
+                out.flush();
+                java.io.ByteArrayOutputStream got = new java.io.ByteArrayOutputStream();
+                long end = System.currentTimeMillis() + wait;
+                long quietUntil = 0;
+                while (System.currentTimeMillis() < end) {
+                    int n = in.available();
+                    if (n > 0) {
+                        byte[] buf = new byte[n];
+                        int r = in.read(buf);
+                        if (r > 0) got.write(buf, 0, r);
+                        quietUntil = System.currentTimeMillis() + 150;
+                    } else if (quietUntil > 0 && System.currentTimeMillis() > quietUntil) {
+                        break;
+                    } else {
+                        Thread.sleep(20);
+                    }
+                }
+                JSObject r = new JSObject();
+                r.put("data", Base64.encodeToString(got.toByteArray(), Base64.NO_WRAP));
+                r.put("bytes", got.size());
+                call.resolve(r);
+            } catch (Exception e) {
+                closeSocket();
+                call.reject("Yazıcıdan yanıt alınamadı: " + e.getMessage());
+            }
+        }).start();
+    }
+
     @SuppressLint("MissingPermission")
     private synchronized BluetoothSocket connect(String address) throws IOException {
         if (socket != null && socket.isConnected() && address.equals(socketAddress)) return socket;

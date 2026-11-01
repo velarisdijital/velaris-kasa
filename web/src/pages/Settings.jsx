@@ -527,6 +527,7 @@ function LabelPrinterSettings() {
   const [busy, setBusy] = useState(false);
   const [diag, setDiag] = useState(null);
   const [picker, setPicker] = useState(null); // { paired: [], nearby: [], scanning }
+  const [status, setStatus] = useState(null); // yazıcı durum sorgusu sonucu
   useEffect(() => {
     import('../printing/labelPrinter.js').then(async (m) => {
       setLp(m); setCfg(m.getPrinter());
@@ -608,6 +609,15 @@ function LabelPrinterSettings() {
             {cfg.deviceId && lp.isNative() && cfg.receiptVia !== 'system' && <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => { const r = await import('../printing/receiptBitmap.js'); await r.printReceiptBluetooth(r.SAMPLE_SALE, settings, 1010); }, 'Deneme fişi gönderildi')}>Deneme fişi bas</button>}
             {cfg.deviceId && <button type="button" className="btn small ghost danger-text" onClick={() => { lp.forgetPrinter(); setCfg(lp.getPrinter()); setDiag(null); }}>Unut</button>}
           </div>
+          {cfg.deviceId && lp.isNative() && (
+            <div className="row wrap" style={{ gap: 6 }}>
+              <span className="muted small-text" style={{ flex: 1 }}>Yazıcının ışığı kırmızı yanıyorsa:</span>
+              <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => { const s = await lp.printerStatus(); setStatus(s); })}>Yazıcı durumu</button>
+              <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => { await lp.calibratePrinter(); await new Promise((r) => setTimeout(r, 4000)); try { setStatus(await lp.printerStatus()); } catch { /* durum desteklenmiyor */ } }, 'Kalibrasyon komutu gönderildi')}>Kalibre et</button>
+              <button type="button" className="btn small ghost" disabled={busy} onClick={() => run(async () => { await lp.resetPrinter(); setStatus(null); }, 'Yazıcı fabrika ayarlarına döndürüldü; kapatıp açın')}>Yazıcıyı sıfırla</button>
+            </div>
+          )}
+          {status && <div className={`small-text ${status.ok ? 'success-text' : status.ok === false ? 'danger-text' : 'muted'}`}>Yazıcı durumu: {status.text}{status.code != null ? ` (kod ${status.code})` : ''}</div>}
           {picker && (
             <div className="card card-pad stack" style={{ gap: 6 }}>
               <div className="row"><strong style={{ flex: 1 }}>Yazıcıyı seçin</strong>{(picker.scanning || picker.classicScanning) && <span className="muted small-text">aranıyor…</span>}

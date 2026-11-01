@@ -115,6 +115,14 @@ async function saveTsplPages(p, prefix) {
     if (r1.prints < 2) fail(`deneme fişi etiketlere bölünmedi (${r1.prints})`); else ok(`Deneme fişi gönderildi (${r1.prints} etiket, ${r1.bytes} bayt)`);
     if (shots) await saveTsplPages(p, path.join(shots, 'fis'));
 
+    // Kırmızı ışık: durum sorgusu ve kalibrasyon
+    await p.getByRole('button', { name: 'Yazıcı durumu' }).click();
+    await p.getByText(/Yazıcı durumu: Kâğıt yok ya da etiket algılanamıyor/).waitFor({ timeout: 10000 });
+    ok('Yazıcı durumu okundu: etiket algılanamıyor (kod 4)');
+    await p.getByRole('button', { name: 'Kalibre et' }).click();
+    await p.getByText(/Yazıcı durumu: Hazır/).waitFor({ timeout: 15000 });
+    ok('Kalibre et → GAPDETECT gönderildi, yazıcı hazır');
+
     // Kasa: satış yap → "Fiş yazdır" Bluetooth yazıcıya gider
     await p.goto(`${url}#/`);
     await p.waitForTimeout(1500);
