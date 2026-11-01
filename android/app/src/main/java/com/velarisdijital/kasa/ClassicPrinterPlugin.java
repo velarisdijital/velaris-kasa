@@ -277,6 +277,19 @@ public class ClassicPrinterPlugin extends Plugin {
         }).start();
     }
 
+    /** Tabletin Bluetooth ayarları ekranını açar. */
+    @PluginMethod
+    public void openSettings(PluginCall call) {
+        try {
+            Intent i = new Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Bluetooth ayarları açılamadı: " + e.getMessage());
+        }
+    }
+
     @PluginMethod
     public void disconnect(PluginCall call) {
         closeSocket();

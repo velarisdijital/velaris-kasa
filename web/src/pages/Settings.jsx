@@ -542,7 +542,8 @@ function LabelPrinterSettings() {
     if (!lp.isNative()) return run(async () => { await lp.choosePrinter(); setDiag(await lp.connectPrinter()); }, 'Yazıcı bağlandı');
     const state = { paired: [], nearby: [], classic: [], scanning: true, classicScanning: true };
     setPicker({ ...state });
-    try { state.paired = await lp.pairedDevices(); setPicker({ ...state }); } catch (e) { toast.err(e.message || String(e)); }
+    try { state.paired = await lp.pairedDevices(); setPicker({ ...state }); } catch (e) { state.error = e.message || String(e); setPicker({ ...state }); }
+    try { await lp.prepareBluetooth(); } catch (e) { state.error = `Bluetooth izni: ${e.message || e}`; setPicker({ ...state }); }
     const sortList = (list) => list.sort((a, b) => Number(lp.looksLikePrinter(b.name)) - Number(lp.looksLikePrinter(a.name)) || (b.rssi || -999) - (a.rssi || -999));
     // Klasik Bluetooth araması: eşleşmeye açık yazıcılar burada görünür
     try {
@@ -554,7 +555,7 @@ function LabelPrinterSettings() {
         setPicker((p) => (p ? { ...state } : p));
       }, 15000);
       done.then((r) => { if (!state.classic.length && r && r.locationOn === false) toast.err('Cihaz bulunamadı. Tabletin Konum (GPS) ayarını açıp tekrar arayın.'); })
-        .catch((e) => toast.err(`Klasik Bluetooth araması: ${e.message || e}`))
+        .catch((e) => { state.error = `Klasik Bluetooth araması: ${e.message || e}`; toast.err(state.error); })
         .finally(() => { state.classicScanning = false; setPicker((p) => (p ? { ...state } : p)); });
     } catch (e) { state.classicScanning = false; setPicker({ ...state }); toast.err(`Klasik Bluetooth araması başlatılamadı: ${e.message || e}`); }
     try {
@@ -566,6 +567,7 @@ function LabelPrinterSettings() {
       setTimeout(() => { state.scanning = false; setPicker((p) => (p ? { ...state } : p)); stop(); }, 12000);
     } catch (e) { state.scanning = false; setPicker({ ...state }); toast.err(`Tarama başlatılamadı: ${e.message || e}`); }
   };
+  const state_error = (p) => (p.error ? <div className="small-text danger-text">{p.error}</div> : null);
   const pick = (d) => {
     setPicker(null);
     if (d.classic && !d.paired) toast.ok('Eşleştirme isteniyor… Tablette çıkan pencerede "Eşleştir"e basın (PIN sorarsa 0000 ya da 1234).');
@@ -603,6 +605,12 @@ function LabelPrinterSettings() {
             <div className="card card-pad stack" style={{ gap: 6 }}>
               <div className="row"><strong style={{ flex: 1 }}>Yazıcıyı seçin</strong>{(picker.scanning || picker.classicScanning) && <span className="muted small-text">aranıyor…</span>}
                 <button type="button" className="btn small ghost" onClick={() => setPicker(null)}>Kapat</button></div>
+              {state_error(picker)}
+              <div className="row wrap" style={{ gap: 6 }}>
+                <button type="button" className="btn small" onClick={() => lp.openBluetoothSettings().catch((e) => toast.err(e.message || String(e)))}>Tabletin Bluetooth ayarlarını aç</button>
+                <button type="button" className="btn small ghost" onClick={openPicker}>Listeyi yenile</button>
+              </div>
+              <div className="muted small-text">Listede yoksa: Bluetooth ayarlarından yazıcıyla eşleşin, uygulamaya dönüp “Listeyi yenile”ye basın.</div>
               <div className="muted small-text">Tabletle eşleşmiş cihazlar</div>
               {picker.paired.length ? picker.paired.map((d) => <DeviceRow key={d.deviceId} d={d} />) : <div className="muted small-text">Eşleşmiş cihaz yok</div>}
               <div className="muted small-text" style={{ marginTop: 6 }}>Eşleşmeye açık cihazlar (klasik Bluetooth)</div>

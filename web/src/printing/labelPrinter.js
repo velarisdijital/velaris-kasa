@@ -31,7 +31,8 @@ let webChar = null;
 
 async function ble() {
   const { BleClient } = await import('@capacitor-community/bluetooth-le');
-  await BleClient.initialize({ androidNeverForLocation: true });
+  // Android 12+: konum izni de istenir; yoksa sistem tarama sonuçlarını boş döndürüyor
+  await BleClient.initialize({ androidNeverForLocation: false });
   return BleClient;
 }
 
@@ -95,6 +96,17 @@ export async function discoverClassic(onFound, ms = 12000) {
   const done = c.discover({ timeout: ms }).finally(() => handle.remove());
   done.catch(() => {});
   return { done, stop: async () => { try { await handle.remove(); } catch { /* yok say */ } } };
+}
+
+/** Bluetooth izinlerini tek seferde ister (aynı anda iki izin penceresi açılırsa biri reddediliyor). */
+export async function prepareBluetooth() {
+  if (!isNative()) return;
+  await ble();
+}
+
+/** Tabletin Bluetooth ayarlarını açar (oradan eşleştirilen yazıcı uygulamada "eşleşmiş" listesinde görünür). */
+export async function openBluetoothSettings() {
+  await (await classic()).openSettings();
 }
 
 /** Klasik Bluetooth cihazıyla eşleşir (tablet eşleştirme penceresi açabilir; PIN genelde 0000 ya da 1234). */
