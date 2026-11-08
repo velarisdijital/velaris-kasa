@@ -20,9 +20,11 @@ const kurus = (tl) => Math.round(tl * 100);
 export function seedPreset(db, type) {
   const preset = PRESETS[type] || PRESETS.genel;
   const catIds = {};
-  const insCat = db.prepare('INSERT INTO categories (name, color, sort_order) VALUES (?, ?, ?)');
+  const insCat = db.prepare('INSERT INTO categories (name, color, sort_order, station) VALUES (?, ?, ?, ?)');
+  // Mutfak ekranı: içecekler bar ekranına, hazır paketli ürünler ekrana düşmez; geri kalanı mutfak
+  const stationOf = (name) => (/içecek|kahve|çay|meşrubat|bar\b|kokteyl/i.test(name) ? 'bar' : /tatlı|dondurma|atıştırmalık|paketli|tütün|sigara/i.test(name) && type !== 'restoran' ? 'yok' : 'mutfak');
   preset.categories.forEach(([name, color], i) => {
-    catIds[name] = insCat.run(name, color, i).lastInsertRowid;
+    catIds[name] = insCat.run(name, color, i, stationOf(name)).lastInsertRowid;
   });
   const insProd = db.prepare(`
     INSERT INTO products (name, barcode, category_id, unit, buy_price, sell_price, vat_rate, type, stock, min_stock,

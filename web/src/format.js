@@ -33,4 +33,4 @@ export const d = (s) => (s ? new Date(`${s.slice(0, 10)}T00:00`).toLocaleDateStr
 
 export const METHOD_LABELS = { cash: 'Nakit', card: 'Kart', credit: 'Veresiye', transfer: 'Havale/EFT', points: 'Puan', online: 'Online (platform)' };
 export const FISCAL_LABELS = { none: ['Bilgi fişi', ''], pending: ['Yazarkasada', 'yellow'], done: ['Mali fiş', 'green'], failed: ['Mali fiş basılamadı', 'red'] };
-export const ROLE_LABELS = { admin: 'Yönetici', manager: 'Müdür', cashier: 'Kasiyer', staff: 'Personel' };
+export const ROLE_LABELS = { admin: 'Yönetici', manager: 'Müdür', cashier: 'Kasiyer', staff: 'Personel', kitchen: 'Mutfak' };

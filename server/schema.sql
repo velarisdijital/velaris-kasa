@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   name            TEXT NOT NULL,
   pin_hash        TEXT NOT NULL,
-  role            TEXT NOT NULL DEFAULT 'cashier' CHECK (role IN ('admin','manager','cashier','staff')),
+  role            TEXT NOT NULL DEFAULT 'cashier' CHECK (role IN ('admin','manager','cashier','staff','kitchen')),
   commission_rate REAL NOT NULL DEFAULT 0,          -- hizmet primi yüzdesi (berber vb.)
   color           TEXT,
   active          INTEGER NOT NULL DEFAULT 1,

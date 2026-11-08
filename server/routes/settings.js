@@ -101,7 +101,7 @@ export default function settingsRoutes(db) {
     res.json(db.prepare(`SELECT ${cols} FROM users ORDER BY active DESC, name`).all());
   }));
 
-  const ROLES = ['admin', 'manager', 'cashier', 'staff'];
+  const ROLES = ['admin', 'manager', 'cashier', 'staff', 'kitchen'];
   r.post('/users', allow(), h((req, res) => {
     const lic = currentLicense(db);
     const active = db.prepare('SELECT COUNT(*) AS n FROM users WHERE active = 1').get().n;

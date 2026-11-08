@@ -1043,3 +1043,58 @@ test('yerel Türkiye barkod listesi (internetsiz) ve hazır katalog', async () =
     assert.equal((10 - (sum % 10)) % 10, Number(b[12]), `${p[0]} kontrol hanesi`);
   }
 });
+
+test('mutfak ekranı: gönderilen siparişler, istasyon, hazırlanıyor → hazır (garsona) → teslim; mutfak rolü', async () => {
+  await call('PUT', '/api/settings', { modules_tables: '1' });
+  const [m] = (await call('POST', '/api/tables', { count: 1, prefix: 'KDS', zone: 'Bahçe' })).body;
+  const icecek = (await call('POST', '/api/categories', { name: 'Sıcak İçecek KDS', station: 'bar' })).body;
+  const hazir = (await call('POST', '/api/categories', { name: 'Paketli KDS', station: 'yok' })).body;
+  assert.equal(icecek.station, 'bar');
+  const kofte = (await call('POST', '/api/products', { name: 'Izgara Köfte', sell_price: 25000, vat_rate: 10, track_stock: 0 })).body;
+  const latte = (await call('POST', '/api/products', { name: 'Latte', sell_price: 9000, vat_rate: 10, track_stock: 0, category_id: icecek.id })).body;
+  const su = (await call('POST', '/api/products', { name: 'Su 0,5 L', sell_price: 1500, vat_rate: 10, track_stock: 0, category_id: hazir.id })).body;
+
+  let t = (await call('POST', `/api/tables/${m.id}/ticket`, { guest_count: 2, items: [{ product_id: kofte.id, qty: 2, note: 'az pişmiş' }, { product_id: latte.id, qty: 1 }, { product_id: su.id, qty: 2 }] })).body;
+  // Gönderilmeden ekrana düşmez
+  let k = (await call('GET', '/api/kitchen')).body;
+  assert.ok(!k.tickets.some((x) => x.id === t.id));
+  await call('POST', `/api/tickets/${t.id}/kitchen`);
+
+  k = (await call('GET', '/api/kitchen')).body;
+  let card = k.tickets.find((x) => x.id === t.id);
+  assert.equal(card.label, 'KDS 1');
+  assert.equal(card.status, 'new');
+  assert.deepEqual(card.items.map((i) => i.name).sort(), ['Izgara Köfte', 'Latte']); // su (hazır ürün) ekrana düşmez
+  assert.equal(card.items.find((i) => i.name === 'Izgara Köfte').note, 'az pişmiş');
+  // İstasyon süzgeci
+  assert.deepEqual((await call('GET', '/api/kitchen?station=bar')).body.tickets.find((x) => x.id === t.id).items.map((i) => i.name), ['Latte']);
+  assert.deepEqual((await call('GET', '/api/kitchen?station=mutfak')).body.tickets.find((x) => x.id === t.id).items.map((i) => i.name), ['Izgara Köfte']);
+
+  const kofteItem = card.items.find((i) => i.name === 'Izgara Köfte');
+  assert.equal((await call('POST', '/api/kitchen/status', { ids: [kofteItem.id], status: 'preparing' })).status, 200);
+  card = (await call('GET', '/api/kitchen')).body.tickets.find((x) => x.id === t.id);
+  assert.equal(card.status, 'new'); // latte hâlâ yeni
+  assert.equal((await call('POST', '/api/kitchen/status', { ids: [1], status: 'pişti' })).status, 400);
+
+  // Mutfak rolündeki kullanıcı: ekranı görür, adisyonun tamamını hazır yapar
+  const cook = (await call('POST', '/api/users', { name: 'Aşçı Ahmet', pin: '7777', role: 'kitchen' })).body;
+  assert.equal(cook.role, 'kitchen');
+  const cookToken = (await (await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: cook.id, pin: '7777' }) })).json()).token;
+  const asCook = (method, url, body) => fetch(base + url, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cookToken}` }, body: body ? JSON.stringify(body) : undefined })
+    .then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
+  assert.equal((await asCook('GET', '/api/kitchen')).status, 200);
+  assert.equal((await asCook('POST', '/api/kitchen/status', { ticket_id: t.id, status: 'ready' })).status, 200);
+  assert.equal((await asCook('GET', '/api/reports/summary')).status, 403); // raporları göremez
+
+  // Garson: masada "hazır" görünür
+  const tbl = (await call('GET', '/api/tables')).body.find((x) => x.id === m.id);
+  assert.equal(tbl.ready_count, 2);
+  t = (await call('GET', `/api/tickets/${t.id}`)).body;
+  assert.equal(t.ready_count, 2);
+  assert.equal((await call('GET', '/api/kitchen')).body.tickets.find((x) => x.id === t.id).status, 'ready');
+
+  // Teslim edildi → ekrandan kalkar
+  await call('POST', '/api/kitchen/status', { ticket_id: t.id, status: 'served' });
+  assert.ok(!(await call('GET', '/api/kitchen')).body.tickets.some((x) => x.id === t.id));
+  assert.equal((await call('GET', '/api/tables')).body.find((x) => x.id === m.id).ready_count, 0);
+});

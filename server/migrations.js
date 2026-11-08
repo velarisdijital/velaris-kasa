@@ -330,6 +330,27 @@ const MIGRATIONS = [
   );
   CREATE INDEX idx_platform_events_status ON platform_events(status);
   `,
+  // 13: Mutfak ekranı — "Mutfak" kullanıcı rolü, kalem mutfak durumu, kategori hazırlama yeri (mutfak / bar / yok)
+  `
+  CREATE TABLE users_new (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL,
+    pin_hash        TEXT NOT NULL,
+    role            TEXT NOT NULL DEFAULT 'cashier' CHECK (role IN ('admin','manager','cashier','staff','kitchen')),
+    commission_rate REAL NOT NULL DEFAULT 0,
+    color           TEXT,
+    active          INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  INSERT INTO users_new (id, name, pin_hash, role, commission_rate, color, active, created_at)
+    SELECT id, name, pin_hash, role, commission_rate, color, active, created_at FROM users;
+  DROP TABLE users;
+  ALTER TABLE users_new RENAME TO users;
+  ALTER TABLE ticket_items ADD COLUMN kitchen_status TEXT;        -- new | preparing | ready | served (mutfağa gönderilince new)
+  ALTER TABLE ticket_items ADD COLUMN ready_at TEXT;
+  ALTER TABLE categories ADD COLUMN station TEXT NOT NULL DEFAULT 'mutfak'; -- mutfak | bar | yok (hazır ürün, ekrana düşmez)
+  UPDATE ticket_items SET kitchen_status = 'served' WHERE sent_at IS NOT NULL;
+  `,
 ];
 
 export function migrate(db) {

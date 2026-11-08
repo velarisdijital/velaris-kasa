@@ -518,6 +518,8 @@ function BulkPriceModal({ selected, categories, defaultCategory, onClose, onDone
 function CategoryModal({ categories, onClose, reload }) {
   const toast = useToast();
   const ask = useConfirm();
+  const { settings } = useSession();
+  const kds = settings.modules_tables === '1'; // mutfak ekranı: kategori nerede hazırlanır
   const [name, setName] = useState('');
   const [color, setColor] = useState('#3b82f6');
   const add = async (e) => {
@@ -537,6 +539,14 @@ function CategoryModal({ categories, onClose, reload }) {
             <input type="color" defaultValue={c.color || '#999999'} style={{ width: 44, height: 36, border: 0, background: 'none' }} aria-label="Renk"
               onBlur={(e) => put(`/categories/${c.id}`, { ...c, color: e.target.value }).then(reload)} />
             <input className="input" defaultValue={c.name} onBlur={(e) => e.target.value !== c.name && put(`/categories/${c.id}`, { ...c, name: e.target.value }).then(reload)} />
+            {kds && (
+              <select className="input" style={{ width: 'auto' }} aria-label={`${c.name} hazırlandığı yer`} value={c.station || 'mutfak'}
+                onChange={(e) => put(`/categories/${c.id}`, { ...c, station: e.target.value }).then(reload).catch((err) => toast.err(err))}>
+                <option value="mutfak">Mutfak ekranı</option>
+                <option value="bar">Bar ekranı</option>
+                <option value="yok">Ekrana düşmez</option>
+              </select>
+            )}
             <span className="muted small-text" style={{ whiteSpace: 'nowrap' }}>{c.product_count} ürün</span>
             <button className="btn small" onClick={async () => (await ask(`${c.name} kategorisi silinsin mi?`, { ok: 'Sil' })) && del(`/categories/${c.id}`).then(reload)} aria-label="Sil"><Icon name="trash" /></button>
           </div>

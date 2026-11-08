@@ -156,6 +156,8 @@ export default function productRoutes(db) {
   }));
 
   // ---- Kategoriler ----
+  // Mutfak ekranı: kategorinin hazırlandığı yer
+  const station = (v) => (['mutfak', 'bar', 'yok'].includes(v) ? v : 'mutfak');
   r.get('/categories', h((req, res) => {
     res.json(db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.active = 1) AS product_count
                          FROM categories c ORDER BY sort_order, name`).all());
@@ -163,15 +165,16 @@ export default function productRoutes(db) {
   r.post('/categories', allow(...MANAGERS), h((req, res) => {
     const name = str(req.body.name);
     if (!name) throw bad('Kategori adı gerekli');
-    const id = db.prepare('INSERT INTO categories (name, color, sort_order) VALUES (?, ?, ?)')
-      .run(name, str(req.body.color), int(req.body.sort_order)).lastInsertRowid;
+    const id = db.prepare('INSERT INTO categories (name, color, sort_order, station) VALUES (?, ?, ?, ?)')
+      .run(name, str(req.body.color), int(req.body.sort_order), station(req.body.station)).lastInsertRowid;
     res.status(201).json(db.prepare('SELECT * FROM categories WHERE id = ?').get(id));
   }));
   r.put('/categories/:id', allow(...MANAGERS), h((req, res) => {
     const name = str(req.body.name);
     if (!name) throw bad('Kategori adı gerekli');
-    db.prepare('UPDATE categories SET name = ?, color = ?, sort_order = ? WHERE id = ?')
-      .run(name, str(req.body.color), int(req.body.sort_order), req.params.id);
+    const cur = db.prepare('SELECT station FROM categories WHERE id = ?').get(req.params.id);
+    db.prepare('UPDATE categories SET name = ?, color = ?, sort_order = ?, station = ? WHERE id = ?')
+      .run(name, str(req.body.color), int(req.body.sort_order), req.body.station === undefined ? (cur?.station || 'mutfak') : station(req.body.station), req.params.id);
     res.json(db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id));
   }));
   r.delete('/categories/:id', allow(...MANAGERS), h((req, res) => {

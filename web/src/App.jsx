@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import logo from './assets/logo.svg';
 import { HashRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { flushQueue, get, getToken, offlineQueue, onQueueChange, post, setToken, setUnauthorizedHandler } from './api.js';
+import { flushQueue, get, getToken, offlineQueue, onQueueChange, post, serverUrl, setToken, setUnauthorizedHandler } from './api.js';
 import { ConfirmProvider, Icon, ToastProvider } from './components/ui.jsx';
 import DemoBar from './demo/DemoBar.jsx';
 import Appointments from './pages/Appointments.jsx';
@@ -12,6 +12,7 @@ import MenuPage from './pages/Menu.jsx';
 import Pos from './pages/Pos.jsx';
 import Purchases from './pages/Purchases.jsx';
 import Tables from './pages/Tables.jsx';
+import Kitchen from './pages/Kitchen.jsx';
 import Deliveries from './pages/Deliveries.jsx';
 import Products from './pages/Products.jsx';
 import Reports from './pages/Reports.jsx';
@@ -103,8 +104,9 @@ function Root() {
       <div className="center-screen">
         <div className="card card-pad stack" style={{ maxWidth: 420, textAlign: 'center' }}>
           <h2>Sunucuya ulaşılamıyor</h2>
-          <p className="muted">Kasa sunucusu kapalı ya da ağ bağlantısı yok. Ana bilgisayarın açık olduğundan emin olun.</p>
+          <p className="muted">Kasa sunucusu kapalı ya da ağ bağlantısı yok. Ana bilgisayarın açık olduğundan emin olun.{serverUrl() ? ` (${serverUrl()})` : ''}</p>
           <button className="btn primary" onClick={() => { setBooting(true); boot(); }}>Tekrar dene</button>
+          {serverUrl() && <button className="btn ghost" onClick={() => import('./serverMode.js').then((m) => { m.useLocalData(); location.reload(); })}>Bu tabletin kendi verisiyle aç</button>}
         </div>
       </div>
     );
@@ -117,6 +119,28 @@ function Root() {
   const appointmentsOn = settings.modules_appointments === '1' && !!license?.features?.includes('appointments');
   const tablesOn = settings.modules_tables === '1' && !!license?.features?.includes('tables');
   const deliveryOn = settings.modules_delivery === '1' && !!license?.features?.includes('tables');
+  // Mutfak rolü: yalnızca mutfak ekranı
+  if (user.role === 'kitchen') {
+    return (
+      <SessionCtx.Provider value={{ user, settings, license, reloadSettings, logout, waiter: false }}>
+        <div className="app waiter-mode">
+          <nav className="sidebar">
+            <div className="logo"><img src={logo} alt="VelarisKasa" /></div>
+            <NavItem to="/mutfak" icon="chef" label="Mutfak" />
+            <div className="spacer" />
+            <button className="nav-link btn ghost" onClick={logout} title={`${user.name} — çıkış`}><Icon name="logout" /><span>Çıkış</span></button>
+          </nav>
+          <div className="main">
+            <OfflineBanner />
+            <Routes>
+              <Route path="/mutfak" element={tablesOn ? <Kitchen /> : <div className="page"><div className="card card-pad">Mutfak ekranı için Ayarlar → İşletme'den masa modülünü açın.</div></div>} />
+              <Route path="*" element={<Navigate to="/mutfak" replace />} />
+            </Routes>
+          </div>
+        </div>
+      </SessionCtx.Provider>
+    );
+  }
   // Garson modu: masa modülü açıkken "Personel" rolü yalnızca masaları (ve varsa randevuları) görür, ödeme kasada alınır
   const waiter = tablesOn && user.role === 'staff';
   if (waiter) {
@@ -150,6 +174,7 @@ function Root() {
           <div className="logo"><img src={logo} alt="VelarisKasa" /></div>
           <NavItem to="/kasa" icon="pos" label="Kasa" />
           {tablesOn && <NavItem to="/masalar" icon="table" label="Masalar" />}
+          {tablesOn && <NavItem to="/mutfak" icon="chef" label="Mutfak" />}
           {deliveryOn && <NavItem to="/paket" icon="bag" label="Paket" />}
           {appointmentsOn && <NavItem to="/randevu" icon="calendar" label="Randevu" />}
           <NavItem to="/urunler" icon="box" label="Stok" />
@@ -171,6 +196,7 @@ function Root() {
           <Routes>
             <Route path="/kasa" element={<Pos />} />
             {tablesOn && <Route path="/masalar" element={<Tables />} />}
+            {tablesOn && <Route path="/mutfak" element={<Kitchen />} />}
             {deliveryOn && <Route path="/paket" element={<Deliveries />} />}
             {appointmentsOn && <Route path="/randevu" element={<Appointments />} />}
             <Route path="/urunler" element={<Products />} />

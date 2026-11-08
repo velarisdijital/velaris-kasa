@@ -25,6 +25,7 @@ export function loadTicket(db, id) {
   t.total = live.reduce((a, i) => a + Math.round(i.qty * i.unit_price), 0);
   t.remaining_total = live.reduce((a, i) => a + Math.round(i.remaining_qty * i.unit_price), 0);
   t.unsent_count = live.filter((i) => !i.sent_at).length;
+  t.ready_count = live.filter((i) => i.kitchen_status === 'ready').length;
   t.sales = db.prepare('SELECT id, receipt_no, total, created_at FROM sales WHERE ticket_id = ? ORDER BY id').all(id);
   return t;
 }
@@ -59,13 +60,19 @@ export function applyTicketPayment(db, ticketId, lines, saleId, saleTotal) {
  * Adisyona kalem ekler. items: [{ product_id?, name?, qty, unit_price?, vat_rate?, note? }].
  * Mutfağa henüz gitmemiş, aynı ürün/not/fiyattaki satır varsa miktarı artırır.
  */
+/** Mutfak ekranı: hazırlanmayan ürünler (kategorisi "ekrana düşmez") gönderilince doğrudan teslim edilmiş sayılır */
+export function skipNonKitchen(db, ticketId) {
+  db.prepare(`UPDATE ticket_items SET kitchen_status = 'served' WHERE ticket_id = ? AND kitchen_status = 'new'
+    AND product_id IN (SELECT p.id FROM products p JOIN categories c ON c.id = p.category_id WHERE c.station = 'yok')`).run(ticketId);
+}
+
 export function addTicketItems(db, ticketId, items, userId, { sent = false } = {}) {
   const getP = db.prepare('SELECT * FROM products WHERE id = ? AND active = 1');
   const same = db.prepare(`SELECT id FROM ticket_items WHERE ticket_id = ? AND product_id = ? AND sent_at IS NULL AND void_at IS NULL
     AND paid_qty = 0 AND unit_price = ? AND COALESCE(note, '') = COALESCE(?, '')`);
   const inc = db.prepare('UPDATE ticket_items SET qty = qty + ? WHERE id = ?');
-  const ins = db.prepare(`INSERT INTO ticket_items (ticket_id, product_id, name, qty, unit, unit_price, vat_rate, note, user_id, sent_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${sent ? "datetime('now','localtime')" : 'NULL'})`);
+  const ins = db.prepare(`INSERT INTO ticket_items (ticket_id, product_id, name, qty, unit, unit_price, vat_rate, note, user_id, sent_at, kitchen_status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${sent ? "datetime('now','localtime'), 'new'" : 'NULL, NULL'})`);
   const defaultVat = num(getSetting(db, 'default_vat'), 20);
   for (const it of items) {
     const p = it.product_id ? getP.get(int(it.product_id)) : null;
@@ -81,6 +88,7 @@ export function addTicketItems(db, ticketId, items, userId, { sent = false } = {
     if (row) inc.run(qty, row.id);
     else ins.run(ticketId, p?.id ?? null, name, qty, p?.unit || 'adet', price, p ? p.vat_rate : num(it.vat_rate, defaultVat), note, userId);
   }
+  if (sent) skipNonKitchen(db, ticketId);
 }
 
 export default function tableRoutes(db) {
@@ -101,7 +109,8 @@ export default function tableRoutes(db) {
         (SELECT GROUP_CONCAT(q.type) FROM table_requests q WHERE q.table_id = d.id AND q.status = 'new') AS requests,
         (SELECT COALESCE(SUM(ROUND((i.qty - i.paid_qty) * i.unit_price)),0) FROM ticket_items i WHERE i.ticket_id = t.id AND i.void_at IS NULL) AS remaining_total,
         (SELECT COUNT(*) FROM ticket_items i WHERE i.ticket_id = t.id AND i.void_at IS NULL AND i.sent_at IS NULL) AS unsent_count,
-        (SELECT COUNT(*) FROM ticket_items i WHERE i.ticket_id = t.id AND i.void_at IS NULL) AS item_count
+        (SELECT COUNT(*) FROM ticket_items i WHERE i.ticket_id = t.id AND i.void_at IS NULL) AS item_count,
+        (SELECT COUNT(*) FROM ticket_items i WHERE i.ticket_id = t.id AND i.void_at IS NULL AND i.kitchen_status = 'ready') AS ready_count
       FROM dining_tables d LEFT JOIN tickets t ON t.table_id = d.id AND t.status = 'open' LEFT JOIN users u ON u.id = t.user_id
       WHERE d.active = 1
       ORDER BY (SELECT MIN(x.sort_order) FROM dining_tables x WHERE x.active = 1 AND COALESCE(x.zone, '') = COALESCE(d.zone, '')), d.sort_order, d.id`).all();
@@ -235,7 +244,8 @@ export default function tableRoutes(db) {
     const items = db.prepare('SELECT * FROM ticket_items WHERE ticket_id = ? AND sent_at IS NULL AND void_at IS NULL ORDER BY id').all(t.id);
     if (!items.length) throw bad('Mutfağa gönderilecek yeni sipariş yok');
     const now = db.prepare("SELECT datetime('now','localtime') AS n").get().n;
-    db.prepare('UPDATE ticket_items SET sent_at = ? WHERE ticket_id = ? AND sent_at IS NULL AND void_at IS NULL').run(now, t.id);
+    db.prepare("UPDATE ticket_items SET sent_at = ?, kitchen_status = 'new' WHERE ticket_id = ? AND sent_at IS NULL AND void_at IS NULL").run(now, t.id);
+    skipNonKitchen(db, t.id);
     const ticket = loadTicket(db, t.id);
     res.json({ ticket, kitchen: { table_name: ticket.table_name, zone: ticket.zone, waiter: req.user.name, sent_at: now, guest_count: ticket.guest_count,
       kind: ticket.kind, note: ticket.delivery_note, due_at: ticket.due_at,
@@ -287,8 +297,8 @@ export default function tableRoutes(db) {
           db.prepare('UPDATE ticket_items SET ticket_id = ? WHERE id = ?').run(targetId, it.id);
         } else {
           db.prepare('UPDATE ticket_items SET qty = ? WHERE id = ?').run(round3(it.qty - qty), it.id);
-          db.prepare(`INSERT INTO ticket_items (ticket_id, product_id, name, qty, unit, unit_price, vat_rate, note, user_id, sent_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(targetId, it.product_id, it.name, qty, it.unit, it.unit_price, it.vat_rate, it.note, it.user_id, it.sent_at, it.created_at);
+          db.prepare(`INSERT INTO ticket_items (ticket_id, product_id, name, qty, unit, unit_price, vat_rate, note, user_id, sent_at, created_at, kitchen_status, ready_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(targetId, it.product_id, it.name, qty, it.unit, it.unit_price, it.vat_rate, it.note, it.user_id, it.sent_at, it.created_at, it.kitchen_status, it.ready_at);
         }
       }
       const left = db.prepare('SELECT COUNT(*) AS n FROM ticket_items WHERE ticket_id = ? AND void_at IS NULL AND qty - paid_qty > 0.0005').get(t.id).n;

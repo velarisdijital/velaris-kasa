@@ -3,7 +3,7 @@
 //  - Her gün ilk açılışta ve gün sonunda otomatik yedek: Belgeler/VelarisKasa/Otomatik (son 7 gün)
 //  - Elle: "Paylaş" (Google Drive, WhatsApp, e-posta…) ya da "Tablete kaydet" (Belgeler/VelarisKasa)
 //  - Geri yükleme: listeden ya da dosya seçerek
-import { storage } from './api.js';
+import { api, serverUrl, storage } from './api.js';
 import { isNativeApp } from './native.js';
 
 const AUTO_KEY = 'vk_auto_backup_day';
@@ -28,6 +28,12 @@ async function fs() { return import('@capacitor/filesystem'); } // modül nesnes
 
 /** Veritabanı baytları */
 export async function backupBytes() {
+  if (serverUrl()) {
+    // Sunucu modu: sunucudaki verinin yedeği bu tablete de alınır (yönetici yetkisi gerekir)
+    const res = await api('/backup', { raw: true });
+    if (!res.ok) throw new Error(res.status === 403 ? 'Sunucudan yedek almak için yönetici olarak giriş yapın' : `Sunucudan yedek alınamadı (${res.status})`);
+    return new Uint8Array(await res.arrayBuffer());
+  }
   return (await backend()).exportDatabase();
 }
 
@@ -138,6 +144,7 @@ export async function restoreFromFile(file) {
 
 /** Önce mevcut veriyi güvenlik yedeği olarak kaydeder, sonra yedeği yükler ve uygulamayı yeniden açar. */
 async function restoreBytes(bytes) {
+  if (serverUrl()) throw new Error('Bu tablet sunucuya bağlı. Önce Ayarlar → Bu cihaz → "Bu tablete dön" deyin ya da yedeği sunucunun kendisinde geri yükleyin.');
   const be = await backend();
   const err = await be.checkBackup(bytes);
   if (err) throw new Error(err);

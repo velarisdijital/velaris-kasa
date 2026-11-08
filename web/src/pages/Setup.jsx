@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { post } from '../api.js';
 import { Wordmark } from '../components/Brand.jsx';
 import { Field, useToast } from '../components/ui.jsx';
+import ServerConnect from '../components/ServerConnect.jsx';
 
 const TYPES = [
   { id: 'market', label: 'Market / Bakkal', desc: 'Barkodlu ürünler, terazi, stok takibi' },
@@ -61,6 +62,12 @@ export default function Setup({ onDone }) {
         </div>
         <label className="check"><input type="checkbox" checked={f.seed_samples} onChange={set('seed_samples')} /> Örnek kategori ve ürünleri ekle (sonra silebilirsiniz)</label>
         <button className="btn primary big" disabled={busy}>{busy ? 'Kuruluyor…' : 'Kurulumu tamamla'}</button>
+        {import.meta.env.VITE_APP && (
+          <details style={{ marginTop: 8 }}>
+            <summary className="muted" style={{ cursor: 'pointer' }}>Birden çok cihaz mı kullanacaksınız? Var olan bir sunucuya bağlanın</summary>
+            <div style={{ marginTop: 10 }}><ServerConnect hasLocalData={false} /></div>
+          </details>
+        )}
       </form>
     </div>
   );

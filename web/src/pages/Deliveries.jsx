@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { get, loadProducts, post, put } from '../api.js';
+import { get, loadProducts, post, publicBaseUrl, put } from '../api.js';
 import { isManager, useSession } from '../App.jsx';
 import { printElement } from '../components/Receipt.jsx';
 import { Field, Icon, Modal, useLoad, useToast } from '../components/ui.jsx';
@@ -236,7 +236,7 @@ function DeliverySettings({ onClose }) {
   const mapTo = async (m, productId) => {
     try { await put('/platforms/products', { platform: m.platform, external_id: m.external_id, product_id: productId || null }); mapping.reload(); } catch (e) { toast.err(e); }
   };
-  const webhook = `${(settings.public_base_url || `${location.origin}${location.pathname}`).replace(/#.*$/, '').replace(/\/$/, '')}/api/integrations/orders`;
+  const webhook = `${publicBaseUrl(settings.public_base_url)}/api/integrations/orders`;
   const st = status.data;
   return (
     <Modal title="Paket servis ayarları" onClose={onClose} wide footer={<button className="btn primary" onClick={save}>Kaydet</button>}>

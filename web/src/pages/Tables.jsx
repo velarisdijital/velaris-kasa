@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { get, loadProducts, post, put, storage } from '../api.js';
+import { get, loadProducts, post, publicBaseUrl, put, storage } from '../api.js';
 import { isManager, useSession } from '../App.jsx';
 import { printElement } from '../components/Receipt.jsx';
 import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
@@ -23,7 +23,7 @@ export default function Tables() {
 
   // Diğer cihazlardaki değişiklikler ve QR istekleri için ara ara yenile
   useEffect(() => {
-    const t = setInterval(() => { if (!openTable) { tables.reload(); requests.reload(); } }, 10000);
+    const t = setInterval(() => { if (!openTable) { tables.reload(); requests.reload(); } }, 6000);
     return () => clearInterval(t);
   });
   const handle = async (q, ok) => {
@@ -85,6 +85,7 @@ export default function Tables() {
                     <div className="tc-total">{money(t.remaining_total)}</div>
                     <div className="tc-meta">{since(t.opened_at)}{t.guest_count ? ` · ${t.guest_count} kişi` : ''}{t.user_name ? ` · ${t.user_name}` : ''}</div>
                     {t.unsent_count > 0 && <span className="badge yellow">{t.unsent_count} yeni sipariş</span>}
+                    {t.ready_count > 0 && <span className="badge ready-badge">Mutfak: {t.ready_count} hazır</span>}
                     {t.paid_total > 0 && <span className="badge green">{money(t.paid_total)} ödendi</span>}
                   </>
                 ) : <div className="tc-meta">Boş</div>}
@@ -106,8 +107,8 @@ function QrMenuModal({ tables, onClose }) {
   const { settings, reloadSettings } = useSession();
   const [f, setF] = useState({ qrmenu_enabled: settings.qrmenu_enabled === '1', qrmenu_orders: settings.qrmenu_orders === '1',
     qrmenu_note: settings.qrmenu_note || '', public_base_url: settings.public_base_url || '' });
-  const base = (f.public_base_url || `${location.origin}${location.pathname}`).replace(/#.*$/, '');
-  const urlFor = (t) => `${base}#/menu?t=${t.qr_token}`;
+  const base = publicBaseUrl(f.public_base_url);
+  const urlFor = (t) => `${base}/#/menu?t=${t.qr_token}`;
   const save = async () => {
     try {
       await put('/settings', { qrmenu_enabled: f.qrmenu_enabled ? '1' : '0', qrmenu_orders: f.qrmenu_orders ? '1' : '0',
@@ -263,6 +264,8 @@ export function TicketScreen({ table, tables = [], onBack, onSwitch, back = '/ma
                   <div className="l-name">
                     {!paid && <input type="checkbox" readOnly checked={!!sel[i.id]} style={{ marginRight: 8, verticalAlign: 'middle' }} />}
                     {i.name}{!i.sent_at && <span className="badge yellow" style={{ marginLeft: 6 }}>yeni</span>}
+                    {i.kitchen_status === 'preparing' && <span className="badge" style={{ marginLeft: 6 }}>hazırlanıyor</span>}
+                    {i.kitchen_status === 'ready' && <span className="badge ready-badge" style={{ marginLeft: 6 }}>hazır</span>}
                     {paid && <span className="badge green" style={{ marginLeft: 6 }}>ödendi</span>}
                   </div>
                   <div className="l-meta">{fmtQty(i.qty)} × {plain(i.unit_price)}{i.paid_qty > 0 && !paid ? ` · ${fmtQty(i.paid_qty)} ödendi` : ''}{i.note ? ` · ${i.note}` : ''}{i.sent_at ? ` · ${dt(i.sent_at).split(' ').pop()}` : ''}</div>

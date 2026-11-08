@@ -15,6 +15,44 @@ export const setToken = (t) => (t ? safe.set(TOKEN_KEY, t) : safe.del(TOKEN_KEY)
 export const registerName = () => safe.get('vk_register', 'Kasa 1');
 export const setRegisterName = (n) => safe.set('vk_register', n || 'Kasa 1');
 
+// ---- Sunucu modu (Android uygulaması): birden çok cihaz aynı veriyi kullanır ----
+// Boşsa uygulama tabletin kendi verisiyle çalışır (tek cihaz). Doluysa tüm istekler o sunucuya gider
+// (bulut sunucu ya da dükkandaki Windows bilgisayarında çalışan VelarisKasa).
+const SERVER_KEY = 'vk_server_url';
+export const serverUrl = () => (import.meta.env.VITE_APP ? safe.get(SERVER_KEY, null) : null);
+export const setServerUrl = (u) => (u ? safe.set(SERVER_KEY, normalizeServerUrl(u)) : safe.del(SERVER_KEY));
+/** "192.168.1.20" → "http://192.168.1.20:4848"; "kasa.ornek.com" → "https://kasa.ornek.com" */
+export function normalizeServerUrl(u) {
+  let s = String(u || '').trim().replace(/\/+$/, '').replace(/\/api$/, '').replace(/\/#.*$/, '');
+  if (!s) return '';
+  const ip = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(s) || /^localhost(:\d+)?$/.test(s);
+  if (!/^https?:\/\//i.test(s)) s = `${ip ? 'http' : 'https'}://${s}`;
+  const m = s.match(/^(https?:\/\/)([^/]+)(.*)$/i);
+  if (m && ip && !/:\d+$/.test(m[2])) s = `${m[1]}${m[2]}:4848${m[3]}`;
+  return s.replace(/\/+$/, '');
+}
+/** QR menü, online randevu ve web kancası bağlantıları için uygulamanın herkese açık adresi */
+export const publicBaseUrl = (configured) => (configured || serverUrl() || `${location.origin}${location.pathname}`)
+  .replace(/#.*$/, '').replace(/\/index\.html$/, '').replace(/\/+$/, '');
+
+/** Sunucuya ulaşılabiliyor mu? Dönüş: { ok, setup_done, business_name } ya da hata fırlatır. */
+export async function probeServer(url) {
+  const base = normalizeServerUrl(url);
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 8000);
+  try {
+    const h = await fetch(`${base}/api/health`, { signal: ctl.signal }).then((r) => r.json());
+    if (h?.app !== 'velaris-kasa') throw new Error('Bu adreste VelarisKasa sunucusu yok');
+    const st = await fetch(`${base}/api/setup/status`, { signal: ctl.signal }).then((r) => r.json());
+    return { ok: true, url: base, setup_done: !!st.setup_done, business_name: st.business_name || '' };
+  } catch (e) {
+    if (e.name === 'AbortError' || e instanceof TypeError) throw new Error(`Sunucuya ulaşılamadı (${base}). Adresi, sunucunun açık olduğunu ve tabletin aynı ağda olduğunu kontrol edin.`);
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export class ApiError extends Error {
   constructor(status, message, body) { super(message); this.status = status; this.body = body; }
 }
@@ -26,8 +64,9 @@ export async function api(path, { method = 'GET', body, raw } = {}) {
   const token = getToken();
   let res;
   try {
-    const send = import.meta.env.VITE_DEMO ? (await import('./demo/backend.js')).demoFetch : fetch;
-    res = await send(`./api${path}`, {
+    const remote = serverUrl();
+    const send = remote ? fetch : import.meta.env.VITE_DEMO ? (await import('./demo/backend.js')).demoFetch : fetch;
+    res = await send(remote ? `${remote}/api${path}` : `./api${path}`, {
       method,
       headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: body ? JSON.stringify(body) : undefined,

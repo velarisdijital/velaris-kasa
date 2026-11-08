@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authenticate } from './auth.js';
 import { getSetting, openDatabase, setSettings } from './db.js';
+import { importDatabase } from './importDb.js';
 import { startIntegrationWorker } from './integrations/velaris.js';
 import { startNotifyWorker } from './notify.js';
 import appointmentRoutes from './routes/appointments.js';
@@ -18,6 +19,7 @@ import customerRoutes from './routes/customers.js';
 import notifyRoutes from './routes/notify.js';
 import productRoutes from './routes/products.js';
 import tableRoutes from './routes/tables.js';
+import kitchenRoutes from './routes/kitchen.js';
 import deliveryRoutes from './routes/deliveries.js';
 import purchaseRoutes from './routes/purchases.js';
 import reportRoutes from './routes/reports.js';
@@ -42,6 +44,28 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
   app.use(express.json({ limit: '5mb', verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8'); } }));
 
   const api = express.Router();
+  // Tablet uygulaması (https://localhost) ve ağdaki diğer cihazlar sunucuya doğrudan bağlanabilsin.
+  // Kimlik doğrulama çerez değil Bearer anahtarıyla yapıldığından her kaynağa izin vermek güvenlidir.
+  api.use((req, res, next) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-VK-Signature');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.set('Access-Control-Expose-Headers', 'Content-Disposition');
+    if (req.method === 'OPTIONS') {
+      res.set('Access-Control-Allow-Private-Network', 'true');
+      res.set('Access-Control-Max-Age', '600');
+      return res.sendStatus(204);
+    }
+    next();
+  });
+  // Tabletteki verileri boş (kurulumu yapılmamış) sunucuya taşı
+  api.post('/setup/import', express.raw({ type: 'application/octet-stream', limit: '512mb' }), (req, res, next) => {
+    try {
+      if (getSetting(db, 'setup_done') === '1') return res.status(409).json({ error: 'Bu sunucuda zaten veri var. Taşıma yalnızca yeni kurulmuş sunucuya yapılabilir.' });
+      const counts = importDatabase(db, req.body);
+      res.json({ ok: true, products: counts.products || 0, sales: counts.sales || 0, customers: counts.customers || 0 });
+    } catch (e) { next(e); }
+  });
   api.get('/health', (req, res) => res.json({ ok: true, app: 'velaris-kasa', version: process.env.npm_package_version || '1.0.0' }));
   api.use(publicRoutes(db));
   api.use(inboundWebhook(db));
@@ -54,6 +78,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
   api.use(branchRoutes(db));
   api.use(purchaseRoutes(db));
   api.use(tableRoutes(db));
+  api.use(kitchenRoutes(db));
   api.use(deliveryRoutes(db));
   api.use(platformRoutes(db));
   api.use(customerRoutes(db));

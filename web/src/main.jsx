@@ -24,7 +24,9 @@ const render = () => root.render(
 
 if (import.meta.env.VITE_APP) {
   root.render(<div className="center-screen muted">VelarisKasa açılıyor…</div>);
-  import('./demo/backend.js').then((m) => m.ensureApp()).then(() => {
+  // Sunucu modunda (birden çok cihaz) tabletteki yerel veritabanı açılmaz; istekler sunucuya gider
+  const remote = (() => { try { return JSON.parse(localStorage.getItem('vk_server_url') || 'null'); } catch { return null; } })();
+  (remote ? Promise.resolve() : import('./demo/backend.js').then((m) => m.ensureApp())).then(() => {
     render();
     // Kasa modu (ekran kararmasın / tam ekran) ve günlük otomatik yedek
     import('./kiosk.js').then((k) => k.applyKiosk()).catch(() => {});

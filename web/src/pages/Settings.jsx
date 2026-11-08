@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api, del, get, post, put, registerName, setRegisterName, storage } from '../api.js';
+import { api, del, get, post, publicBaseUrl, put, registerName, serverUrl, setRegisterName, storage } from '../api.js';
+import ServerConnect from '../components/ServerConnect.jsx';
 import { useCan, useSession } from '../App.jsx';
 import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { d, dt, ROLE_LABELS } from '../format.js';
@@ -423,7 +424,7 @@ function BookingSettings() {
     const next = closed.includes(d) ? closed.filter((x) => x !== d) : [...closed, d];
     set('booking_closed_days')({ target: { value: next.sort().join(','), type: 'text' } });
   };
-  const base = (f.public_base_url || `${location.origin}${location.pathname}`).replace(/\/+$/, '').replace(/\/index\.html$/, '');
+  const base = publicBaseUrl(f.public_base_url);
   const link = `${base}/#/randevu-al`;
   return (
     <form className="card card-pad stack" onSubmit={save}>
@@ -517,9 +518,38 @@ function Device() {
         <b>Fiş yazıcı:</b> 80 mm termal yazıcıyı bilgisayarın varsayılan yazıcısı yapın; masaüstü uygulamasında fiş doğrudan basılır.
       </div>
       <div><button className="btn primary">Kaydet</button></div>
+      {import.meta.env.VITE_APP && <DataLocation />}
       {import.meta.env.VITE_APP && <KioskSettings />}
       <LabelPrinterSettings />
     </form>
+  );
+}
+
+/** Tablet uygulaması: veriler bu tablette mi, sunucuda mı (birden çok cihaz) */
+function DataLocation() {
+  const ask = useConfirm();
+  const remote = serverUrl();
+  const back = async () => {
+    if (!(await ask('Bu tablet kendi verisine dönsün mü? Sunucudaki veriler sunucuda kalır; tablette sunucuya geçmeden önceki veriler açılır.', { ok: 'Bu tablete dön', danger: false }))) return;
+    const m = await import('../serverMode.js');
+    m.useLocalData();
+    location.reload();
+  };
+  return (
+    <div className="card card-pad stack" style={{ background: 'var(--panel-2)', boxShadow: 'none' }} onClick={(e) => e.stopPropagation()}>
+      <strong>Veri konumu (birden çok cihaz)</strong>
+      {remote ? (
+        <div className="row wrap" style={{ gap: 8 }}>
+          <span style={{ flex: 1 }}>Bu tablet sunucuya bağlı: <b>{remote}</b>. Kasa, garson ve mutfak cihazları aynı veriyi kullanır.</span>
+          <button type="button" className="btn small ghost" onClick={back}>Bu tablete dön</button>
+        </div>
+      ) : (
+        <>
+          <div>Veriler <b>yalnızca bu tablette</b>. Başka bir tablet, garson telefonu ya da mutfak ekranı aynı veriyi göremez.</div>
+          <ServerConnect hasLocalData />
+        </>
+      )}
+    </div>
   );
 }
 
@@ -820,7 +850,7 @@ function UserForm({ user, onClose, onSaved }) {
         <div className="grid-2">
           <Field label="Ad"><input className="input" autoFocus required value={f.name} onChange={set('name')} /></Field>
           <Field label="Rol" hint={f.role === 'staff' ? 'Masa modülü açıksa Personel garson modunda açılır: yalnızca masalar, ödeme kasada.' : null}>
-            <select className="input" value={f.role} onChange={set('role')}>{Object.entries(ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{k === 'staff' ? 'Personel / Garson' : l}</option>)}</select></Field>
+            <select className="input" value={f.role} onChange={set('role')}>{Object.entries(ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{k === 'staff' ? 'Personel / Garson' : k === 'kitchen' ? 'Mutfak (yalnızca mutfak ekranı)' : l}</option>)}</select></Field>
           <Field label={user ? 'Yeni PIN (boş = değişmez)' : 'PIN (4-8 rakam)'}><input className="input" type="password" inputMode="numeric" pattern="\d{4,8}" required={!user} value={f.pin} onChange={set('pin')} /></Field>
           <Field label="Hizmet primi %"><input className="input" inputMode="decimal" value={f.commission_rate} onChange={set('commission_rate')} /></Field>
         </div>
@@ -855,7 +885,7 @@ function Crm() {
     set('crm_webhook_secret')({ target: { value: Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(''), type: 'text' } });
   };
   const s = status.data;
-  const origin = location.origin + location.pathname.replace(/\/$/, '');
+  const origin = publicBaseUrl();
 
   return (
     <div className="stack">
@@ -987,6 +1017,10 @@ function AppBackup() {
         <button className="btn primary" disabled={busy} onClick={() => run(async () => { await bk.shareBackup(); })}><Icon name="download" /> Yedeği paylaş (Drive, WhatsApp…)</button>
         <button className="btn" disabled={busy} onClick={() => run(async () => { const r = await bk.saveBackupToDevice(); toast.ok(`Yedek kaydedildi: ${r.where}`); refresh(bk); })}>Tablete kaydet</button>
       </div>
+      {serverUrl() ? (
+        <div className="muted small-text">Bu tablet sunucuya bağlı ({serverUrl()}). Yedek sunucudaki verinin kopyasıdır. Geri yükleme sunucunun kendisinde yapılır.</div>
+      ) : (
+        <>
       <h3 style={{ marginTop: 12 }}>Geri yükle</h3>
       <label className="btn" style={{ alignSelf: 'flex-start' }}>
         Dosya seç (Drive'dan, İndirilenler'den…)
@@ -1002,6 +1036,8 @@ function AppBackup() {
             </div>
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   );

@@ -140,6 +140,7 @@ const PATHS = {
   bag: 'M5 8h14l-1 13H6zM9 8V6a3 3 0 0 1 6 0v2',
   truck: 'M2 6h12v11H2zM14 10h4l4 4v3h-8M6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm12 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
   table: 'M3 8h18M5 8v12m14-12v12M8 4h8M9 8l-1 6h8l-1-6',
+  chef: 'M6 13.9A4 4 0 0 1 7 6a5 5 0 0 1 10 0 4 4 0 0 1 1 7.9V20H6zM6 17h12',
 };
 
 export function Icon({ name, ...props }) {
