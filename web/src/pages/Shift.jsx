@@ -3,6 +3,7 @@ import { get, post, registerName, storage } from '../api.js';
 import { useSession } from '../App.jsx';
 import { printElement } from '../components/Receipt.jsx';
 import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
+import NumPad, { applyKey } from '../components/NumPad.jsx';
 import { dt, METHOD_LABELS, money, plain, toKurus } from '../format.js';
 
 export default function Shift() {
@@ -111,7 +112,8 @@ function CashMoveModal({ shift, type, onClose, onDone }) {
   return (
     <Modal title={type === 'in' ? 'Kasaya para girişi' : 'Kasadan para çıkışı'} onClose={onClose} footer={<button className="btn primary" form="cm">Kaydet</button>}>
       <form id="cm" className="stack" onSubmit={save}>
-        <Field label="Tutar (₺)"><input className="input" autoFocus required inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+        <Field label="Tutar (₺)"><input className="input amount-display" autoFocus required inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+        <NumPad compact onKey={(k) => setAmount((v) => applyKey(v, k))} />
         <Field label="Açıklama"><input className="input" required value={note} onChange={(e) => setNote(e.target.value)} placeholder={type === 'out' ? 'Örn. tedarikçi ödemesi, fatura, bankaya yatırılan' : 'Örn. bozuk para'} /></Field>
       </form>
     </Modal>
@@ -138,7 +140,8 @@ function CloseModal({ s, onClose, onDone }) {
     <Modal title="Günü kapat" onClose={onClose} footer={<button className="btn primary" form="zc">Kapat ve Z raporu al</button>}>
       <form id="zc" className="stack" onSubmit={save}>
         <div>Kasada olması gereken nakit: <strong>{money(s.expected_cash)}</strong></div>
-        <Field label="Saydığınız nakit (₺)"><input className="input" autoFocus required inputMode="decimal" value={counted} onChange={(e) => setCounted(e.target.value)} style={{ fontSize: 22 }} /></Field>
+        <Field label="Saydığınız nakit (₺)"><input className="input amount-display" autoFocus required inputMode="decimal" value={counted} onChange={(e) => setCounted(e.target.value)} /></Field>
+        <NumPad compact onKey={(k) => setCounted((v) => applyKey(v, k))} />
         {diff != null && <div style={{ fontWeight: 700 }}>Fark: <Diff v={diff} /> {diff < 0 ? '(kasa eksik)' : diff > 0 ? '(kasa fazla)' : ''}</div>}
         <Field label="Not"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </form>

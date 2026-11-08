@@ -458,3 +458,38 @@ a.btn.primary { color: var(--bg); }
 .kds-name em { color: var(--danger); font-style: normal; font-weight: 600; }
 .kds-st { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .badge.ready-badge { background: var(--success-soft, #dcfce7); color: var(--success, #15803d); }
+
+/* ---------- Sayı tuş takımı (ekranda) ---------- */
+.numpad-grid { display: flex; flex-direction: column; gap: 6px; user-select: none; }
+.numpad-grid .np-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.numpad-grid.with-side .np-row { grid-template-columns: repeat(3, 1fr) 1.25fr; }
+.np-key { min-height: 52px; font-size: 22px; font-weight: 700; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; touch-action: manipulation; }
+.np-key:active { transform: scale(.97); background: var(--panel-2); }
+.np-key.np-del { color: var(--danger); }
+.np-key.np-side { font-size: 15px; background: var(--panel-2); }
+.np-key.np-side.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.np-key:disabled { opacity: .45; cursor: default; }
+.numpad-grid.compact .np-key { min-height: 40px; font-size: 18px; border-radius: 10px; }
+.numpad-grid.compact .np-key.np-side { font-size: 13px; }
+.numpad-grid.compact .np-row { gap: 5px; }
+.numpad-grid.compact { gap: 5px; }
+
+/* Kasa ekranı tuş takımı paneli */
+.pos-pad { border-top: 1px solid var(--border); padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--panel-2); }
+.pos-pad-display { display: flex; align-items: center; gap: 8px; min-height: 34px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 4px 10px; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pos-pad-display .muted { font-weight: 500; font-size: 14px; }
+.pos-pad-display .pending { background: var(--primary-soft); color: var(--primary); border-radius: 8px; padding: 2px 8px; font-size: 15px; }
+.pos-left > .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 4px; }
+.pos-left > .tabs .tab { flex: 0 0 auto; }
+.cart-count { font-size: 13px; color: var(--muted); text-align: right; margin-top: -4px; }
+
+/* Ödeme / tutar pencereleri: sol bilgi, sağ tuş takımı */
+.pay-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 640px) { .pay-layout { grid-template-columns: 1fr; } }
+.amount-display { font-size: 32px; font-weight: 800; text-align: center; border: 2px solid var(--primary); border-radius: 12px; padding: 8px; min-height: 60px; font-variant-numeric: tabular-nums; background: var(--panel); }
+.amount-display.placeholder { color: var(--muted); font-weight: 600; border-color: var(--border); }
+.banknotes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.change-big { text-align: center; border-radius: 12px; padding: 10px; background: var(--success-soft); color: var(--success); }
+.change-big strong { display: block; font-size: 34px; }
+.price-check { text-align: center; padding: 12px; }
+.price-check .pc-price { font-size: 48px; font-weight: 800; }

@@ -5,6 +5,8 @@ import { useCan, useSession } from '../App.jsx';
 import CameraScanner, { cameraSupported } from '../components/CameraScanner.jsx';
 import { printReceipt } from '../components/Receipt.jsx';
 import { Field, Icon, Modal, useConfirm, useToast } from '../components/ui.jsx';
+import NumPad, { applyKey } from '../components/NumPad.jsx';
+import { softKeyboardDefault } from '../softKeyboard.js';
 import { METHOD_LABELS, money, nowSql, parseQty, plain, qty as fmtQty, toInput, toKurus } from '../format.js';
 
 const lineTotal = (l) => Math.round(l.qty * l.unit_price) - (l.discount || 0);
@@ -37,6 +39,12 @@ export default function Pos() {
   const scanRef = useRef(null);
   const typeRef = useRef(null); // ScanBox'a dışarıdan yazı ekler
   const scanBuf = useRef({ text: '', timer: null }); // hiçbir kutu seçili değilken gelen okuyucu tuşları
+  // Ekrandaki tuş takımı: "3 ×" sonra ürün → 3 adet; barkodu elle gir; seçili satırın adet / fiyatı
+  const [showPad, setShowPad] = useState(() => storage.get('vk_pos_pad', softKeyboardDefault() === 'tap'));
+  const [entry, setEntry] = useState('');
+  const [pendingQty, setPendingQty] = useState(null);
+  const pendingRef = useRef(null);
+  const takeQty = () => { const q = pendingRef.current; pendingRef.current = null; setPendingQty(null); return q; };
 
   const subtotal = cart.reduce((a, l) => a + lineTotal(l), 0);
   const total = Math.max(0, subtotal - discount);
@@ -114,6 +122,7 @@ export default function Pos() {
     let q = null;
     const m = code.match(/^(\d+(?:[.,]\d+)?)\s*[*xX]\s*(.+)$/); // "3*8690..." çarpanlı okutma
     if (m) { q = parseQty(m[1]); code = m[2].trim(); }
+    if (q == null && pendingRef.current) q = takeQty(); // tuş takımında "3 ×" denmiş
     const local = products.find((p) => p.barcode === code);
     if (local) { addProduct(local, q); return true; }
     if (/^\d{6,14}$/.test(code)) {
@@ -198,7 +207,9 @@ export default function Pos() {
     const onKey = (e) => {
       if (modal) return;
       const key = e.key;
-      if (key === 'F2') { e.preventDefault(); if (cart.length) setModal({ type: 'cash' }); }
+      if (key === 'F1') { e.preventDefault(); setModal({ type: 'price' }); }
+      else if (key === 'F5') { e.preventDefault(); holdCart(); }
+      else if (key === 'F2') { e.preventDefault(); if (cart.length) setModal({ type: 'cash' }); }
       else if (key === 'F3') { e.preventDefault(); if (cart.length) payCard(); }
       else if (key === 'F4') { e.preventDefault(); if (cart.length && perm('credit_sale')) payCredit(); }
       else if (key === 'F6') { e.preventDefault(); if (cart.length) setModal({ type: 'split' }); }
@@ -259,13 +270,13 @@ export default function Pos() {
   return (
     <div className="pos">
       <div className="pos-left">
-        <ScanBox inputRef={scanRef} typeRef={typeRef} products={products} onScan={onScan} onPick={(p) => { addProduct(p); focusScan(); }} />
+        <ScanBox inputRef={scanRef} typeRef={typeRef} products={products} onScan={onScan} onPick={(p) => { addProduct(p, takeQty()); focusScan(); }} />
         <div className="tabs">
           {tabs.map((t) => <button key={t.id} className={`tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>{t.name}</button>)}
         </div>
         <div className="product-grid">
           {visible.map((p) => (
-            <button key={p.id} className="tile" style={{ '--cat': p.category_color || undefined }} onClick={() => { addProduct(p); focusScan(); }}>
+            <button key={p.id} className="tile" style={{ '--cat': p.category_color || undefined }} onClick={() => { addProduct(p, takeQty()); focusScan(); }}>
               <span className="t-name">{p.name}</span>
               <span>
                 <div className="t-price">{p.sell_price ? money(p.sell_price) : 'Fiyat gir'}{p.unit !== 'adet' ? ` / ${p.unit}` : ''}</div>
@@ -287,7 +298,8 @@ export default function Pos() {
               : <span className="muted">Müşteri seç <span className="kbd">F8</span></span>}
           </button>
           {customer && <button className="btn small ghost" onClick={() => setCustomer(null)} aria-label="Müşteriyi kaldır"><Icon name="x" /></button>}
-          <button className="btn small" onClick={holdCart} disabled={!cart.length} title="Sepeti beklet"><Icon name="pause" /></button>
+          <button className="btn small" onClick={() => setModal({ type: 'price' })} title="Fiyat gör (F1)">Fiyat gör</button>
+          <button className="btn small" onClick={holdCart} disabled={!cart.length} title="Sepeti beklet (F5)"><Icon name="pause" /> Beklet</button>
           {held.length > 0 && <button className="btn small" onClick={() => setModal({ type: 'held' })}>Bekleyen ({held.length})</button>}
         </div>
 
@@ -343,15 +355,36 @@ export default function Pos() {
           )}
         </div>
 
+        {showPad && (
+          <div className="pos-pad">
+            <div className="pos-pad-display">
+              {pendingQty != null && <span className="pending">{fmtQty(pendingQty)} ×</span>}
+              <span style={{ flex: 1 }}>{entry || <span className="muted">{pendingQty != null ? 'Ürünü okutun ya da dokunun' : 'Miktar, fiyat ya da barkod'}</span>}</span>
+              {(entry || pendingQty != null) && <button type="button" className="btn small ghost" onClick={() => { setEntry(''); takeQty(); }}>Temizle</button>}
+            </div>
+            <NumPad compact onKey={(k) => setEntry((v) => applyKey(v, k))} side={[
+              { label: 'Miktar ×', title: 'Önce miktarı yazın, sonra ürünü okutun ya da dokunun', disabled: !entry || !(parseQty(entry) > 0),
+                onClick: () => { const q = parseQty(entry); pendingRef.current = q; setPendingQty(q); setEntry(''); focusScan(); } },
+              { label: 'Adet', title: 'Seçili satırın miktarını değiştir', disabled: !entry || !sel || !(parseQty(entry) > 0),
+                onClick: () => { updateLine(sel, { qty: parseQty(entry) }); setEntry(''); } },
+              { label: 'Fiyat', title: 'Seçili satırın birim fiyatını değiştir', disabled: !entry || !sel || !(perm('price_edit') || !(cart.find((l) => l.key === sel)?.unit_price > 0)),
+                onClick: () => { updateLine(sel, { unit_price: toKurus(entry) }); setEntry(''); } },
+              { label: 'Barkod', className: 'primary', title: 'Yazılan barkodu okut', disabled: !entry,
+                onClick: async () => { const code = entry; setEntry(''); if (!(await onScan(code))) toast.err(`Barkod bulunamadı: ${code}`); } },
+            ]} />
+          </div>
+        )}
         <div className="cart-sum">
           {discount > 0 && <div className="line"><span>Ara toplam</span><span>{money(subtotal)}</span></div>}
           {discount > 0 && <div className="line"><span>İndirim</span><span className="success-text">−{money(discount)}</span></div>}
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <button className="btn small ghost" disabled={!cart.length || !perm('discount')} title={perm('discount') ? '' : 'İndirim yetkiniz yok'} onClick={() => setModal({ type: 'discount' })}>İndirim <span className="kbd">F9</span></button>
             <button className="btn small ghost" disabled={!cart.length} onClick={() => setModal({ type: 'split' })}>Parçalı <span className="kbd">F6</span></button>
+            <button className="btn small ghost" onClick={() => { storage.set('vk_pos_pad', !showPad); setShowPad(!showPad); }} title="Ekrandaki sayı tuş takımı">{showPad ? 'Tuşları gizle' : 'Tuş takımı'}</button>
             <button className="btn small ghost danger-text" disabled={!cart.length} onClick={async () => { if (await ask('Sepet temizlensin mi?', { ok: 'Temizle' })) clearCart(); }}>Temizle</button>
           </div>
           <div className="total"><span>TOPLAM</span><span>{money(total)}</span></div>
+          {cart.length > 0 && <div className="cart-count">{cart.length} kalem · {fmtQty(cart.reduce((a, l) => a + l.qty, 0))} {cart.every((l) => l.unit === 'adet') ? 'adet' : 'birim'}</div>}
         </div>
         <div className="pay-buttons">
           <button className="btn success" disabled={!cart.length || busy} onClick={() => setModal({ type: 'cash' })}>Nakit<small><span className="kbd">F2</span></small></button>
@@ -391,6 +424,8 @@ export default function Pos() {
           </div>
         </Modal>
       )}
+      {modal?.type === 'price' && <PriceCheck products={products} onClose={() => { setModal(null); focusScan(); }}
+        onAdd={(p) => { addProduct(p, takeQty()); setModal(null); focusScan(); }} />}
       {modal?.type === 'quickProduct' && (
         <QuickProduct barcode={modal.barcode} onClose={() => { setModal(null); focusScan(); }}
           onCreated={(p) => { setProducts((ps) => [...ps, p]); addProduct(p); setModal(null); focusScan(); }} />
@@ -524,7 +559,8 @@ function OpenShift({ register, onOpened }) {
       <form className="card card-pad stack" style={{ maxWidth: 400, width: '100%' }} onSubmit={open}>
         <h2>{register} — Kasa açılışı</h2>
         <p className="muted">Güne başlamak için kasadaki başlangıç nakit tutarını girin.</p>
-        <Field label="Kasadaki nakit (₺)"><input className="input" autoFocus inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} placeholder="0,00" /></Field>
+        <Field label="Kasadaki nakit (₺)"><input className="input amount-display" autoFocus inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} placeholder="0,00" /></Field>
+        <NumPad compact onKey={(k) => setCash((v) => applyKey(v, k))} />
         <button className="btn primary big">Kasayı aç</button>
       </form>
     </div>
@@ -535,23 +571,27 @@ function CashModal({ total, onPay, onClose, busy }) {
   const [given, setGiven] = useState('');
   const g = given ? toKurus(given) : total;
   const change = g - total;
-  // Tam tutar + toplamın üzerindeki ilk 3 yuvarlak banknot
-  const quick = [...new Set([total, ...[5000, 10000, 20000, 50000, 100000, 200000].filter((v) => v > total).slice(0, 3)])].slice(0, 4);
+  // Banknotlar (5–200 ₺): dokundukça alınan tutara eklenir (ör. 200 + 50); C sıfırlar
+  const notes = [500, 1000, 2000, 5000, 10000, 20000];
+  const addNote = (v) => setGiven((x) => toInput((x ? toKurus(x) : 0) + v));
   return (
-    <Modal title="Nakit ödeme" onClose={onClose}
+    <Modal title="Nakit ödeme" onClose={onClose} wide
       footer={<><button className="btn" onClick={onClose}>Vazgeç</button>
         <button className="btn success big" disabled={busy || change < 0} onClick={() => onPay(g)}>Satışı tamamla (Enter)</button></>}>
-      <form className="stack" onSubmit={(e) => { e.preventDefault(); if (change >= 0) onPay(g); }}>
-        <div className="pay-total">{money(total)}</div>
-        <Field label="Alınan tutar (boş bırakırsanız tam tutar)">
-          <input className="input" autoFocus inputMode="decimal" style={{ fontSize: 24, minHeight: 56, textAlign: 'center' }}
-            value={given} onChange={(e) => setGiven(e.target.value)} placeholder={toInput(total)} />
-        </Field>
-        <div className="cash-quick">
-          {quick.map((v) => <button type="button" key={v} className="btn big" onClick={() => setGiven(toInput(v))}>{v === total ? 'Tam' : money(v)}</button>)}
+      <form className="pay-layout" onSubmit={(e) => { e.preventDefault(); if (change >= 0) onPay(g); }}>
+        <div className="stack">
+          <div className="muted" style={{ textAlign: 'center' }}>Toplam</div>
+          <div className="pay-total">{money(total)}</div>
+          <div className="muted" style={{ textAlign: 'center' }}>Alınan</div>
+          <input className="input amount-display" autoFocus inputMode="decimal" aria-label="Alınan tutar" value={given} onChange={(e) => setGiven(e.target.value)} placeholder={toInput(total)} />
+          <div className="banknotes">
+            <button type="button" className="btn big" onClick={() => setGiven('')}>Tam</button>
+            {notes.map((v) => <button type="button" key={v} className="btn big" onClick={() => addNote(v)}>{money(v).replace(',00', '')}</button>)}
+          </div>
+          {change > 0 && <div className="change-big">Para üstü<strong>{money(change)}</strong></div>}
+          {change < 0 && <div className="danger-text" style={{ textAlign: 'center', fontWeight: 800, fontSize: 20 }}>Eksik: {money(-change)}</div>}
         </div>
-        {change > 0 && <div className="change-box">Para üstü: {money(change)}</div>}
-        {change < 0 && <div className="danger-text" style={{ textAlign: 'center', fontWeight: 700 }}>Eksik: {money(-change)}</div>}
+        <NumPad onKey={(k) => setGiven((v) => applyKey(v, k))} side={[{ label: 'C', onClick: () => setGiven('') }]} />
         <button hidden />
       </form>
     </Modal>
@@ -605,6 +645,7 @@ function DiscountModal({ subtotal, value, onSave, onClose }) {
         </div>
         {mode === 'pct' && <div className="row wrap">{[5, 10, 15, 20].map((p) => <button type="button" key={p} className="btn" onClick={() => setV(String(p))}>%{p}</button>)}</div>}
         <input className="input" autoFocus inputMode="decimal" value={v} onChange={(e) => setV(e.target.value)} placeholder={mode === 'pct' ? 'Örn. 10' : '0,00'} />
+        <NumPad compact onKey={(k) => setV((x) => applyKey(x, k))} />
         <div className="muted">İndirim: <strong>{money(amount)}</strong> · Yeni toplam: <strong>{money(subtotal - amount)}</strong></div>
       </form>
     </Modal>
@@ -616,6 +657,17 @@ function LineModal({ line, staff, onSave, onClose, onRemove }) {
   const canPrice = !user.permissions || user.permissions.price_edit || !(line.unit_price > 0) || !!line.ticket_item_id;
   const canDiscount = !user.permissions || user.permissions.discount;
   const [f, setF] = useState({ qty: String(line.qty).replace('.', ','), price: toInput(line.unit_price), discount: toInput(line.discount), staff_id: line.staff_id || '' });
+  // Tuş takımı hangi kutuya yazar: başta miktar (fiyatı yoksa fiyat); kutuya dokununca o kutu
+  const [active, setActive] = useState(line.unit_price > 0 ? 'qty' : 'price');
+  const [fresh, setFresh] = useState(true); // ilk tuş eski değerin yerine geçsin
+  const writable = (k) => (k === 'qty' || (k === 'price' && canPrice) || (k === 'discount' && canDiscount));
+  const padKey = (k) => {
+    if (!writable(active)) return;
+    setF((x) => ({ ...x, [active]: applyKey(fresh && k !== '⌫' ? '' : x[active], k) }));
+    setFresh(false);
+  };
+  const pick = (k) => { setActive(k); setFresh(true); };
+  const hl = (k) => (active === k ? { borderColor: 'var(--primary)', boxShadow: '0 0 0 3px var(--primary-soft)' } : undefined);
   const save = (e) => {
     e?.preventDefault();
     const q = parseQty(f.qty);
@@ -627,9 +679,9 @@ function LineModal({ line, staff, onSave, onClose, onRemove }) {
       footer={<><button className="btn danger" onClick={onRemove}>Satırı sil</button><div style={{ flex: 1 }} /><button className="btn primary" onClick={save}>Kaydet</button></>}>
       <form className="stack" onSubmit={save}>
         <div className="grid-3">
-          <Field label={`Miktar (${line.unit})`}><input className="input" autoFocus inputMode="decimal" value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })} onFocus={(e) => e.target.select()} /></Field>
-          <Field label="Birim fiyat (₺)" hint={canPrice ? null : 'Fiyat değiştirme yetkiniz yok'}><input className="input" inputMode="decimal" readOnly={!canPrice} value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} onFocus={(e) => e.target.select()} /></Field>
-          <Field label="Satır indirimi (₺)"><input className="input" inputMode="decimal" readOnly={!canDiscount} value={f.discount} onChange={(e) => setF({ ...f, discount: e.target.value })} /></Field>
+          <Field label={`Miktar (${line.unit})`}><input className="input" autoFocus={line.unit_price > 0} inputMode="decimal" style={hl('qty')} value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })} onFocus={(e) => { e.target.select(); pick('qty'); }} /></Field>
+          <Field label="Birim fiyat (₺)" hint={canPrice ? null : 'Fiyat değiştirme yetkiniz yok'}><input className="input" autoFocus={!(line.unit_price > 0)} inputMode="decimal" style={hl('price')} readOnly={!canPrice} value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} onFocus={(e) => { e.target.select(); pick('price'); }} /></Field>
+          <Field label="Satır indirimi (₺)"><input className="input" inputMode="decimal" style={hl('discount')} readOnly={!canDiscount} value={f.discount} onChange={(e) => setF({ ...f, discount: e.target.value })} onFocus={() => pick('discount')} /></Field>
         </div>
         {staff.length > 1 && (
           <Field label="İşlemi yapan personel (prim için)">
@@ -639,9 +691,44 @@ function LineModal({ line, staff, onSave, onClose, onRemove }) {
             </select>
           </Field>
         )}
+        <NumPad compact onKey={padKey} side={[{ label: 'Kaydet', className: 'primary', onClick: save }]} />
         <div className="muted">Satır toplamı: <strong>{money(Math.round(parseQty(f.qty) * toKurus(f.price)) - toKurus(f.discount))}</strong></div>
         <button hidden />
       </form>
+    </Modal>
+  );
+}
+
+/** Fiyat gör: ürünü sepete eklemeden fiyatına ve stoğuna bakma (barkod okutun ya da adını yazın) */
+function PriceCheck({ products, onClose, onAdd }) {
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState(null);
+  const term = q.trim().toLocaleLowerCase('tr');
+  const matches = useMemo(() => (term.length < 2 || found ? [] : products.filter((p) => p.name.toLocaleLowerCase('tr').includes(term) || p.barcode?.includes(term)).slice(0, 8)), [term, products, found]);
+  const lookup = async () => {
+    const code = q.trim();
+    if (!code) return;
+    const local = products.find((p) => p.barcode === code) || (matches.length === 1 ? matches[0] : null);
+    if (local) { setFound(local); setQ(''); return; }
+    try { const r = await get(`/products/barcode/${encodeURIComponent(code)}`); setFound(r.product); setQ(''); } catch { setFound({ missing: code }); setQ(''); }
+  };
+  return (
+    <Modal title="Fiyat gör" onClose={onClose}
+      footer={<>{found && !found.missing && <button className="btn primary" onClick={() => onAdd(found)}>Sepete ekle</button>}<button className="btn" onClick={onClose}>Kapat</button></>}>
+      <div className="stack">
+        <input className="input" autoFocus placeholder="Barkod okutun ya da ürün adı yazın…" value={q} onChange={(e) => { setQ(e.target.value); setFound(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookup(); } }} aria-label="Fiyat sorgula" />
+        {matches.map((p) => <button key={p.id} type="button" className="dropdown-item" onClick={() => { setFound(p); setQ(''); }}><span>{p.name}</span><span className="muted">{money(p.sell_price)}</span></button>)}
+        {found?.missing && <div className="danger-text" style={{ textAlign: 'center', fontWeight: 700 }}>Barkod bulunamadı: {found.missing}</div>}
+        {found && !found.missing && (
+          <div className="price-check">
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{found.name}</div>
+            <div className="pc-price">{money(found.sell_price)}{found.unit !== 'adet' ? <span style={{ fontSize: 20 }}> / {found.unit}</span> : null}</div>
+            <div className="muted">{found.barcode || ''}{found.track_stock ? ` · Stok: ${fmtQty(found.stock)} ${found.unit}` : ''}</div>
+          </div>
+        )}
+        {!found && !matches.length && <div className="muted small-text" style={{ textAlign: 'center' }}>Ürün sepete eklenmez; yalnızca fiyatı ve stoğu gösterilir.</div>}
+      </div>
     </Modal>
   );
 }
