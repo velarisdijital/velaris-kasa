@@ -478,6 +478,9 @@ function InvoiceSettings() {
       {f.invoice_provider === 'parasut' && (
         <>
           <p className="small-text muted">Paraşüt hesabınızda e-Arşiv/e-Fatura açık olmalı. API bilgilerini Paraşüt destek ekibinden alabilirsiniz; firma numarası Paraşüt adres çubuğundaki sayıdır.</p>
+          {import.meta.env.VITE_APP && !serverUrl() && (
+            <div className="banner warn" style={{ borderRadius: 10 }}>Bu tablet tek başına çalışıyor: tabletten Paraşüt'e doğrudan bağlanılamaz. e-Fatura için Ayarlar → Bu cihaz → Veri konumu'ndan bir sunucuya (dükkandaki Windows bilgisayarı ya da bulut) bağlanın; faturalar sunucu üzerinden gönderilir.</div>
+          )}
           <div className="grid-2">
             <Field label="Client ID"><input className="input" value={f.parasut_client_id} onChange={set('parasut_client_id')} autoComplete="off" /></Field>
             <Field label="Client Secret"><input className="input" type="password" value={f.parasut_client_secret} onChange={set('parasut_client_secret')} autoComplete="off" /></Field>

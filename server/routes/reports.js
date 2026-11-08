@@ -17,6 +17,86 @@ export default function reportRoutes(db) {
     res.json({ today: { ...today, net: today.total - today.refunded }, low_stock: lowStock, receivables, appointments });
   }));
 
+  /**
+   * Muhasebe aktarımı (muhasebeci paketi): seçilen tarihlerdeki satış fişleri, iadeler ve alış faturaları,
+   * KDV oranına göre matrah / KDV ve ödeme tipine göre. Tutarlar kuruş. Fiş geneli indirim satırlara dağıtılır.
+   */
+  r.get('/reports/accounting', allow(...MANAGERS), h((req, res) => {
+    const [from, to] = dateRange(req.query);
+    const split = (gross, rate) => { const base = Math.round(gross / (1 + rate / 100)); return { base, vat: gross - base }; };
+    const addVat = (acc, rate, gross) => {
+      const k = String(rate);
+      const v = split(gross, Number(rate));
+      acc[k] = { base: (acc[k]?.base || 0) + v.base, vat: (acc[k]?.vat || 0) + v.vat };
+    };
+    const rates = new Set();
+    const sales = db.prepare(`SELECT s.*, c.name AS customer_name, c.tax_number AS customer_tax, u.name AS user_name FROM sales s
+      LEFT JOIN customers c ON c.id = s.customer_id LEFT JOIN users u ON u.id = s.user_id
+      WHERE s.created_at BETWEEN ? AND ? ORDER BY s.created_at, s.id`).all(from, to);
+    const itemsOf = db.prepare('SELECT id, vat_rate, line_total FROM sale_items WHERE sale_id = ? ORDER BY id');
+    const payOf = db.prepare('SELECT method, SUM(amount) AS amount FROM sale_payments WHERE sale_id = ? GROUP BY method');
+    const shareMap = new Map(); // sale_item_id → indirim sonrası satır tutarı (iadelerin KDV'si için)
+    const saleRows = sales.map((s) => {
+      const items = itemsOf.all(s.id);
+      const sub = items.reduce((a, i) => a + i.line_total, 0);
+      let left = s.discount || 0;
+      const vat = {};
+      items.forEach((it, idx) => {
+        const share = !s.discount || !sub ? 0 : idx === items.length - 1 ? left : Math.round((s.discount * it.line_total) / sub);
+        left -= share;
+        shareMap.set(it.id, { gross: it.line_total - share, rate: it.vat_rate });
+        rates.add(String(it.vat_rate));
+        addVat(vat, it.vat_rate, it.line_total - share);
+      });
+      const payments = Object.fromEntries(payOf.all(s.id).map((p) => [p.method, p.amount]));
+      return { id: s.id, date: s.created_at, receipt_no: s.receipt_no, register: s.register_name, user: s.user_name, customer: s.customer_name || '',
+        customer_tax: s.customer_tax || '', total: s.total, discount: s.discount, refunded: s.refunded_total, vat, payments,
+        fiscal_no: s.fiscal_no || '', invoice_no: s.invoice_no || '' };
+    });
+    const refunds = db.prepare(`SELECT r.*, s.receipt_no FROM refunds r JOIN sales s ON s.id = r.sale_id
+      WHERE r.created_at BETWEEN ? AND ? ORDER BY r.created_at, r.id`).all(from, to).map((r) => {
+      const vat = {};
+      const itemRate = db.prepare('SELECT vat_rate FROM sale_items WHERE id = ?');
+      for (const l of JSON.parse(r.items_json || '[]')) {
+        const rate = shareMap.get(l.sale_item_id)?.rate ?? itemRate.get(l.sale_item_id)?.vat_rate ?? 0;
+        rates.add(String(rate));
+        addVat(vat, rate, l.amount);
+      }
+      return { date: r.created_at, receipt_no: r.receipt_no, amount: r.amount, method: r.method, vat, note: r.note || '' };
+    });
+    const purchases = db.prepare(`SELECT p.*, sp.name AS supplier, sp.tax_number AS supplier_tax FROM purchases p LEFT JOIN suppliers sp ON sp.id = p.supplier_id
+      WHERE p.status = 'posted' AND p.doc_date BETWEEN ? AND ? ORDER BY p.doc_date, p.id`).all(from.slice(0, 10), to.slice(0, 10)).map((p) => {
+      const vat = {};
+      for (const l of db.prepare('SELECT vat_rate, line_net, line_total FROM purchase_items WHERE purchase_id = ?').all(p.id)) {
+        const k = String(l.vat_rate);
+        rates.add(k);
+        vat[k] = { base: (vat[k]?.base || 0) + l.line_net, vat: (vat[k]?.vat || 0) + (l.line_total - l.line_net) };
+      }
+      return { date: p.doc_date, supplier: p.supplier || '', supplier_tax: p.supplier_tax || '', doc_type: p.doc_type, doc_no: p.doc_no || '',
+        net_total: p.net_total, vat_total: p.vat_total, total: p.total, vat };
+    });
+    // Günlük özet (satış günü): fiş sayısı, brüt, iade, net, KDV oranına göre, ödeme tipine göre
+    const days = new Map();
+    const day = (d) => {
+      if (!days.has(d)) days.set(d, { day: d, receipts: 0, gross: 0, refunds: 0, vat: {}, refund_vat: {}, payments: {} });
+      return days.get(d);
+    };
+    for (const s of saleRows) {
+      const d = day(s.date.slice(0, 10));
+      d.receipts += 1; d.gross += s.total;
+      for (const [k, v] of Object.entries(s.vat)) d.vat[k] = { base: (d.vat[k]?.base || 0) + v.base, vat: (d.vat[k]?.vat || 0) + v.vat };
+      for (const [m, a] of Object.entries(s.payments)) d.payments[m] = (d.payments[m] || 0) + a;
+    }
+    for (const r of refunds) {
+      const d = day(r.date.slice(0, 10));
+      d.refunds += r.amount;
+      for (const [k, v] of Object.entries(r.vat)) d.refund_vat[k] = { base: (d.refund_vat[k]?.base || 0) + v.base, vat: (d.refund_vat[k]?.vat || 0) + v.vat };
+    }
+    const daily = [...days.values()].sort((a, b) => a.day.localeCompare(b.day)).map((d) => ({ ...d, net: d.gross - d.refunds }));
+    const vatRates = [...rates].map(Number).sort((a, b) => a - b).map(String);
+    res.json({ from, to, vat_rates: vatRates, daily, sales: saleRows, refunds, purchases });
+  }));
+
   r.get('/reports/summary', allow(...MANAGERS), h((req, res) => {
     const [from, to] = dateRange(req.query);
     const p = { from, to };

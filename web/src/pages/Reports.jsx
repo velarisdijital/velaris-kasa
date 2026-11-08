@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { get } from '../api.js';
 import { useCan, useSession } from '../App.jsx';
-import { useLoad } from '../components/ui.jsx';
+import { useLoad, useToast } from '../components/ui.jsx';
 import { METHOD_LABELS, money, qty, today } from '../format.js';
 import { SOURCE_LABELS } from './Deliveries.jsx';
 
@@ -96,6 +96,7 @@ export default function Reports() {
             </div>
           </div>
           {tablesOn && <TablesReport from={from} to={to} />}
+          <AccountingExport from={from} to={to} />
         </div>
       )}
 
@@ -195,6 +196,42 @@ function hourRange(rows) {
 const Stat = ({ label, value, sub }) => (
   <div className="card stat"><div className="label">{label}</div><div className="value">{value}</div>{sub ? <div className="sub">{sub}</div> : null}</div>
 );
+
+/** Muhasebe aktarımı: seçili tarihlerin satış özeti, fişler, iadeler, alışlar (CSV, Excel uyumlu) */
+function AccountingExport({ from, to }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const run = async (all) => {
+    setBusy(true);
+    try {
+      const m = await import('../accountingExport.js');
+      const built = m.buildFiles(await m.loadAccounting(from, to));
+      setPreview(built);
+      if (all !== null) {
+        const { giveFiles } = await import('../files.js');
+        await giveFiles(all ? built.files : built.files.slice(0, 1), { title: `Muhasebe ${from} – ${to}` });
+      }
+    } catch (e) { toast.err(e); } finally { setBusy(false); }
+  };
+  return (
+    <div className="card card-pad stack" style={{ gap: 8 }}>
+      <h3>Muhasebe aktarımı</h3>
+      <div className="muted small-text">Seçili tarihlerin satış özeti (KDV oranına göre matrah ve KDV, ödeme türleri), satış fişleri, iadeler ve alış faturaları. Dosyalar Excel'de açılır; muhasebeciniz kendi programına (Logo, Mikro, Luca, Zirve, Paraşüt…) Excel'den aktarabilir.</div>
+      <div className="row wrap" style={{ gap: 8 }}>
+        <button className="btn primary" disabled={busy} onClick={() => run(true)}>Muhasebeci paketi (4 dosya)</button>
+        <button className="btn" disabled={busy} onClick={() => run(false)}>Yalnızca günlük satış özeti</button>
+        <button className="btn ghost" disabled={busy} onClick={() => run(null)}>Önizle</button>
+      </div>
+      {preview && (
+        <div className="muted small-text">
+          {preview.files.map((f) => `${f.name} (${f.rows} satır)`).join(' · ')}
+          <div>Net satış {money(preview.summary.net)} · {Object.entries(preview.summary.vat).map(([r, v]) => `KDV %${r}: matrah ${money(v.base)}, KDV ${money(v.vat)}`).join(' · ')}</div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Bars({ data }) {
   const max = Math.max(1, ...data.map((d) => d.value));

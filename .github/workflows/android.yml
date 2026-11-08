@@ -39,6 +39,8 @@ jobs:
           npm i --no-save playwright@1.63.0
           npx playwright install --with-deps chromium
           node scripts/e2e/android-printer.e2e.cjs
+      - name: Birden çok cihaz ve mutfak ekranı uçtan uca testi (gerçek sunucu + iki tablet)
+        run: node scripts/e2e/multi-device.e2e.cjs
       - name: APK derle (imzalı)
         working-directory: android
         env:

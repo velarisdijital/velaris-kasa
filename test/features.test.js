@@ -1098,3 +1098,43 @@ test('mutfak ekranı: gönderilen siparişler, istasyon, hazırlanıyor → haz�
   assert.ok(!(await call('GET', '/api/kitchen')).body.tickets.some((x) => x.id === t.id));
   assert.equal((await call('GET', '/api/tables')).body.find((x) => x.id === m.id).ready_count, 0);
 });
+
+test('muhasebe aktarımı: KDV oranına göre matrah/KDV (fiş indirimi dağıtılır), iadeler, alış faturaları, günlük özet', async () => {
+  const today = new Date().toLocaleDateString('sv-SE');
+  // 2 x 50 TL (%20) + 1 x 100 TL (%1), 20 TL fiş indirimi → %20 satırı 100-10=90 TL, %1 satırı 100-10=90 TL
+  const s = (await call('POST', '/api/sales', { register_name: 'Kasa 1', discount: 2000,
+    items: [{ name: 'Defter MUH', qty: 2, unit_price: 5000, vat_rate: 20 }, { name: 'Peynir MUH', qty: 1, unit_price: 10000, vat_rate: 1 }],
+    payments: [{ method: 'card', amount: 18000 }] })).body;
+  const sale = (await call('GET', `/api/sales/${s.id}`)).body;
+  await call('POST', `/api/sales/${s.id}/refund`, { items: [{ sale_item_id: sale.items.find((i) => i.vat_rate === 1).id, qty: 1 }], method: 'card' });
+  const sup = (await call('POST', '/api/suppliers', { name: 'Toptancı MUH', tax_number: '9990001112' })).body;
+  const prod = (await call('POST', '/api/products', { name: 'Alış Ürünü MUH', sell_price: 3000, vat_rate: 10 })).body;
+  await call('POST', '/api/purchases', { supplier_id: sup.id, doc_no: 'MUH-1', items: [{ product_id: prod.id, qty: 10, unit_price: 1100 }] });
+
+  const r = await call('GET', `/api/reports/accounting?from=${today}&to=${today}`);
+  assert.equal(r.status, 200);
+  const a = r.body;
+  const row = a.sales.find((x) => x.receipt_no === s.receipt_no);
+  assert.equal(row.total, 18000);
+  assert.deepEqual(row.vat['20'], { base: 7500, vat: 1500 }); // 90 TL KDV dahil
+  assert.deepEqual(row.vat['1'], { base: 8911, vat: 89 });
+  assert.equal(row.payments.card, 18000);
+  assert.equal(row.refunded, 9000);
+  const ref = a.refunds.find((x) => x.receipt_no === s.receipt_no);
+  assert.equal(ref.amount, 9000);
+  assert.deepEqual(ref.vat['1'], { base: 8911, vat: 89 });
+  const pur = a.purchases.find((x) => x.doc_no === 'MUH-1');
+  assert.equal(pur.supplier_tax, '9990001112');
+  assert.equal(pur.total, 12100); // 10 x 11 TL (KDV hariç) + %10
+  assert.deepEqual(pur.vat['10'], { base: 11000, vat: 1100 });
+  // Günlük özet tutarlı: brüt = fiş toplamları, net = brüt - iade, KDV dökümü brütü verir
+  const d = a.daily.find((x) => x.day === today);
+  assert.equal(d.gross, a.sales.filter((x) => x.date.startsWith(today)).reduce((t, x) => t + x.total, 0));
+  assert.equal(d.net, d.gross - d.refunds);
+  assert.equal(Object.values(d.vat).reduce((t, v) => t + v.base + v.vat, 0), d.gross);
+  assert.ok(a.vat_rates.includes('1') && a.vat_rates.includes('20') && a.vat_rates.includes('10'));
+  // Kasiyer göremez
+  const cashier = (await call('POST', '/api/users', { name: 'Kasiyer MUH', pin: '4321', role: 'cashier' })).body;
+  const ct = (await (await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: cashier.id, pin: '4321' }) })).json()).token;
+  assert.equal((await fetch(`${base}/api/reports/accounting`, { headers: { Authorization: `Bearer ${ct}` } })).status, 403);
+});
