@@ -4,7 +4,7 @@ import { emitEvent } from './db.js';
  * Ürün stokunu değiştirir ve hareket kaydı oluşturur. Transaction içinde çağrılmalı.
  * delta: işaretli miktar (+ giriş, - çıkış). type 'count' ise delta yerine yeni stok verilir.
  */
-export function changeStock(db, productId, delta, type, { unitCost = null, note = null, saleId = null, userId = null, absolute = false, branchId = 1 } = {}) {
+export function changeStock(db, productId, delta, type, { unitCost = null, note = null, saleId = null, userId = null, absolute = false, branchId = 1, expiry = null, purchaseId = null, lotId = null } = {}) {
   const p = db.prepare('SELECT id, name, stock, min_stock, track_stock, type, barcode, crm_id FROM products WHERE id = ?').get(productId);
   if (!p || p.type === 'service' || !p.track_stock) return null;
 
@@ -17,6 +17,7 @@ export function changeStock(db, productId, delta, type, { unitCost = null, note 
   db.prepare("UPDATE products SET stock = round(stock + ?, 3), updated_at = datetime('now','localtime') WHERE id = ?").run(qty, p.id);
   db.prepare(`INSERT INTO stock_movements (product_id, type, qty, stock_after, unit_cost, note, sale_id, user_id, branch_id)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(p.id, type, qty, after, unitCost, note, saleId, userId, branchId);
+  syncLots(db, p.id, branchId, qty, type, { expiry, purchaseId, lotId });
 
   if (p.min_stock > 0 && before > p.min_stock && after <= p.min_stock) {
     emitEvent(db, 'stock.low', {
@@ -27,6 +28,33 @@ export function changeStock(db, productId, delta, type, { unitCost = null, note 
 }
 
 export const round3 = (n) => Math.round(n * 1000) / 1000;
+
+// ---- SKT (son kullanma tarihi) partileri ----
+// Alışta SKT girilirse parti açılır. Çıkışlarda (satış, fire, sayım eksiği) önce SKT'si en yakın parti düşer (FEFO);
+// alış iptalinde o alışın partisi, iadede en son parti geri artar. SKT'siz stok parti tutmaz.
+export function syncLots(db, productId, branchId, qty, type, { expiry = null, purchaseId = null, lotId = null } = {}) {
+  if (!qty) return;
+  if (qty > 0) {
+    if (expiry) {
+      db.prepare('INSERT INTO stock_lots (product_id, branch_id, expiry_date, qty, initial_qty, purchase_id) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(productId, branchId, expiry, qty, qty, purchaseId);
+    } else if (type === 'refund') {
+      db.prepare(`UPDATE stock_lots SET qty = round(qty + ?, 3) WHERE id = (SELECT id FROM stock_lots WHERE product_id = ? AND branch_id = ?
+        ORDER BY id DESC LIMIT 1)`).run(qty, productId, branchId);
+    }
+    return;
+  }
+  let left = -qty;
+  const lots = db.prepare(`SELECT id, qty FROM stock_lots WHERE product_id = ? AND branch_id = ? AND qty > 0
+    ORDER BY CASE WHEN id = ? THEN 0 WHEN purchase_id = ? THEN 1 ELSE 2 END, COALESCE(expiry_date, '9999-12-31'), id`).all(productId, branchId, lotId ?? -1, purchaseId ?? -1);
+  const upd = db.prepare('UPDATE stock_lots SET qty = ? WHERE id = ?');
+  for (const l of lots) {
+    if (left <= 0) break;
+    const take = Math.min(l.qty, left);
+    upd.run(round3(l.qty - take), l.id);
+    left = round3(left - take);
+  }
+}
 
 // ---- Reçeteler ----
 export const recipeOf = (db, productId) =>

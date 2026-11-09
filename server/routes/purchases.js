@@ -166,7 +166,8 @@ export default function purchaseRoutes(db) {
       const gross = incl ? price : Math.round(price * (1 + vat / 100));
       const lineNet = Math.round(net * qty);
       const lineTotal = Math.round(gross * qty);
-      return { p, qty, net, gross, vat, lineNet, lineTotal };
+      const expiry = /^\d{4}-\d{2}-\d{2}$/.test(it.expiry_date || '') ? it.expiry_date : null; // SKT
+      return { p, qty, net, gross, vat, lineNet, lineTotal, expiry };
     });
     const netTotal = items.reduce((a, i) => a + i.lineNet, 0);
     const total = items.reduce((a, i) => a + i.lineTotal, 0);
@@ -183,12 +184,12 @@ export default function purchaseRoutes(db) {
       const id = db.prepare(`INSERT INTO purchases (supplier_id, doc_type, doc_no, doc_date, branch_id, net_total, vat_total, total, note, user_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(supplier?.id ?? null, docType, str(b.doc_no), docDate, branchId, netTotal, total - netTotal, total,
         str(b.note), req.user.id).lastInsertRowid;
-      const ins = db.prepare(`INSERT INTO purchase_items (purchase_id, product_id, name, qty, unit, unit_cost_net, vat_rate, unit_cost, line_net, line_total)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      const ins = db.prepare(`INSERT INTO purchase_items (purchase_id, product_id, name, qty, unit, unit_cost_net, vat_rate, unit_cost, line_net, line_total, expiry_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       const label = `${{ fatura: 'Alış faturası', irsaliye: 'İrsaliye', fis: 'Alış fişi' }[docType]}${b.doc_no ? ` ${str(b.doc_no)}` : ''}${supplier ? ` · ${supplier.name}` : ''}`;
       for (const i of items) {
-        ins.run(id, i.p.id, i.p.name, i.qty, i.p.unit, i.net, i.vat, i.gross, i.lineNet, i.lineTotal);
-        changeStock(db, i.p.id, i.qty, 'in', { unitCost: i.gross, note: label, userId: req.user.id, branchId });
+        ins.run(id, i.p.id, i.p.name, i.qty, i.p.unit, i.net, i.vat, i.gross, i.lineNet, i.lineTotal, i.expiry);
+        changeStock(db, i.p.id, i.qty, 'in', { unitCost: i.gross, note: label, userId: req.user.id, branchId, expiry: i.expiry, purchaseId: id });
         if (updateBuy && i.gross !== i.p.buy_price) {
           db.prepare("UPDATE products SET buy_price = ?, updated_at = datetime('now','localtime') WHERE id = ?").run(i.gross, i.p.id);
           refreshRecipeCosts(db, i.p.id);
@@ -214,7 +215,7 @@ export default function purchaseRoutes(db) {
     if (p.status === 'cancelled') throw bad('Bu alış zaten iptal edilmiş');
     db.transaction(() => {
       const label = `İptal: alış ${p.doc_no || `#${p.id}`}`;
-      for (const i of p.items) if (i.product_id) changeStock(db, i.product_id, -i.qty, 'out', { note: label, userId: req.user.id, branchId: p.branch_id });
+      for (const i of p.items) if (i.product_id) changeStock(db, i.product_id, -i.qty, 'out', { note: label, userId: req.user.id, branchId: p.branch_id, purchaseId: p.id });
       if (p.supplier_id) supplierTx(p.supplier_id, 'adjust', -p.total, { purchaseId: p.id, note: label, userId: req.user.id });
       db.prepare("UPDATE purchases SET status = 'cancelled', note = trim(COALESCE(note, '') || ' ' || ?) WHERE id = ?").run(str(req.body?.note) || '', p.id);
     })();

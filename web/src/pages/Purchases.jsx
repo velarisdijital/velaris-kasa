@@ -161,7 +161,7 @@ function PurchaseForm({ suppliers, onClose, onSaved, onNewSupplier }) {
         supplier_id: h.supplier_id ? Number(h.supplier_id) : null, doc_type: h.doc_type, doc_no: h.doc_no, doc_date: h.doc_date, note: h.note,
         branch_id: h.branch_id ? Number(h.branch_id) : undefined, register_name: registerName(),
         prices_include_vat: incl, update_buy_price: updateBuy,
-        items: lines.map((l) => ({ product_id: l.product.id, qty: parseQty(l.qty), unit_price: toKurus(l.price), vat_rate: l.vat })),
+        items: lines.map((l) => ({ product_id: l.product.id, qty: parseQty(l.qty), unit_price: toKurus(l.price), vat_rate: l.vat, expiry_date: l.expiry || null })),
         payment: amount > 0 ? { amount, method: pay.method === 'all' ? 'cash' : pay.method, register_name: registerName() } : undefined,
       });
       toast.ok(`Alış kaydedildi · ${r.items.length} ürün stoğa girdi`);
@@ -217,7 +217,7 @@ function PurchaseForm({ suppliers, onClose, onSaved, onNewSupplier }) {
 
         <div className="table-wrap" style={{ maxHeight: 340 }}>
           <table className="table">
-            <thead><tr><th>Ürün</th><th style={{ width: 90 }}>Miktar</th><th style={{ width: 120 }}>Birim fiyat</th><th style={{ width: 70 }}>KDV %</th>
+            <thead><tr><th>Ürün</th><th style={{ width: 90 }}>Miktar</th><th style={{ width: 120 }}>Birim fiyat</th><th style={{ width: 70 }}>KDV %</th><th style={{ width: 150 }}>SKT</th>
               <th className="right">Tutar (KDV dahil)</th><th className="right">Satış fiyatı</th><th /></tr></thead>
             <tbody>
               {lines.map((l, i) => {
@@ -230,6 +230,7 @@ function PurchaseForm({ suppliers, onClose, onSaved, onNewSupplier }) {
                     <td><input className="input" inputMode="decimal" value={l.qty} onChange={(e) => upd(i, 'qty', e.target.value)} /></td>
                     <td><input className="input" inputMode="decimal" value={l.price} onChange={(e) => upd(i, 'price', e.target.value)} /></td>
                     <td><input className="input" inputMode="decimal" value={l.vat} onChange={(e) => upd(i, 'vat', e.target.value)} /></td>
+                    <td><input className="input" type="date" aria-label={`${l.product.name} son kullanma tarihi`} value={l.expiry || ''} onChange={(e) => upd(i, 'expiry', e.target.value)} /></td>
                     <td className="right num">{money(c.lineTotal)}</td>
                     <td className="right num">{money(l.product.sell_price)}
                       {low ? <div className="badge red" title="Yeni maliyet satış fiyatından yüksek">Zarar!</div>

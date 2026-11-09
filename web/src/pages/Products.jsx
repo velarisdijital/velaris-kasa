@@ -7,12 +7,15 @@ import { printElement } from '../components/Receipt.jsx';
 import { Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { dt, money, parseQty, qty, toInput, toKurus } from '../format.js';
 import PromotionsModal from './Promotions.jsx';
+import { ExpiryModal } from './StockCount.jsx';
+import { useNavigate } from 'react-router-dom';
 
 const UNITS = ['adet', 'kg', 'lt', 'm', 'paket', 'kutu'];
 const MOVE_LABELS = { in: 'Giriş', out: 'Çıkış', sale: 'Satış', refund: 'İade', adjust: 'Düzeltme', count: 'Sayım' };
 
 export default function Products() {
   const { user, settings } = useSession();
+  const navigate = useNavigate();
   const toast = useToast();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
@@ -60,6 +63,8 @@ export default function Products() {
         <button className="btn" onClick={() => setModal({ type: 'labels' })}>Etiket yazdır</button>
         {manager && <button className="btn" onClick={() => setModal({ type: 'categories' })}>Kategoriler</button>}
         {manager && <button className="btn" onClick={() => setModal({ type: 'promotions' })}>Kampanyalar</button>}
+        <button className="btn" onClick={() => navigate('/sayim')}>Sayım</button>
+        <button className="btn" onClick={() => setModal({ type: 'expiry' })}>SKT takibi</button>
         {manager && <button className="btn" onClick={() => setModal({ type: 'import' })}><Icon name="upload" /> İçe aktar</button>}
         <button className="btn" onClick={exportCsv}><Icon name="download" /> Dışa aktar</button>
         {manager && <button className="btn primary" onClick={() => setModal({ type: 'edit', product: null })}><Icon name="plus" /> Yeni ürün</button>}
@@ -118,6 +123,7 @@ export default function Products() {
         onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal?.type === 'labels' && <LabelModal selected={(products.data || []).filter((p) => selected.has(p.id))} onClose={() => setModal(null)} onPrinted={reload} />}
       {modal?.type === 'promotions' && <PromotionsModal onClose={() => setModal(null)} />}
+      {modal?.type === 'expiry' && <ExpiryModal onClose={() => { setModal(null); reload(); }} />}
       {modal?.type === 'categories' && <CategoryModal categories={categories.data || []} onClose={() => { setModal(null); reload(); }} reload={categories.reload} />}
       {modal?.type === 'import' && <ImportModal onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal?.type === 'recipe' && <RecipeModal product={modal.product} products={products.data || []} onClose={() => setModal(null)} onSaved={() => { setModal(null); reload(); }} />}

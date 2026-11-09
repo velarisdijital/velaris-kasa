@@ -1190,3 +1190,52 @@ test('kampanyalar: 3 al 2 öde, 2. ürüne %50, happy hour, sepet üzeri; sunucu
   const kg = applyPromotions([{ id: 1, name: 'x', active: 1, type: 'bxgy', scope: 'all', buy_qty: 3, pay_qty: 2 }], [{ product_id: 5, qty: 3.5, unit_price: 1000 }]);
   assert.equal(kg.lines[0], null);
 });
+
+test('toplu stok sayımı: okutarak say, fark listesi, uygula; SKT partileri FEFO, iade, alış iptali, fire, yaklaşanlar', async () => {
+  const a = (await call('POST', '/api/products', { name: 'Sayım Süt', barcode: '8690000077771', sell_price: 3000, stock: 10, track_stock: 1 })).body;
+  const b = (await call('POST', '/api/products', { name: 'Sayım Peynir', barcode: '8690000077772', sell_price: 9000, stock: 5, track_stock: 1 })).body;
+  let c = (await call('POST', '/api/stock-counts', { note: 'Ay sonu' })).body;
+  for (let i = 0; i < 3; i++) await call('PUT', `/api/stock-counts/${c.id}/items`, { barcode: '8690000077771' }); // 3 okutma
+  await call('PUT', `/api/stock-counts/${c.id}/items`, { barcode: '8690000077771', add: 5 }); // koli: +5 → 8
+  await call('PUT', `/api/stock-counts/${c.id}/items`, { product_id: b.id, counted: 7 });
+  assert.equal((await call('PUT', `/api/stock-counts/${c.id}/items`, { barcode: '0000000000000' })).status, 404);
+  c = (await call('GET', `/api/stock-counts/${c.id}`)).body;
+  const ia = c.items.find((i) => i.product_id === a.id);
+  assert.equal(ia.counted, 8); assert.equal(ia.diff, -2);
+  assert.equal(c.items.find((i) => i.product_id === b.id).diff, 2);
+  assert.equal(c.summary.minus, 1); assert.equal(c.summary.plus, 1);
+  c = (await call('POST', `/api/stock-counts/${c.id}/apply`)).body;
+  assert.equal(c.status, 'applied');
+  assert.equal((await call('GET', `/api/products/${a.id}`)).body.stock, 8);
+  assert.equal((await call('GET', `/api/products/${b.id}`)).body.stock, 7);
+  assert.equal((await call('PUT', `/api/stock-counts/${c.id}/items`, { product_id: a.id, counted: 1 })).status, 400); // kapalı
+
+  // SKT: alışta iki parti (yakın ve uzak), satış önce yakın SKT'liyi düşer
+  const sup = (await call('POST', '/api/suppliers', { name: 'SKT Toptan' })).body;
+  const soon = new Date(Date.now() + 5 * 864e5).toLocaleDateString('sv-SE');
+  const later = new Date(Date.now() + 90 * 864e5).toLocaleDateString('sv-SE');
+  const pur = (await call('POST', '/api/purchases', { supplier_id: sup.id, doc_no: 'SKT-1', items: [
+    { product_id: a.id, qty: 6, unit_price: 2000, expiry_date: later },
+    { product_id: a.id, qty: 4, unit_price: 2000, expiry_date: soon },
+  ] })).body;
+  let lots = (await call('GET', `/api/stock-lots?product_id=${a.id}`)).body;
+  assert.deepEqual(lots.map((l) => [l.expiry_date, l.qty]), [[soon, 4], [later, 6]]);
+  const s = (await call('POST', '/api/sales', { register_name: 'Kasa 1', items: [{ product_id: a.id, qty: 5 }], payments: [{ method: 'cash', amount: 15000 }] })).body;
+  lots = (await call('GET', `/api/stock-lots?product_id=${a.id}`)).body;
+  assert.deepEqual(lots.map((l) => [l.expiry_date, l.qty]), [[later, 5]]); // yakın parti bitti, uzaktan 1
+  // İade en son partiye geri eklenir
+  await call('POST', `/api/sales/${s.id}/refund`, { items: [{ sale_item_id: s.items[0].id, qty: 1 }], method: 'cash' });
+  assert.equal((await call('GET', `/api/stock-lots?product_id=${a.id}`)).body.reduce((t, l) => t + l.qty, 0), 6);
+  // Yaklaşanlar: 30 gün içinde yakın parti yok artık (bitti); elle parti ekle ve fire düş
+  const manual = (await call('POST', '/api/stock-lots', { product_id: b.id, expiry_date: new Date(Date.now() - 864e5).toLocaleDateString('sv-SE'), qty: 2 })).body;
+  let ex = (await call('GET', '/api/reports/expiry?days=30')).body;
+  assert.ok(ex.lots.some((l) => l.id === manual.id && l.days_left < 0));
+  assert.ok(ex.expired >= 1);
+  await call('POST', `/api/stock-lots/${manual.id}/waste`);
+  assert.equal((await call('GET', `/api/products/${b.id}`)).body.stock, 5); // 7 - 2 fire
+  ex = (await call('GET', '/api/reports/expiry?days=30')).body;
+  assert.ok(!ex.lots.some((l) => l.id === manual.id));
+  // Alış iptali o alışın partisini düşer
+  await call('POST', `/api/purchases/${pur.id}/cancel`);
+  assert.equal((await call('GET', `/api/stock-lots?product_id=${a.id}`)).body.reduce((t, l) => t + l.qty, 0), 0);
+});

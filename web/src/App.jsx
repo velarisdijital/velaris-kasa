@@ -13,6 +13,7 @@ import Pos from './pages/Pos.jsx';
 import Purchases from './pages/Purchases.jsx';
 import Tables from './pages/Tables.jsx';
 import Kitchen from './pages/Kitchen.jsx';
+import StockCount from './pages/StockCount.jsx';
 import Deliveries from './pages/Deliveries.jsx';
 import Products from './pages/Products.jsx';
 import Reports from './pages/Reports.jsx';
@@ -200,6 +201,7 @@ function Root() {
             {deliveryOn && <Route path="/paket" element={<Deliveries />} />}
             {appointmentsOn && <Route path="/randevu" element={<Appointments />} />}
             <Route path="/urunler" element={<Products />} />
+            <Route path="/sayim" element={<StockCount />} />
             {isManager(user) && <Route path="/alis" element={<Purchases />} />}
             <Route path="/musteriler" element={<Customers />} />
             <Route path="/satislar" element={<Sales />} />
