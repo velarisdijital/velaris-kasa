@@ -41,6 +41,20 @@ jobs:
           node scripts/e2e/android-printer.e2e.cjs
       - name: Birden çok cihaz ve mutfak ekranı uçtan uca testi (gerçek sunucu + iki tablet)
         run: node scripts/e2e/multi-device.e2e.cjs
+      - name: İmza anahtarı (GitHub sırlarında varsa üretim anahtarı, yoksa test anahtarı)
+        env:
+          KS_B64: ${{ secrets.VK_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.VK_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "VK_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "VK_KEYSTORE_PASSWORD=$KS_PASS" >> "$GITHUB_ENV"
+            echo "VK_KEY_ALIAS=velariskasa" >> "$GITHUB_ENV"
+            echo "Üretim imza anahtarı kullanılıyor"
+          else
+            echo "::warning::Üretim imza anahtarı yok (VK_KEYSTORE_BASE64 / VK_KEYSTORE_PASSWORD); test anahtarıyla imzalanıyor"
+          fi
       - name: APK derle (imzalı)
         working-directory: android
         env:

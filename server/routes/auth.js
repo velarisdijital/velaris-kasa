@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createSession, hashSecret, PERMISSIONS, rolePermissions, verifySecret } from '../auth.js';
+import { createSession, hashSecret, needsRehash, PERMISSIONS, rolePermissions, verifySecret } from '../auth.js';
 import { getSetting, setSettings } from '../db.js';
 import { BUSINESS_TYPES, seedPreset } from '../presets.js';
 import { bad, h, str } from '../util.js';
@@ -70,6 +70,7 @@ export function publicRoutes(db) {
       return res.status(401).json({ error: 'Hatalı PIN' });
     }
     failures.delete(userId);
+    if (needsRehash(pin, user.pin_hash)) db.prepare('UPDATE users SET pin_hash = ? WHERE id = ?').run(hashSecret(pin), user.id);
     const token = createSession(db, user.id);
     res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
   }));

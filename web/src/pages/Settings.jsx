@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, del, get, post, publicBaseUrl, put, registerName, serverUrl, setRegisterName, storage } from '../api.js';
 import ServerConnect from '../components/ServerConnect.jsx';
+import CameraScanner, { cameraSupported } from '../components/CameraScanner.jsx';
 import { useCan, useSession } from '../App.jsx';
 import { Avatar, Field, Icon, Modal, useConfirm, useLoad, useToast } from '../components/ui.jsx';
 import { d, dt, ROLE_LABELS } from '../format.js';
@@ -67,6 +68,7 @@ function Plan() {
   const ask = useConfirm();
   const { license, reloadSettings } = useSession();
   const [key, setKey] = useState('');
+  const [scan, setScan] = useState(false);
   if (!license) return null;
   const activate = async (e) => {
     e.preventDefault();
@@ -87,8 +89,8 @@ function Plan() {
             <div className="muted small-text">Şu anki paket</div>
             <h2 style={{ fontSize: 28 }}>{license.plan_name}</h2>
           </div>
-          <span className={`badge ${license.status === 'active' || license.status === 'demo' ? 'green' : license.status === 'free' ? '' : 'red'}`}>
-            {{ active: 'Etkin', demo: 'Demo', free: 'Lisans yok', grace: 'Süresi doldu (ek süre)', expired: 'Süresi doldu', invalid: 'Geçersiz' }[license.status]}
+          <span className={`badge ${license.status === 'active' || license.status === 'demo' ? 'green' : license.status === 'trial' ? 'blue' : license.status === 'free' ? '' : 'red'}`}>
+            {{ active: 'Etkin', demo: 'Demo', trial: 'Deneme', free: 'Lisans yok', grace: 'Süresi doldu (ek süre)', expired: 'Süresi doldu', invalid: 'Geçersiz' }[license.status]}
           </span>
         </div>
         <div className="muted small-text">
@@ -98,12 +100,16 @@ function Plan() {
           {license.install_id && <> · Kurulum kimliği: <code>{license.install_id}</code></>}
         </div>
         {license.error && <div className="danger-text small-text">{license.error}</div>}
+        {license.status === 'trial' && <div className="small-text">Deneme sürümü: tüm özellikler <b>{d(license.trial_until)}</b> tarihine kadar açık. Sonra lisans anahtarı girilmezse Ücretsiz pakete geçilir (veriler silinmez).</div>}
+        {license.trial_ended && <div className="small-text danger-text">Deneme süresi {d(license.trial_ended)} tarihinde bitti; Ücretsiz paketteyiz. Lisans anahtarı girin.</div>}
         <form className="row wrap" onSubmit={activate}>
           <input className="input" style={{ flex: 1, minWidth: 220, fontFamily: 'monospace' }} placeholder="VK1.… lisans anahtarı" value={key} onChange={(e) => setKey(e.target.value)} aria-label="Lisans anahtarı" />
+          {cameraSupported() && <button type="button" className="btn" onClick={() => setScan(true)}><Icon name="camera" /> QR okut</button>}
           <button className="btn primary" disabled={!key.trim()}>Etkinleştir</button>
           {license.status !== 'free' && license.status !== 'demo' && <button type="button" className="btn" onClick={remove}>Lisansı kaldır</button>}
         </form>
-        <small className="muted">Lisans anahtarını Velaris Dijital'den alırsınız. Anahtar internete bağlanmadan doğrulanır.</small>
+        <small className="muted">Lisans anahtarını Velaris Dijital'den alırsınız (yazı ya da QR kod). Anahtar internete bağlanmadan doğrulanır.</small>
+        {scan && <CameraScanner onClose={() => setScan(false)} onResult={(code) => { setScan(false); if (/^VK1\./.test(String(code).trim())) setKey(String(code).trim()); else toast.err('Bu QR bir lisans anahtarı değil'); }} />}
       </div>
       <div className="card table-wrap">
         <table className="table">

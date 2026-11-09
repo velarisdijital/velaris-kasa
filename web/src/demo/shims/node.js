@@ -1,8 +1,10 @@
 // Demo: node:fs / node:path / node:os / node:url yerine geçen küçük parçalar.
 import schema from '../../../../server/schema.sql?raw';
+import licensePublicKey from '../../../../server/license-public.pem?raw';
 
 export const readFileSync = (p) => {
   if (String(p).endsWith('schema.sql')) return schema;
+  if (String(p).endsWith('license-public.pem')) return licensePublicKey;
   throw new Error(`Demoda dosya okunamaz: ${p}`);
 };
 export const mkdirSync = () => {};

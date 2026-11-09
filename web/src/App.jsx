@@ -223,6 +223,13 @@ function NavItem({ to, icon, label }) {
 }
 
 function LicenseBanner({ license, admin }) {
+  if (license?.status === 'trial') {
+    const left = Math.max(0, Math.ceil((new Date(`${license.trial_until}T23:59`) - new Date()) / 86400000));
+    return <div className="banner blue">Deneme sürümü: tüm özellikler {left} gün daha açık.{admin && <> Lisans anahtarınızı girin: <NavLink className="btn small" to="/ayarlar?sekme=paket">Paket</NavLink></>}</div>;
+  }
+  if (license?.trial_ended && license.status === 'free') {
+    return <div className="banner warn">Deneme süresi bitti; Ücretsiz paketteyiz (veriler duruyor).{admin && <NavLink className="btn small" to="/ayarlar?sekme=paket">Lisans gir</NavLink>}</div>;
+  }
   if (!license || !['grace', 'expired', 'invalid'].includes(license.status)) return null;
   const text = license.status === 'grace'
     ? `${license.plan_name} lisansınızın süresi doldu. ${license.grace_until} tarihine kadar yenilemezseniz Ücretsiz pakete geçilecek.`

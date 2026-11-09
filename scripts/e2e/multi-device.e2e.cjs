@@ -83,6 +83,13 @@ function startServer() {
     await kasa.getByText(`Bu tablet sunucuya bağlı: ${api}`).waitFor({ timeout: 10000 });
     ok('Kasa tableti oturum kapanmadan sunucuyla çalışıyor');
 
+    // Tablette kurulan kullanıcı sunucuda PIN'iyle giriş yapabilmeli (tablet PIN'i sunucuyla aynı scrypt ile saklar)
+    const st2 = await (await fetch(`${api}/api/setup/status`)).json();
+    const ali = st2.users.find((u) => u.name === 'Ali');
+    const login = await fetch(`${api}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: ali.id, pin: '1234' }) });
+    if (login.status !== 200) fail(`tabletten taşınan kullanıcı sunucuda giriş yapamadı (${login.status})`);
+    else ok('Tabletten taşınan kullanıcı (Ali) sunucuda PIN ile giriş yapabiliyor');
+
     // Mutfak kullanıcısı (yönetici ekler)
     await call('POST', '/api/users', { name: 'Aşçı Ahmet', pin: '7777', role: 'kitchen' });
 

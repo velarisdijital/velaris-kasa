@@ -52,7 +52,8 @@ function publicKey() {
 }
 
 const b64u = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const unb64u = (s) => Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+// Doğrulama tarafı Buffer kullanmaz (tablet uygulamasında tarayıcıda da çalışır)
+const unb64uBytes = (s) => Uint8Array.from(atob(String(s).replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 
 /** Gizli anahtarla lisans anahtarı üretir (yalnızca Velaris Dijital'in aracında kullanılır). */
 export function signLicense(payload, privateKeyPem) {
@@ -66,9 +67,9 @@ export function verifyLicense(key) {
   const m = /^VK1\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(String(key || '').trim());
   if (!m) throw new Error('Lisans anahtarı biçimi hatalı');
   let ok = false;
-  try { ok = crypto.verify(null, Buffer.from(m[1]), publicKey(), unb64u(m[2])); } catch { ok = false; }
+  try { ok = crypto.verify(null, new TextEncoder().encode(m[1]), publicKey(), unb64uBytes(m[2])); } catch { ok = false; }
   if (!ok) throw new Error('Lisans anahtarı geçersiz (imza doğrulanamadı)');
-  const payload = JSON.parse(unb64u(m[1]).toString('utf8'));
+  const payload = JSON.parse(new TextDecoder().decode(unb64uBytes(m[1])));
   if (!PLANS[payload.plan]) throw new Error('Lisanstaki paket tanınmıyor');
   return payload;
 }
@@ -77,13 +78,25 @@ const today = () => new Date().toLocaleDateString('sv-SE');
 const addDays = (d, n) => { const x = new Date(`${d}T12:00`); x.setDate(x.getDate() + n); return x.toLocaleDateString('sv-SE'); };
 
 /** Kurulumun geçerli paketi ve durumu. */
+const TRIAL_DAYS = 14;
+
 export function currentLicense(db) {
   if (globalThis.__VK_DEMO__) return describe('pro', { status: 'demo' });
   if (process.env.NODE_ENV === 'test' && process.env.VK_TEST_DEFAULT_PLAN && !getSetting(db, 'license_key')) {
     return describe(process.env.VK_TEST_DEFAULT_PLAN, { status: 'active' });
   }
   const key = getSetting(db, 'license_key');
-  if (!key) return describe('free', { status: 'free' });
+  if (!key) {
+    // Tablet uygulaması: lisans girilene kadar 14 gün Pro deneme, sonra Ücretsiz paket (veriler silinmez)
+    if (globalThis.__VK_APP__) {
+      let start = getSetting(db, 'trial_started');
+      if (!start) { start = today(); db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('trial_started', start); }
+      const until = addDays(start, TRIAL_DAYS);
+      if (today() <= until) return describe('pro', { status: 'trial', trial_until: until });
+      return describe('free', { status: 'free', trial_ended: until });
+    }
+    return describe('free', { status: 'free' });
+  }
   let p;
   try { p = verifyLicense(key); } catch (e) { return describe('free', { status: 'invalid', error: e.message }); }
   const installId = getSetting(db, 'install_id');

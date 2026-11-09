@@ -63,6 +63,10 @@ async function saveTsplPages(p, prefix) {
     await p.getByText('Kurulumu tamamla').click();
     await p.waitForTimeout(4000);
 
+    // Lisans: tablet uygulaması lisanssızken 14 gün Pro deneme
+    await p.getByText(/Deneme sürümü: tüm özellikler \d+ gün daha açık/).waitFor({ timeout: 10000 });
+    ok('Lisanssız tablet: deneme sürümü bilgisi görünüyor');
+
     // Ayarlar → Bu cihaz
     await p.goto(`${url}#/ayarlar`);
     await p.getByRole('button', { name: 'Bu cihaz' }).click();

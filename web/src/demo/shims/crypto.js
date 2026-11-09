@@ -1,4 +1,7 @@
-// Demo: node:crypto'nun sunucu kodunda kullanılan kısmı (senkron SHA-256 / HMAC).
+// Demo / tablet uygulaması: node:crypto'nun sunucu kodunda kullanılan kısmı (senkron SHA-256 / HMAC, scrypt, Ed25519 doğrulama).
+import * as ed from '@noble/ed25519';
+import { scrypt as nobleScrypt } from '@noble/hashes/scrypt';
+import { sha512 } from '@noble/hashes/sha512';
 // Not: demo amaçlıdır; gerçek sürüm Node'un scrypt'ini kullanır.
 const K = new Uint32Array([0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
 
@@ -48,20 +51,60 @@ function hmac(key, data) {
   return sha256Bytes(concat(pad(0x5c), sha256Bytes(concat(pad(0x36), toBytes(data)))));
 }
 
-const digester = (fn) => { const parts = []; const o = { update: (d) => { parts.push(String(d)); return o; }, digest: () => hex(fn(parts.join(''))) }; return o; };
+// update(): metin ya da bayt; digest('hex') metin, digest() bayt (Node'daki gibi Buffer benzeri)
+const digester = (fn) => {
+  const parts = [];
+  const o = {
+    update: (d) => { parts.push(d instanceof Uint8Array ? d : d && d.__bytes ? d.__bytes : toBytes(String(d))); return o; },
+    digest: (encoding) => {
+      const all = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
+      let off = 0; for (const p of parts) { all.set(p, off); off += p.length; }
+      const out = fn(all);
+      return encoding === 'hex' ? hex(out) : globalThis.Buffer.from(out);
+    },
+  };
+  return o;
+};
 
 export const randomBytes = (n) => wrap(globalThis.crypto.getRandomValues(new Uint8Array(n)));
 export const randomUUID = () => globalThis.crypto.randomUUID();
-export const createHash = () => digester((s) => sha256Bytes(toBytes(s)));
-export const createHmac = (_alg, key) => digester((s) => hmac(key, s));
-export const scryptSync = (secret, salt) => {
-  let b = toBytes(`${salt}:${secret}`);
-  for (let i = 0; i < 2000; i++) b = sha256Bytes(b);
-  return wrap(b);
+export const createHash = () => digester((b) => sha256Bytes(b));
+export const createHmac = (_alg, key) => digester((b) => hmac(key, b));
+// Gerçek scrypt (Node'un scryptSync varsayılanlarıyla aynı: N=16384, r=8, p=1): tablette kaydedilen PIN'ler
+// sunucuya taşınınca da doğrulanabilsin.
+export const scryptSync = (secret, salt, keylen = 32) => wrap(nobleScrypt(toBytes(String(secret)), toBytes(String(salt)), { N: 16384, r: 8, p: 1, dkLen: keylen }));
+const bytesOf = (v) => (v instanceof Uint8Array ? v : v && v.__bytes ? v.__bytes : toBytes(String(v)));
+export const timingSafeEqual = (a, b) => {
+  const x = bytesOf(a); const y = bytesOf(b);
+  if (x.length !== y.length) return false;
+  let d = 0;
+  for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i];
+  return d === 0;
 };
-export const timingSafeEqual = (a, b) => String(a) === String(b);
 
-// Sunucu kodu Buffer.from(...) kullanıyor; demoda yalnızca karşılaştırma için gerekiyor.
-globalThis.Buffer ??= { from: (v) => ({ toString: () => String(v), length: String(v).length }) };
+// Lisans imzası (Ed25519) doğrulama: anahtar PEM (SPKI) → son 32 bayt ham açık anahtar
+ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
+export function verify(_alg, data, keyPem, sig) {
+  const der = Uint8Array.from(atob(String(keyPem).replace(/-----[^-]+-----/g, '').replace(/\s+/g, '')), (c) => c.charCodeAt(0));
+  return ed.verify(bytesOf(sig), bytesOf(data), der.slice(-32));
+}
 
-export default { randomBytes, randomUUID, createHash, createHmac, scryptSync, timingSafeEqual };
+// Sunucu kodundaki Buffer kullanımı için küçük bir karşılık (hex / base64 / utf8)
+if (!globalThis.Buffer) {
+  const fromHex = (s) => Uint8Array.from(String(s).match(/../g) || [], (h) => parseInt(h, 16));
+  const make = (bytes) => ({
+    __bytes: bytes, length: bytes.length,
+    toString: (encoding) => (encoding === 'hex' ? hex(bytes) : encoding === 'base64' ? btoa(String.fromCharCode(...bytes)) : new TextDecoder().decode(bytes)),
+  });
+  globalThis.Buffer = {
+    from: (v, encoding) => {
+      if (v instanceof Uint8Array) return make(v);
+      if (v && v.__bytes) return make(v.__bytes);
+      if (encoding === 'hex') return make(fromHex(v));
+      if (encoding === 'base64') return make(Uint8Array.from(atob(String(v)), (c) => c.charCodeAt(0)));
+      return make(toBytes(String(v)));
+    },
+  };
+}
+
+export default { randomBytes, randomUUID, createHash, createHmac, scryptSync, timingSafeEqual, verify };

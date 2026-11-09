@@ -7,11 +7,28 @@ export function hashSecret(secret) {
   return `${salt}:${hash}`;
 }
 
+// Eski tablet uygulaması sürümleri PIN'i gerçek scrypt yerine SHA-256 zinciriyle saklıyordu (salt:secret, 2000 tur).
+// Bu kayıtlar hem tablette hem sunucuya taşındıktan sonra kabul edilir; ilk başarılı girişte scrypt'e çevrilir.
+function legacyHash(secret, salt) {
+  let b = Buffer.from(`${salt}:${secret}`, 'utf8');
+  for (let i = 0; i < 2000; i++) b = crypto.createHash('sha256').update(b).digest();
+  return b.toString('hex');
+}
+const hexEq = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
+
 export function verifySecret(secret, stored) {
   const [salt, hash] = String(stored).split(':');
   if (!salt || !hash) return false;
-  const test = crypto.scryptSync(String(secret), salt, 32);
-  return crypto.timingSafeEqual(test, Buffer.from(hash, 'hex'));
+  const test = crypto.scryptSync(String(secret), salt, 32).toString('hex');
+  if (hexEq(test, hash)) return true;
+  return hexEq(legacyHash(String(secret), salt), hash);
+}
+
+/** Kayıt eski biçimdeyse (doğrulandıktan sonra) yeniden scrypt ile saklanmalı mı? */
+export function needsRehash(secret, stored) {
+  const [salt, hash] = String(stored).split(':');
+  if (!salt || !hash) return false;
+  return !hexEq(crypto.scryptSync(String(secret), salt, 32).toString('hex'), hash);
 }
 
 export const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');

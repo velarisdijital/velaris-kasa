@@ -63,7 +63,9 @@ async function clearSaved() {
 }
 
 async function boot(bytes) {
-  globalThis.__VK_DEMO__ = true; // demoda tüm paket özellikleri açık
+  // Demoda tüm paket özellikleri açık. Tablet uygulamasında lisansa bakılır (lisans yoksa 14 gün Pro deneme).
+  globalThis.__VK_DEMO__ = !import.meta.env.VITE_APP;
+  globalThis.__VK_APP__ = !!import.meta.env.VITE_APP;
   const SQL = await initSqlJs();
   useSqlJs(SQL, bytes);
   const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR, purchaseR, tableR, qrR, deliveryR, platformR, kitchenR] = await Promise.all([
