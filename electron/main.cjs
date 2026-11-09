@@ -48,7 +48,21 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true },
   });
   win.loadURL(`http://localhost:${port}/`);
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // Müşteri ekranı: ikinci monitör varsa orada tam ekran açılır
+    if (url.startsWith(`http://localhost:${port}/`) && url.includes('#/musteri-ekrani')) {
+      const { screen } = require('electron');
+      const primary = screen.getPrimaryDisplay();
+      const other = screen.getAllDisplays().find((d) => d.id !== primary.id);
+      const b = (other || primary).bounds;
+      return { action: 'allow', overrideBrowserWindowOptions: {
+        x: b.x + 40, y: b.y + 40, width: 1024, height: 700, fullscreen: !!other, autoHideMenuBar: true,
+        title: 'Müşteri ekranı', backgroundColor: '#121212', icon: path.join(__dirname, 'icon.png'),
+      } };
+    }
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
 
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     {

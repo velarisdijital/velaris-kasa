@@ -529,6 +529,7 @@ function Device() {
       <div><button className="btn primary">Kaydet</button></div>
       {import.meta.env.VITE_APP && <DataLocation />}
       {import.meta.env.VITE_APP && <KioskSettings />}
+      <CustomerDisplaySettings />
       <ReceiptPrinterSettings />
       <LabelPrinterSettings />
     </form>
@@ -559,6 +560,46 @@ function DataLocation() {
           <ServerConnect hasLocalData />
         </>
       )}
+    </div>
+  );
+}
+
+/** Müşteri ekranı: kasanın sepetini müşteriye dönük ekranda göster (aynı cihazda ayrı pencere ya da başka cihaz) */
+function CustomerDisplaySettings() {
+  const ask = useConfirm();
+  const [mod, setMod] = useState(null);
+  const [on, setOn] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [watch, setWatch] = useState(() => storage.get('vk_display_register', null) || registerName());
+  useEffect(() => { import('../customerDisplay.js').then((m) => { setMod(m); setOn(m.displayEnabled()); setMsg(m.displayMessage()); }); }, []);
+  if (!mod) return null;
+  const native = !!globalThis.Capacitor?.isNativePlatform?.();
+  const localOnly = import.meta.env.VITE_DEMO && !serverUrl();
+  const openWindow = () => {
+    mod.setDisplayEnabled(true); setOn(true);
+    window.open(`${location.pathname}#/musteri-ekrani?kasa=${encodeURIComponent(registerName())}`, 'vk-musteri-ekrani', 'popup,width=1024,height=700');
+  };
+  const makeDisplay = async () => {
+    if (!(await ask(`Bu cihaz "${watch}" kasasının müşteri ekranı olsun mu? Uygulama açılınca doğrudan müşteri ekranı görünür. Çıkmak için sağ üstteki × (çıkışta oturum kapanır).`, { ok: 'Müşteri ekranı yap', danger: false }))) return;
+    storage.set('vk_display_register', watch);
+    storage.set('vk_display_device', true);
+    location.hash = `#/musteri-ekrani?kasa=${encodeURIComponent(watch)}`;
+  };
+  return (
+    <div className="card card-pad stack" style={{ background: 'var(--panel-2)', boxShadow: 'none' }} onClick={(e) => e.stopPropagation()}>
+      <strong>Müşteri ekranı</strong>
+      <label className="check"><input type="checkbox" checked={on} onChange={(e) => { mod.setDisplayEnabled(e.target.checked); setOn(e.target.checked); }} /> Bu kasanın sepeti müşteri ekranında görünsün</label>
+      <Field label="Boşta görünen yazı"><input className="input" value={msg} maxLength={120} onChange={(e) => { setMsg(e.target.value); mod.setDisplayMessage(e.target.value); }} placeholder="Hoş geldiniz" /></Field>
+      <div className="row wrap" style={{ gap: 8 }}>
+        {!native && <button type="button" className="btn small" onClick={openWindow}>Bu bilgisayarda ayrı pencerede aç</button>}
+        <input className="input" style={{ width: 160 }} value={watch} onChange={(e) => setWatch(e.target.value)} aria-label="Gösterilecek kasa" title="Gösterilecek kasa" />
+        <button type="button" className="btn small" onClick={makeDisplay}>Bu cihazı müşteri ekranı yap</button>
+      </div>
+      <div className="muted small-text">
+        {!native && <>Ayrı pencereyi müşteriye dönük ikinci monitöre sürükleyin (masaüstü uygulamasında ikinci monitör varsa orada tam ekran açılır). </>}
+        Başka bir tablet ya da telefonu müşteri ekranı yapmak için o cihazı aynı sunucuya bağlayın, yönetici olarak girin ve "Bu cihazı müşteri ekranı yap"a basın.
+        {localOnly && <> <b>Bu tabletin verileri yalnızca bu tablette;</b> başka cihazda müşteri ekranı için önce yukarıdan sunucuya bağlanın.</>}
+      </div>
     </div>
   );
 }

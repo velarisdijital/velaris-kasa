@@ -3,6 +3,7 @@
 //  - Kasa tableti (Android uygulaması, sahte köprü) kurulur, verilerini sunucuya taşıyıp bağlanır
 //  - Mutfak tableti ilk açılışta sunucuya bağlanır, Mutfak kullanıcısıyla girer
 //  - Masadan mutfağa gönderilen sipariş mutfak ekranına düşer; "Hepsi hazır" garsonun masasında görünür
+//  - Müşteri ekranı (ayrı tablet): kasanın sepeti, toplamı ve para üstü
 //   node scripts/build-app.mjs && node scripts/e2e/multi-device.e2e.cjs [ekran-görüntüsü-klasörü]
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
@@ -130,6 +131,71 @@ function startServer() {
     await readyBadge.waitFor({ timeout: 15000 });
     ok(`Garsonun masasında görünüyor: "${await readyBadge.innerText()}"`);
     await shot(kasa, 'kasa-masalar');
+
+    // ---- Müşteri ekranı: ayrı tablet, kasanın sepetini ve para üstünü gösterir ----
+    await call('POST', '/api/shifts/open', { register_name: 'Kasa 1', opening_cash: 0 });
+    const ekran = await device('ekran');
+    ekran.on('dialog', (d) => d.accept());
+    await ekran.goto(url);
+    await ekran.getByText('Birden çok cihaz mı kullanacaksınız?').click();
+    await ekran.getByLabel('Sunucu adresi').fill(`127.0.0.1:${srv.port}`);
+    await ekran.getByRole('button', { name: 'Sunucuyu dene' }).click();
+    await ekran.getByText(/Sunucu hazır: Deneme Kafe/).waitFor({ timeout: 10000 });
+    const r3 = ekran.waitForEvent('load', { timeout: 20000 });
+    await ekran.getByRole('button', { name: 'Bu sunucuyu kullan' }).click();
+    await r3;
+    await ekran.getByRole('button', { name: /Ali/ }).first().click();
+    for (const d of '1234') await ekran.locator('.numpad button', { hasText: new RegExp(`^${d}$`) }).click();
+    await ekran.getByRole('button', { name: 'Giriş' }).click();
+    await ekran.locator('.sidebar').waitFor({ timeout: 10000 });
+    await ekran.goto(`${url}#/ayarlar`);
+    await ekran.getByRole('button', { name: 'Bu cihaz' }).click();
+    await ekran.getByRole('button', { name: 'Bu cihazı müşteri ekranı yap', exact: true }).click();
+    await ekran.getByRole('button', { name: 'Müşteri ekranı yap', exact: true }).click();
+    await ekran.locator('.cd[data-mode="idle"]').waitFor({ timeout: 10000 });
+    if (!(await ekran.getByRole('heading', { name: 'Deneme Kafe' }).isVisible())) fail('müşteri ekranında işletme adı yok');
+    else ok('Ayrı tablet müşteri ekranı oldu (boşta: işletme adı, hoş geldiniz)');
+    await shot(ekran, 'musteri-1-bosta');
+    // Yeniden açılınca doğrudan müşteri ekranı
+    await ekran.reload();
+    await ekran.locator('.cd[data-mode="idle"]').waitFor({ timeout: 15000 });
+    ok('Müşteri ekranı cihazı yeniden açılınca doğrudan müşteri ekranında');
+
+    await kasa.goto(`${url}#/ayarlar`);
+    await kasa.getByRole('button', { name: 'Bu cihaz' }).click();
+    await kasa.getByLabel('Bu kasanın sepeti müşteri ekranında görünsün').check();
+    await kasa.goto(`${url}#/kasa`);
+    const item = food.find((p) => p.sell_price > 0) || food[0];
+    const search = kasa.getByLabel('Barkod veya ürün ara');
+    await search.waitFor({ timeout: 15000 }).catch(async (e) => { await shot(kasa, 'kasa-pos-hata'); throw e; });
+    // Her eklemeden sonra müşteri ekranındaki toplamın güncellenmesini bekle
+    for (let i = 1; i <= 2; i++) {
+      await search.fill(item.name); await kasa.keyboard.press('Enter');
+      await ekran.waitForFunction((t) => Number(document.querySelector('.cd-total')?.dataset.total) === t, item.sell_price * i, { timeout: 10000 })
+        .catch(() => {});
+    }
+    await ekran.locator('.cd-line', { hasText: item.name }).waitFor({ timeout: 10000 });
+    const shownTotal = Number(await ekran.locator('.cd-total').getAttribute('data-total'));
+    if (shownTotal !== item.sell_price * 2) fail(`müşteri ekranındaki toplam yanlış: ${shownTotal} (beklenen ${item.sell_price * 2})`);
+    else ok(`Kasada sepete eklenen ürün müşteri ekranında görünüyor (${item.name} × 2, toplam doğru)`);
+    await shot(ekran, 'musteri-2-sepet');
+    await kasa.getByRole('button', { name: /^Nakit/ }).click();
+    const given2 = (Math.ceil((item.sell_price * 2) / 10000) * 100 + 100);
+    await kasa.locator('.modal input.input').first().fill(String(given2));
+    await kasa.getByRole('button', { name: /Satışı tamamla/ }).click();
+    await ekran.locator('.cd[data-mode="paid"]').waitFor({ timeout: 10000 });
+    const change = Number(await ekran.locator('[data-change]').getAttribute('data-change'));
+    if (change !== given2 * 100 - item.sell_price * 2) {
+      const last = await call('GET', '/api/sales?limit=1').catch(() => null);
+      fail(`müşteri ekranında para üstü yanlış: ${change} (ekran: ${await ekran.locator('.cd-paid-grid').innerText()}; son satış: ${JSON.stringify(last && (last.sales || last)[0] && { total: (last.sales || last)[0].total, items: (last.sales || last)[0].item_count })})`);
+    }
+    else ok(`Ödeme sonrası müşteri ekranı "Teşekkürler" ve para üstünü gösteriyor (${change / 100} ₺)`);
+    await shot(ekran, 'musteri-3-odeme');
+    // Çıkış oturumu kapatır (müşteri yönetici ekranına geçemez)
+    await ekran.locator('.cd-exit').click();
+    await ekran.getByRole('button', { name: /Ali/ }).first().waitFor({ timeout: 10000 })
+      .then(async () => { if (await ekran.locator('.sidebar, .cd').count()) throw new Error('oturum açık'); }).then(
+      () => ok('Müşteri ekranından çıkınca oturum kapanıyor (giriş ekranı)'), () => fail('müşteri ekranından çıkınca oturum kapanmadı'));
 
     if (errors.length) fail(`sayfa hataları: ${errors.join(' | ')}`);
     if (!process.exitCode) console.log('\nTüm adımlar başarılı.');

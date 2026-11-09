@@ -68,7 +68,7 @@ async function boot(bytes) {
   globalThis.__VK_APP__ = !!import.meta.env.VITE_APP;
   const SQL = await initSqlJs();
   useSqlJs(SQL, bytes);
-  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR, purchaseR, tableR, qrR, deliveryR, platformR, kitchenR, promoR, invR] = await Promise.all([
+  const [{ openDatabase, getSetting, setSettings }, { authenticate }, authR, productR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR, bookingR, branchR, purchaseR, tableR, qrR, deliveryR, platformR, kitchenR, promoR, invR, displayR] = await Promise.all([
     import('../../../server/db.js'), import('../../../server/auth.js'), import('../../../server/routes/auth.js'),
     import('../../../server/routes/products.js'), import('../../../server/routes/customers.js'), import('../../../server/routes/shifts.js'),
     import('../../../server/routes/sales.js'), import('../../../server/routes/appointments.js'), import('../../../server/routes/reports.js'),
@@ -78,6 +78,7 @@ async function boot(bytes) {
     import('../../../server/routes/kitchen.js'),
     import('../../../server/routes/promotions.js'),
     import('../../../server/routes/inventory.js'),
+    import('../../../server/routes/display.js'),
   ]);
   db = openDatabase('/demo');
   if (!getSetting(db, 'install_id')) setSettings(db, { install_id: crypto.randomUUID() });
@@ -90,7 +91,7 @@ async function boot(bytes) {
   api.use(qrR.default(db));
   api.use(authenticate(db));
   api.use(authR.sessionRoutes(db));
-  for (const m of [productR, branchR, purchaseR, tableR, kitchenR, promoR, invR, deliveryR, platformR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));
+  for (const m of [productR, branchR, purchaseR, tableR, kitchenR, displayR, promoR, invR, deliveryR, platformR, customerR, shiftR, saleR, apptR, reportR, settingsR, notifyR]) api.use(m.default(db));
   handler = api;
 }
 

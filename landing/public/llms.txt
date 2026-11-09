@@ -6,7 +6,7 @@
 - Platformlar: Android tablet/telefon uygulaması (APK), web tarayıcı, Windows bilgisayar (dükkân sunucusu).
 - İnternetsiz çalışır; veriler cihazda tutulur. Birden çok cihaz dükkândaki Windows bilgisayarına ya da bulut sunucuya bağlanarak aynı veriyi kullanır.
 - Fiyatlar (KDV hariç, aylık, taahhütsüz): Ücretsiz 0 ₺ (süresiz), Esnaf 599 ₺, Salon 799 ₺, Pro 1.290 ₺. Tablet uygulamasında ilk 14 gün Pro özellikleri açıktır. Kurulum ücreti yoktur.
-- Satış: barkodlu hızlı satış, kamera ile barkod okuma, sayı tuş takımı (miktar × barkod), fiyat gör, satış bekletme, nakit/kart/parçalı ödeme, banknot düğmeleriyle para üstü, iade.
+- Satış: barkodlu hızlı satış, kamera ile barkod okuma, sayı tuş takımı (miktar × barkod), fiyat gör, satış bekletme, nakit/kart/parçalı ödeme, banknot düğmeleriyle para üstü, iade, müşteri ekranı (ikinci monitör ya da müşteriye dönük tablet: sepet, toplam, para üstü).
 - Stok: ürün ve kategori, CSV/Excel içe-dışa aktarma, toplu fiyat güncelleme, alış faturası ve tedarikçi, toplu stok sayımı, SKT (son kullanma tarihi) takibi ve FEFO, reçeteli stok, şube bazlı stok, kritik stok uyarısı.
 - Kampanyalar: X al Y öde, N. ürüne indirim, saatlik/günlük indirim (happy hour), sepet tutarına indirim.
 - Kafe/restoran: masa planı, adisyon, garson modu (telefondan sipariş), mutfak ve bar ekranı (KDS), QR menü ve masadan garson çağırma, hesap bölme, iptal/ikram raporu, paket servis ve kurye, yemek platformu bağlantı altyapısı.

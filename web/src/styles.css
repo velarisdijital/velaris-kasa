@@ -494,3 +494,44 @@ a.btn.primary { color: var(--bg); }
 .price-check { text-align: center; padding: 12px; }
 .price-check .pc-price { font-size: 48px; font-weight: 800; }
 .promo-tag { font-size: 12px; font-weight: 700; color: var(--success); background: var(--success-soft); border-radius: 8px; padding: 2px 8px; justify-self: start; }
+
+/* ---------- Müşteri ekranı ---------- */
+.cd { position: fixed; inset: 0; background: #121212; color: #F2EFEA; display: flex; flex-direction: column; overflow: hidden; font-size: clamp(16px, 1.6vw, 22px); }
+.cd-exit { position: absolute; top: 8px; right: 10px; z-index: 3; width: 40px; height: 40px; border: 0; border-radius: 20px; background: transparent; color: #F2EFEA; opacity: .25; font-size: 26px; cursor: pointer; }
+.cd-exit:hover, .cd-exit:focus-visible { opacity: .9; background: #2a2a28; }
+.cd-conn { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: #FFC21A; color: #121212; padding: 4px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; z-index: 2; }
+.cd-register { position: absolute; bottom: 10px; right: 10px; background: #1E1D1B; color: #BDB8B0; border: 1px solid #3A3936; border-radius: 8px; padding: 4px 8px; font-size: 13px; opacity: .6; }
+.cd-idle, .cd-paid { margin: auto; text-align: center; padding: 24px; }
+.cd-logo { width: clamp(72px, 10vw, 128px); height: auto; }
+.cd-idle h1 { font-weight: 300; font-size: clamp(34px, 5vw, 72px); letter-spacing: -.02em; margin: 18px 0 6px; }
+.cd-msg { color: #BDB8B0; font-size: clamp(18px, 2.2vw, 30px); margin: 0; }
+.cd-clock { color: #6B6862; font-size: clamp(16px, 1.8vw, 24px); margin-top: 28px; font-variant-numeric: tabular-nums; }
+.cd-cart { flex: 1; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); min-height: 0; }
+.cd-lines { overflow-y: auto; padding: 20px 24px 40px; background: #F2EFEA; color: #121212; }
+.cd-lines header { display: flex; justify-content: space-between; gap: 12px; color: #6B6862; font-size: .8em; padding: 0 0 10px; border-bottom: 1px solid #DCD8D1; margin-bottom: 4px; padding-right: 40px; }
+.cd-cust { font-weight: 600; color: #121212; }
+.cd-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 12px 0; border-bottom: 1px solid #DCD8D1; }
+.cd-line.last { animation: cd-in .35s ease-out; }
+@keyframes cd-in { from { background: #FFE2D7; } to { background: transparent; } }
+.cd-name { display: grid; gap: 2px; min-width: 0; }
+.cd-name b { font-weight: 600; overflow-wrap: anywhere; }
+.cd-name small { color: #6B6862; font-size: .78em; font-variant-numeric: tabular-nums; }
+.cd-amt { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cd-sum { display: flex; flex-direction: column; justify-content: flex-end; padding: 32px 28px; gap: 6px; }
+.cd-count { color: #BDB8B0; margin-bottom: auto; }
+.cd-row { display: flex; justify-content: space-between; color: #BDB8B0; font-variant-numeric: tabular-nums; }
+.cd-total-label { color: #BDB8B0; text-transform: uppercase; letter-spacing: .08em; font-size: .75em; margin-top: 12px; }
+.cd-total { font-size: clamp(40px, 6vw, 104px); font-weight: 600; line-height: 1.05; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cd-save { color: #20C4A0; font-weight: 600; margin-top: 8px; }
+.cd-paid h1 { font-weight: 300; font-size: clamp(40px, 6vw, 88px); margin: 0 0 24px; letter-spacing: -.02em; }
+.cd-paid-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; margin-bottom: 28px; }
+.cd-paid-grid > div { background: #1E1D1B; border: 1px solid #3A3936; border-radius: 16px; padding: 16px 24px; display: grid; gap: 4px; min-width: 200px; }
+.cd-paid-grid span { color: #BDB8B0; font-size: .8em; }
+.cd-paid-grid b { font-size: clamp(28px, 3.6vw, 52px); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cd-change { background: #FF4D1A !important; border-color: #FF4D1A !important; }
+.cd-change span { color: #fff !important; }
+@media (max-width: 720px), (orientation: portrait) {
+  .cd-cart { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  .cd-sum { padding: 18px 20px; }
+  .cd-count { margin-bottom: 0; }
+}

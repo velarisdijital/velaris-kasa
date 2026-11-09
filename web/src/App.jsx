@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import logo from './assets/logo.svg';
 import { HashRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { flushQueue, get, getToken, offlineQueue, onQueueChange, post, serverUrl, setToken, setUnauthorizedHandler } from './api.js';
+import { flushQueue, get, getToken, offlineQueue, onQueueChange, post, serverUrl, setToken, setUnauthorizedHandler, storage } from './api.js';
 import { ConfirmProvider, Icon, ToastProvider } from './components/ui.jsx';
 import DemoBar from './demo/DemoBar.jsx';
 import Appointments from './pages/Appointments.jsx';
@@ -13,6 +13,7 @@ import Pos from './pages/Pos.jsx';
 import Purchases from './pages/Purchases.jsx';
 import Tables from './pages/Tables.jsx';
 import Kitchen from './pages/Kitchen.jsx';
+import CustomerDisplay from './pages/CustomerDisplay.jsx';
 import StockCount from './pages/StockCount.jsx';
 import Deliveries from './pages/Deliveries.jsx';
 import Products from './pages/Products.jsx';
@@ -53,6 +54,7 @@ function Gate() {
 }
 
 function Root() {
+  const { pathname } = useLocation();
   const [status, setStatus] = useState(null);
   const [user, setUser] = useState(null);
   const [settings, setSettings] = useState({});
@@ -120,6 +122,14 @@ function Root() {
   const appointmentsOn = settings.modules_appointments === '1' && !!license?.features?.includes('appointments');
   const tablesOn = settings.modules_tables === '1' && !!license?.features?.includes('tables');
   const deliveryOn = settings.modules_delivery === '1' && !!license?.features?.includes('tables');
+  // Müşteri ekranı: menüsüz, tam ekran (her rol açabilir)
+  if (pathname === '/musteri-ekrani' || storage.get('vk_display_device', false)) {
+    return (
+      <SessionCtx.Provider value={{ user, settings, license, reloadSettings, logout, waiter: false }}>
+        <CustomerDisplay />
+      </SessionCtx.Provider>
+    );
+  }
   // Mutfak rolü: yalnızca mutfak ekranı
   if (user.role === 'kitchen') {
     return (

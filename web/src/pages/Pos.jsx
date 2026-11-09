@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { get, loadProducts, post, registerName, storage, submitSale, uuid } from '../api.js';
+import { publishDisplay } from '../customerDisplay.js';
 import { useCan, useSession } from '../App.jsx';
 import CameraScanner, { cameraSupported } from '../components/CameraScanner.jsx';
 import { printReceipt } from '../components/Receipt.jsx';
@@ -72,6 +73,22 @@ export default function Pos() {
   const subtotal = cart.reduce((a, l, i) => a + lineTotal(l) - promoOf(i), 0);
   const basketPromo = Math.min(promo.basket?.discount || 0, subtotal);
   const total = Math.max(0, subtotal - discount - basketPromo);
+
+  // Müşteri ekranı: sepet her değiştiğinde yayınlanır (ödeme ekranı birkaç saniye kalır, sonra boşta)
+  const paidShownRef = useRef(0);
+  useEffect(() => {
+    if (!cart.length) {
+      if (Date.now() < paidShownRef.current) return;
+      publishDisplay({ mode: 'idle' });
+      return;
+    }
+    paidShownRef.current = 0;
+    const savings = cart.reduce((a, l, i) => a + (l.discount || 0) + promoOf(i), 0) + discount + basketPromo;
+    publishDisplay({
+      mode: 'cart', subtotal, discount: discount + basketPromo, savings, total, customer: customer?.name || '',
+      lines: cart.map((l, i) => ({ name: l.name, qty: l.qty, unit: l.unit, unit_price: l.unit_price, total: lineTotal(l) - promoOf(i), promo: promo.lines[i]?.promo_name || '' })),
+    });
+  }, [cart, promo, discount, basketPromo, subtotal, total, customer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = useCallback(async () => {
     const [p, c, u, s] = await Promise.all([
@@ -201,6 +218,8 @@ export default function Pos() {
           payments: payments.map((p) => (p.method === 'cash' ? { ...p, amount: p.amount - change } : p)) }
         : sale;
       setLastSale({ sale: printable, change });
+      paidShownRef.current = Date.now() + 10000;
+      publishDisplay({ mode: 'paid', total, paid, change, customer: cust?.name || '' }, { now: true });
       if (sale.offline) toast('Çevrimdışı: satış kaydedildi, bağlantı gelince gönderilecek');
       else if (sale.fiscal_status === 'failed') toast.err(`Satış kaydedildi ama mali fiş basılamadı: ${sale.fiscal_error}`);
       else toast.ok(change > 0 ? `Satış tamam — Para üstü ${money(change)}` : 'Satış tamamlandı');
