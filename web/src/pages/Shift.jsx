@@ -155,6 +155,12 @@ const notify = (type, message) => window.dispatchEvent(new CustomEvent('vk-toast
 async function printZ(z, settings = {}) {
   try {
     const lp = await import('../printing/labelPrinter.js');
+    if (lp.isNative() && lp.getReceiptPrinter().deviceId) {
+      const { printZEscPos } = await import('../printing/receiptPrinter.js');
+      await printZEscPos(z, settings);
+      notify('success', 'Z raporu yazıcıya gönderildi');
+      return;
+    }
     const cfg = lp.getPrinter();
     if (lp.isNative() && cfg.deviceId && cfg.receiptVia !== 'system') {
       const { printZBluetooth } = await import('../printing/receiptBitmap.js');

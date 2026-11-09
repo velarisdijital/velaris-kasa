@@ -6,7 +6,7 @@
   const PRINTER_BLE = 'DC:0D:30:AA:B3:34';
   // Eşleşmeler gerçek tablette olduğu gibi uygulama yeniden açılınca da korunur
   const saved = JSON.parse(sessionStorage.getItem('fakeBonded') || 'null');
-  const state = { bonded: saved || [{ address: '11:22:33:44:55:66', name: 'Galaxy Buds', type: 1 }], calls: [], written: 0, writes: [], status: 4, files: {} };
+  const state = { bonded: saved || [{ address: '11:22:33:44:55:66', name: 'Galaxy Buds', type: 1 }, { address: '66:55:44:33:22:11', name: 'RPP02N', type: 1 }], calls: [], written: 0, writes: [], status: 4, files: {} };
   window.__fake = state;
   const listeners = {}; // "Plugin:event" -> [callback]
   let nextId = 1;
@@ -35,7 +35,7 @@
         if (!state.bonded.some((d) => d.address === address)) throw new Error('read failed, socket might closed or timeout');
         const n = atob(data).length;
         state.written += n;
-        state.writes.push({ address, bytes: n, head: atob(data).slice(0, 60), prints: (atob(data).match(/PRINT 1,/g) || []).length });
+        state.writes.push({ address, bytes: n, head: atob(data).slice(0, 60), tail: atob(data).slice(-8), escpos: atob(data).startsWith('\x1b@'), raster: atob(data).includes('\x1dv0'), drawer: atob(data).includes('\x1bp'), prints: (atob(data).match(/PRINT 1,/g) || []).length });
         state.lastData = data;
         if (atob(data).includes('GAPDETECT')) state.status = 0;
         return { bytes: n };

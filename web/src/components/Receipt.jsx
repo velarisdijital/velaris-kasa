@@ -78,9 +78,17 @@ const notify = (type, message) => window.dispatchEvent(new CustomEvent('vk-toast
  * Fişi yazdırır. Android uygulamasında Bluetooth yazıcı seçiliyse fiş oraya gider
  * (Ayarlar → Bu cihaz → "Fişleri bu yazıcıdan bas"); aksi hâlde sistemin yazdırma penceresi.
  */
-export async function printReceipt(sale, settings, change = 0) {
+export async function printReceipt(sale, settings, change = 0, { drawer = false } = {}) {
   try {
     const lp = await import('../printing/labelPrinter.js');
+    // 1) Fiş yazıcısı (ESC/POS) seçiliyse oraya (nakit satışta çekmece de açılır)
+    if (lp.isNative() && lp.getReceiptPrinter().deviceId) {
+      const rp = await import('../printing/receiptPrinter.js');
+      await rp.printReceiptEscPos(sale, settings, change, { drawer });
+      notify('success', 'Fiş yazıcıya gönderildi');
+      return;
+    }
+    // 2) Yalnızca etiket yazıcısı varsa fiş etikete / sürekli ruloya basılır
     const cfg = lp.getPrinter();
     if (lp.isNative() && cfg.deviceId && cfg.receiptVia !== 'system') {
       const { printReceiptBluetooth } = await import('../printing/receiptBitmap.js');

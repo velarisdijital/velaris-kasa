@@ -529,6 +529,7 @@ function Device() {
       <div><button className="btn primary">Kaydet</button></div>
       {import.meta.env.VITE_APP && <DataLocation />}
       {import.meta.env.VITE_APP && <KioskSettings />}
+      <ReceiptPrinterSettings />
       <LabelPrinterSettings />
     </form>
   );
@@ -603,29 +604,11 @@ function KioskSettings() {
   );
 }
 
-/** Bluetooth etiket yazıcısı (TSPL): seç, bağlan, deneme etiketi, boyut ve koyuluk. */
-function LabelPrinterSettings() {
+/** Bluetooth yazıcı seçme listesi (etiket ve fiş yazıcısı ortak): eşleşmiş, eşleşmeye açık (klasik) ve yakındaki (BLE) cihazlar */
+function PrinterPicker({ lp, onPick, onClose }) {
   const toast = useToast();
-  const { settings } = useSession();
-  const [lp, setLp] = useState(null);
-  const [cfg, setCfg] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [diag, setDiag] = useState(null);
-  const [picker, setPicker] = useState(null); // { paired: [], nearby: [], scanning }
-  const [status, setStatus] = useState(null); // yazıcı durum sorgusu sonucu
-  useEffect(() => {
-    import('../printing/labelPrinter.js').then(async (m) => {
-      setLp(m); setCfg(m.getPrinter());
-      // Tabletle eşleşmiş tek bir yazıcı varsa kendiliğinden seçilir
-      try {
-        const found = await m.autoDetectPrinter();
-        if (found) { setCfg(m.getPrinter()); toast.ok(`Eşleşmiş yazıcı bulundu: ${found.name}`); }
-      } catch { /* Bluetooth kapalı ya da izin yok */ }
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!lp || !cfg) return null;
-  const openPicker = async () => {
-    if (!lp.isNative()) return run(async () => { await lp.choosePrinter(); setDiag(await lp.connectPrinter()); }, 'Yazıcı bağlandı');
+  const [picker, setPicker] = useState({ paired: [], nearby: [], classic: [], scanning: true, classicScanning: true });
+  const scan = async () => {
     const state = { paired: [], nearby: [], classic: [], scanning: true, classicScanning: true };
     setPicker({ ...state });
     try { state.paired = await lp.pairedDevices(); setPicker({ ...state }); } catch (e) { state.error = e.message || String(e); setPicker({ ...state }); }
@@ -660,10 +643,7 @@ function LabelPrinterSettings() {
     const twin = !chosen.classic && !chosen.paired && base(chosen.name)
       ? [...(picker?.paired || []), ...(picker?.classic || [])].find((x) => x.type !== 2 && base(x.name) === base(chosen.name))
       : null;
-    const d = twin || chosen;
-    setPicker(null);
-    if (d.classic && !d.paired) toast.ok('Eşleştirme isteniyor… Tablette çıkan pencerede "Eşleştir"e basın (PIN sorarsa 0000 ya da 1234).');
-    run(async () => setDiag(await lp.usePrinterDevice(d)), `${d.name || 'Yazıcı'} bağlandı`);
+    onPick(twin || chosen);
   };
   const DeviceRow = ({ d }) => (
     <button type="button" className="dropdown-item" onClick={() => pick(d)} style={{ border: '1px solid var(--border)', marginBottom: 6, background: lp.looksLikePrinter(d.name) ? 'var(--primary-soft)' : 'var(--panel)' }}>
@@ -671,6 +651,109 @@ function LabelPrinterSettings() {
       <span className="muted small-text">{d.paired ? `eşleşmiş${d.type ? ` · ${lp.BT_TYPES[d.type] || ''}` : ''}` : d.classic ? `${lp.BT_TYPES[d.type] || 'klasik'} · dokunun, eşleşsin` : d.rssi ? `BLE · sinyal ${d.rssi}` : 'BLE'} · {d.deviceId}</span>
     </button>
   );
+  useEffect(() => { scan(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!picker) return null;
+  return (
+            <div className="card card-pad stack" style={{ gap: 6 }}>
+              <div className="row"><strong style={{ flex: 1 }}>Yazıcıyı seçin</strong>{(picker.scanning || picker.classicScanning) && <span className="muted small-text">aranıyor…</span>}
+                <button type="button" className="btn small ghost" onClick={onClose}>Kapat</button></div>
+              {state_error(picker)}
+              <div className="row wrap" style={{ gap: 6 }}>
+                <button type="button" className="btn small" onClick={() => lp.openBluetoothSettings().catch((e) => toast.err(e.message || String(e)))}>Tabletin Bluetooth ayarlarını aç</button>
+                <button type="button" className="btn small ghost" onClick={scan}>Listeyi yenile</button>
+              </div>
+              <div className="muted small-text">Listede yoksa: Bluetooth ayarlarından yazıcıyla eşleşin, uygulamaya dönüp “Listeyi yenile”ye basın.</div>
+              <div className="muted small-text">Tabletle eşleşmiş cihazlar</div>
+              {picker.paired.length ? picker.paired.map((d) => <DeviceRow key={d.deviceId} d={d} />) : <div className="muted small-text">Eşleşmiş cihaz yok</div>}
+              <div className="muted small-text" style={{ marginTop: 6 }}>Eşleşmeye açık cihazlar (klasik Bluetooth)</div>
+              {picker.classic.length ? picker.classic.map((d) => <DeviceRow key={`c-${d.deviceId}`} d={d} />) : <div className="muted small-text">{picker.classicScanning ? 'Aranıyor… Yazıcıyı eşleşme moduna alın.' : 'Bulunamadı.'}</div>}
+              <div className="muted small-text" style={{ marginTop: 6 }}>Yakındaki cihazlar (BLE)</div>
+              {picker.nearby.length ? picker.nearby.map((d) => <DeviceRow key={d.deviceId} d={d} />) : <div className="muted small-text">{picker.scanning ? 'Aranıyor… Yazıcının açık olduğundan emin olun.' : 'Bulunamadı. Yazıcıyı kapatıp açın; tabletin Konum ayarı kapalıysa açın.'}</div>}
+            </div>
+  );
+}
+
+/** Fiş yazıcısı (ESC/POS, 58 / 80 mm termal) ve para çekmecesi */
+function ReceiptPrinterSettings() {
+  const toast = useToast();
+  const { settings } = useSession();
+  const [lp, setLp] = useState(null);
+  const [cfg, setCfg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [picker, setPicker] = useState(false);
+  useEffect(() => { import('../printing/labelPrinter.js').then((m) => { setLp(m); setCfg(m.getReceiptPrinter()); }); }, []);
+  if (!lp || !cfg || !lp.isNative()) return null;
+  const run = async (fn, ok) => {
+    setBusy(true);
+    try { await fn(); if (ok) toast.ok(ok); } catch (e) { toast.err(e.message || String(e)); } finally { setBusy(false); setCfg(lp.getReceiptPrinter()); }
+  };
+  const rp = () => import('../printing/receiptPrinter.js');
+  const set = (k, v) => { const n = { ...cfg, [k]: v }; setCfg(n); lp.saveReceiptPrinter({ [k]: v }); };
+  const pick = (d) => {
+    setPicker(false);
+    if (d.classic && !d.paired) toast.ok('Eşleştirme isteniyor… Tablette çıkan pencerede "Eşleştir"e basın (PIN sorarsa 0000 ya da 1234).');
+    run(async () => { await lp.usePrinterDevice(d, 'receipt'); }, `${d.name || 'Fiş yazıcısı'} seçildi`);
+  };
+  return (
+    <div className="card card-pad stack" style={{ background: 'var(--panel-2)', boxShadow: 'none' }} onClick={(e) => e.stopPropagation()}>
+      <strong>Bluetooth fiş yazıcısı (58 / 80 mm) ve para çekmecesi</strong>
+      <div className="row wrap">
+        <span style={{ flex: 1 }}>{cfg.deviceId ? <>Seçili: <b>{cfg.name}</b> · {cfg.transport === 'spp' ? 'klasik Bluetooth' : 'BLE'}</> : 'Fiş yazıcısı seçilmedi (fişler etiket yazıcısından ya da sistem yazıcısından basılır)'}</span>
+        <button type="button" className="btn small" disabled={busy} onClick={() => setPicker(true)}>{cfg.deviceId ? 'Değiştir' : 'Fiş yazıcısı ara'}</button>
+        {cfg.deviceId && <button type="button" className="btn small primary" disabled={busy} onClick={() => run(async () => (await rp()).printTestReceipt(settings), 'Deneme fişi gönderildi')}>Deneme fişi bas</button>}
+        {cfg.deviceId && <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => (await rp()).openDrawer(), 'Çekmece açma komutu gönderildi')}>Çekmeceyi aç</button>}
+        {cfg.deviceId && <button type="button" className="btn small ghost danger-text" onClick={() => { lp.forgetReceiptPrinter(); setCfg(lp.getReceiptPrinter()); }}>Unut</button>}
+      </div>
+      {picker && <PrinterPicker lp={lp} onPick={pick} onClose={() => setPicker(false)} />}
+      <div className="grid-3">
+        <Field label="Kâğıt eni">
+          <select className="input" value={Number(cfg.paper) >= 76 ? 80 : 58} onChange={(e) => set('paper', Number(e.target.value))}>
+            <option value={58}>58 mm (küçük, 48 mm baskı)</option>
+            <option value={80}>80 mm (büyük, 72 mm baskı)</option>
+          </select>
+        </Field>
+        <Field label="Gönderim hızı">
+          <select className="input" value={cfg.btSpeed || 'normal'} onChange={(e) => set('btSpeed', e.target.value)}>
+            {Object.entries(lp.BT_SPEEDS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </Field>
+        <div className="stack" style={{ gap: 4, alignSelf: 'end' }}>
+          <label className="check"><input type="checkbox" checked={cfg.drawer !== false} onChange={(e) => set('drawer', e.target.checked)} /> Nakit satışta çekmeceyi aç</label>
+          <label className="check"><input type="checkbox" checked={cfg.cut !== false} onChange={(e) => set('cut', e.target.checked)} /> Fişten sonra kâğıdı kes</label>
+        </div>
+      </div>
+      <small className="muted">ESC/POS uyumlu termal fiş yazıcıları (Xprinter, Rongta, HPRT, Sunmi, Goojprt, PT-210 vb.). Para çekmecesi yazıcının çekmece (RJ11) girişine takılır. Fiş yazıcısı seçiliyse satış fişi ve Z raporu ona gider.</small>
+    </div>
+  );
+}
+
+/** Bluetooth etiket yazıcısı (TSPL): seç, bağlan, deneme etiketi, boyut ve koyuluk. */
+function LabelPrinterSettings() {
+  const toast = useToast();
+  const { settings } = useSession();
+  const [lp, setLp] = useState(null);
+  const [cfg, setCfg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [diag, setDiag] = useState(null);
+  const [picker, setPicker] = useState(false); // cihaz seçme listesi açık mı
+  const [status, setStatus] = useState(null); // yazıcı durum sorgusu sonucu
+  useEffect(() => {
+    import('../printing/labelPrinter.js').then(async (m) => {
+      setLp(m); setCfg(m.getPrinter());
+      // Tabletle eşleşmiş tek bir yazıcı varsa kendiliğinden seçilir
+      try {
+        const found = await m.autoDetectPrinter();
+        if (found) { setCfg(m.getPrinter()); toast.ok(`Eşleşmiş yazıcı bulundu: ${found.name}`); }
+      } catch { /* Bluetooth kapalı ya da izin yok */ }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!lp || !cfg) return null;
+  const openPicker = () => (lp.isNative() ? setPicker(true) : run(async () => { await lp.choosePrinter(); setDiag(await lp.connectPrinter()); }, 'Yazıcı bağlandı'));
+  const pick = (d) => {
+    setPicker(false);
+    if (d.classic && !d.paired) toast.ok('Eşleştirme isteniyor… Tablette çıkan pencerede "Eşleştir"e basın (PIN sorarsa 0000 ya da 1234).');
+    run(async () => setDiag(await lp.usePrinterDevice(d)), `${d.name || 'Yazıcı'} bağlandı`);
+  };
   const set = (k, v) => { const n = { ...cfg, [k]: v }; setCfg(n); lp.savePrinter({ [k]: v }); };
   const run = async (fn, ok) => {
     setBusy(true);
@@ -703,24 +786,7 @@ function LabelPrinterSettings() {
             </div>
           )}
           {status && <div className={`small-text ${status.ok ? 'success-text' : status.ok === false ? 'danger-text' : 'muted'}`}>Yazıcı durumu: {status.text}{status.code != null ? ` (kod ${status.code})` : ''}</div>}
-          {picker && (
-            <div className="card card-pad stack" style={{ gap: 6 }}>
-              <div className="row"><strong style={{ flex: 1 }}>Yazıcıyı seçin</strong>{(picker.scanning || picker.classicScanning) && <span className="muted small-text">aranıyor…</span>}
-                <button type="button" className="btn small ghost" onClick={() => setPicker(null)}>Kapat</button></div>
-              {state_error(picker)}
-              <div className="row wrap" style={{ gap: 6 }}>
-                <button type="button" className="btn small" onClick={() => lp.openBluetoothSettings().catch((e) => toast.err(e.message || String(e)))}>Tabletin Bluetooth ayarlarını aç</button>
-                <button type="button" className="btn small ghost" onClick={openPicker}>Listeyi yenile</button>
-              </div>
-              <div className="muted small-text">Listede yoksa: Bluetooth ayarlarından yazıcıyla eşleşin, uygulamaya dönüp “Listeyi yenile”ye basın.</div>
-              <div className="muted small-text">Tabletle eşleşmiş cihazlar</div>
-              {picker.paired.length ? picker.paired.map((d) => <DeviceRow key={d.deviceId} d={d} />) : <div className="muted small-text">Eşleşmiş cihaz yok</div>}
-              <div className="muted small-text" style={{ marginTop: 6 }}>Eşleşmeye açık cihazlar (klasik Bluetooth)</div>
-              {picker.classic.length ? picker.classic.map((d) => <DeviceRow key={`c-${d.deviceId}`} d={d} />) : <div className="muted small-text">{picker.classicScanning ? 'Aranıyor… Yazıcıyı eşleşme moduna alın.' : 'Bulunamadı.'}</div>}
-              <div className="muted small-text" style={{ marginTop: 6 }}>Yakındaki cihazlar (BLE)</div>
-              {picker.nearby.length ? picker.nearby.map((d) => <DeviceRow key={d.deviceId} d={d} />) : <div className="muted small-text">{picker.scanning ? 'Aranıyor… Yazıcının açık olduğundan emin olun.' : 'Bulunamadı. Yazıcıyı kapatıp açın; tabletin Konum ayarı kapalıysa açın.'}</div>}
-            </div>
-          )}
+          {picker && <PrinterPicker lp={lp} onPick={pick} onClose={() => setPicker(false)} />}
           <Field label="Yazıcıda takılı rulo">
             <select className="input" value={cfg.media === 'roll' ? 'roll' : 'label'} onChange={(e) => {
               const media = e.target.value;

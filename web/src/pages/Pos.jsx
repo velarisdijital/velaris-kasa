@@ -10,6 +10,18 @@ import { softKeyboardDefault } from '../softKeyboard.js';
 import { METHOD_LABELS, money, nowSql, parseQty, plain, qty as fmtQty, toInput, toKurus } from '../format.js';
 
 const lineTotal = (l) => Math.round(l.qty * l.unit_price) - (l.discount || 0);
+
+/** Fiş yazıcısı seçili ve "nakit satışta çekmeceyi aç" açıksa çekmeceyi açar (hata olursa satışı bozmaz). */
+async function openDrawerIfAny() {
+  try {
+    const lp = await import('../printing/labelPrinter.js');
+    const cfg = lp.getReceiptPrinter();
+    if (!lp.isNative() || !cfg.deviceId || cfg.drawer === false) return;
+    await (await import('../printing/receiptPrinter.js')).openDrawer();
+  } catch (e) {
+    window.dispatchEvent(new CustomEvent('vk-toast', { detail: { type: 'error', message: `Çekmece açılamadı: ${e.message || e}` } }));
+  }
+}
 const HELD_KEY = 'vk_held_carts';
 
 export default function Pos() {
@@ -177,7 +189,10 @@ export default function Pos() {
       if (sale.offline) toast('Çevrimdışı: satış kaydedildi, bağlantı gelince gönderilecek');
       else if (sale.fiscal_status === 'failed') toast.err(`Satış kaydedildi ama mali fiş basılamadı: ${sale.fiscal_error}`);
       else toast.ok(change > 0 ? `Satış tamam — Para üstü ${money(change)}` : 'Satış tamamlandı');
-      if (storage.get('vk_autoprint', false)) printReceipt(printable, settings, change);
+      // Nakit satış: fiş yazıcısına bağlı para çekmecesi açılır (fiş basılıyorsa aynı işte)
+      const cashSale = payments.some((p) => p.method === 'cash' && p.amount > 0);
+      if (storage.get('vk_autoprint', false)) printReceipt(printable, settings, change, { drawer: cashSale });
+      else if (cashSale) openDrawerIfAny();
       const fromTable = ticket;
       clearCart();
       setModal(null);

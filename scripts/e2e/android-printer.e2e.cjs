@@ -11,6 +11,33 @@ const shots = process.argv[2];
 const fail = (msg) => { console.error('BAŞARISIZ:', msg); process.exitCode = 1; };
 const ok = (msg) => console.log('✓', msg);
 
+/** Son gönderilen ESC/POS verisindeki GS v 0 bantlarını birleştirip PNG kaydeder (gözle kontrol için). */
+async function saveEscPos(p, file) {
+  const url = await p.evaluate(() => {
+    const bin = atob(window.__fake.lastData);
+    const b = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+    const bands = [];
+    for (let i = 0; i < b.length - 8; i++) {
+      if (b[i] === 0x1d && b[i + 1] === 0x76 && b[i + 2] === 0x30) {
+        const wb = b[i + 4] + b[i + 5] * 256; const h = b[i + 6] + b[i + 7] * 256;
+        bands.push({ wb, h, start: i + 8 }); i += 8 + wb * h - 1;
+      }
+    }
+    const W = bands[0].wb * 8; const H = bands.reduce((a, x) => a + x.h, 0);
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d'); const img = x.createImageData(W, H); let y0 = 0;
+    for (const band of bands) {
+      for (let y = 0; y < band.h; y++) for (let i = 0; i < W; i++) {
+        const on = (b[band.start + y * band.wb + (i >> 3)] >> (7 - (i & 7))) & 1;
+        const k = ((y0 + y) * W + i) * 4; img.data[k] = img.data[k + 1] = img.data[k + 2] = on ? 0 : 255; img.data[k + 3] = 255;
+      }
+      y0 += band.h;
+    }
+    x.putImageData(img, 0, 0); return c.toDataURL();
+  });
+  fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
+}
+
 /** Son gönderilen TSPL verisindeki her BITMAP'i PNG olarak kaydeder (gözle kontrol için). */
 async function saveTsplPages(p, prefix) {
   const urls = await p.evaluate(() => {
@@ -143,6 +170,22 @@ async function saveTsplPages(p, prefix) {
     else ok(`Deneme fişi düz kâğıda tek parça gönderildi (${r3[0].head.split('\r\n').slice(0, 2).join(' · ')})`);
     if (shots) await saveTsplPages(p, path.join(shots, 'rulo-fis'));
 
+    // ---- Fiş yazıcısı (ESC/POS) ve para çekmecesi ----
+    await p.getByRole('button', { name: 'Fiş yazıcısı ara' }).click();
+    await p.getByRole('button', { name: /^RPP02N/ }).click();
+    await p.getByText(/Seçili: RPP02N/).waitFor({ timeout: 10000 });
+    before = await p.evaluate(() => window.__fake.writes.length);
+    await p.getByRole('button', { name: 'Deneme fişi bas' }).first().click();
+    await p.waitForFunction((n) => window.__fake.writes.slice(n).some((w) => w.address === '66:55:44:33:22:11'), before, { timeout: 15000 });
+    const esc = await p.evaluate((n) => window.__fake.writes.slice(n).find((w) => w.address === '66:55:44:33:22:11'), before);
+    if (!esc.escpos || !esc.raster || !esc.tail.endsWith('\x1dVB\x00')) fail(`ESC/POS fişi beklenmiyor: ${JSON.stringify(esc)}`);
+    else ok(`Deneme fişi fiş yazıcısına ESC/POS olarak gitti (raster, kesim; ${esc.bytes} bayt)`);
+    if (shots) await saveEscPos(p, path.join(shots, 'escpos-fis.png'));
+    before = await p.evaluate(() => window.__fake.writes.length);
+    await p.getByRole('button', { name: 'Çekmeceyi aç' }).click();
+    await p.waitForFunction((n) => window.__fake.writes.slice(n).some((w) => w.drawer), before, { timeout: 10000 });
+    ok('"Çekmeceyi aç" çekmece komutunu (ESC p) gönderdi');
+
     // Kasa: satış yap → "Fiş yazdır" Bluetooth yazıcıya gider
     await p.goto(`${url}#/`);
     await p.waitForTimeout(1500);
@@ -177,7 +220,10 @@ async function saveTsplPages(p, prefix) {
     const gm = await given.evaluate((el) => ({ focused: document.activeElement === el, mode: el.getAttribute('inputmode') }));
     if (!gm.focused || gm.mode !== 'none') fail(`nakit penceresindeki kutu klavye açıyor: ${JSON.stringify(gm)}`);
     else ok('Nakit penceresinde tutar kutusu seçili, klavye kendiliğinden açılmıyor');
+    before = await p.evaluate(() => window.__fake.writes.length);
     await p.getByRole('button', { name: /Satışı tamamla/ }).click();
+    await p.waitForFunction((n) => window.__fake.writes.slice(n).some((w) => w.drawer && w.address === '66:55:44:33:22:11'), before, { timeout: 10000 })
+      .then(() => ok('Nakit satışta para çekmecesi kendiliğinden açıldı'), () => fail('nakit satışta çekmece açılmadı'));
     await p.getByRole('button', { name: 'Fiş yazdır' }).waitFor({ timeout: 10000 });
     before = await p.evaluate(() => window.__fake.writes.length);
     await p.getByRole('button', { name: 'Fiş yazdır' }).click();

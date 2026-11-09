@@ -24,14 +24,22 @@ const STANDARD = /^0000(1800|1801|180a|180f)-/; // Generic Access/Attribute, Dev
 
 export const getPrinter = () => ({ ...DEFAULT_PRINTER, ...storage.get(KEY, {}) });
 export const savePrinter = (p) => storage.set(KEY, { ...getPrinter(), ...p });
+
+// İki yazıcı: etiket yazıcısı (TSPL) ve fiş yazıcısı (ESC/POS, 58 / 80 mm). Bağlantı kodu ortak; prof hangisi olduğunu söyler.
+const RECEIPT_KEY = 'vk_receipt_printer';
+export const DEFAULT_RECEIPT_PRINTER = { paper: 58, drawer: true, cut: true, btSpeed: 'normal' };
+export const getReceiptPrinter = () => ({ ...DEFAULT_RECEIPT_PRINTER, ...storage.get(RECEIPT_KEY, {}) });
+export const saveReceiptPrinter = (p) => storage.set(RECEIPT_KEY, { ...getReceiptPrinter(), ...p });
+export const forgetReceiptPrinter = () => storage.set(RECEIPT_KEY, {});
+const PROFILES = { label: { get: getPrinter, save: savePrinter }, receipt: { get: getReceiptPrinter, save: saveReceiptPrinter } };
+const P = (prof) => PROFILES[prof] || PROFILES.label;
+const web = { label: { device: null, char: null }, receipt: { device: null, char: null } };
 export const forgetPrinter = () => storage.set(KEY, {});
 export const isNative = () => !!globalThis.Capacitor?.isNativePlatform?.();
 export const bleSupported = () => isNative() || !!globalThis.navigator?.bluetooth;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------- Bağlantı
-let webDevice = null; // Web Bluetooth cihaz nesnesi (sayfa yenilenince yeniden seçilir)
-let webChar = null;
 
 async function ble() {
   const { BleClient } = await import('@capacitor-community/bluetooth-le');
@@ -136,14 +144,14 @@ export async function bondDevice(address) {
 }
 
 /** Listeden seçilen cihazı yazıcı olarak kaydeder ve bağlanır. */
-export async function usePrinterDevice(dev) {
+export async function usePrinterDevice(dev, prof = 'label') {
   if (dev.classic && !dev.paired && dev.type !== 2) {
     await bondDevice(dev.deviceId);
     dev = { ...dev, paired: true };
   }
-  savePrinter({ deviceId: dev.deviceId, name: dev.name || dev.deviceId, service: null, characteristic: null, noResponse: false,
+  P(prof).save({ deviceId: dev.deviceId, name: dev.name || dev.deviceId, service: null, characteristic: null, noResponse: false,
     transport: transportFor(dev), paired: !!dev.paired, btType: dev.type ?? null });
-  return connectPrinter();
+  return connectPrinter({ prof });
 }
 
 /** Kayıtlı yazıcı yoksa: eşleşmiş cihazlar arasında tek bir yazıcı varsa onu seçer. Dönüş: seçilen cihaz ya da null. */
@@ -157,23 +165,25 @@ export async function autoDetectPrinter() {
 }
 
 /** Tarayıcıda (Chrome) yazıcı seçimi: tarayıcının kendi listesi. */
-export async function choosePrinter() {
+export async function choosePrinter(prof = 'label') {
   if (isNative()) {
     const B = await ble();
     const dev = await B.requestDevice({});
-    savePrinter({ deviceId: dev.deviceId, name: dev.name || dev.deviceId, service: null, characteristic: null });
+    P(prof).save({ deviceId: dev.deviceId, name: dev.name || dev.deviceId, service: null, characteristic: null });
     return dev;
   }
   if (!navigator.bluetooth) throw new Error('Bu tarayıcı Bluetooth desteklemiyor. Android uygulamasını ya da Chrome tarayıcısını kullanın.');
-  webDevice = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: KNOWN_SERVICES });
-  webChar = null;
-  savePrinter({ deviceId: webDevice.id, name: webDevice.name || 'Yazıcı', service: null, characteristic: null });
-  return { deviceId: webDevice.id, name: webDevice.name };
+  const w = web[prof] || web.label;
+  w.device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: KNOWN_SERVICES });
+  w.char = null;
+  P(prof).save({ deviceId: w.device.id, name: w.device.name || 'Yazıcı', service: null, characteristic: null });
+  return { deviceId: w.device.id, name: w.device.name };
 }
 
 /** Bağlanır, yazılabilir karakteristiği bulur. Dönüş: tanılama için servis listesi. */
-export async function connectPrinter({ ble: forceBle = false } = {}) {
-  const p = getPrinter();
+export async function connectPrinter({ ble: forceBle = false, prof = 'label' } = {}) {
+  const p = P(prof).get();
+  const w = web[prof] || web.label;
   if (!p.deviceId) throw new Error('Önce yazıcıyı seçin');
   if (isNative() && p.transport === 'spp' && !forceBle) {
     // Klasik Bluetooth bağlantısı baskı sırasında kurulur
@@ -189,9 +199,9 @@ export async function connectPrinter({ ble: forceBle = false } = {}) {
         // Yakında aynı adlı (ya da yazıcıya benzeyen) BLE cihazını arayıp ona bağlan.
         const alt = await findByScan(B, p);
         if (!alt) throw new Error(`Yazıcıya bağlanılamadı (${e.message || e}). Yazıcının açık olduğundan ve başka bir uygulamaya (yazıcının kendi uygulaması) bağlı olmadığından emin olun; tabletin Konum ayarını açıp tekrar deneyin.`);
-        savePrinter({ deviceId: alt.deviceId, name: alt.name || p.name, service: null, characteristic: null, transport: 'ble', paired: false });
+        P(prof).save({ deviceId: alt.deviceId, name: alt.name || p.name, service: null, characteristic: null, transport: 'ble', paired: false });
         await B.connect(alt.deviceId, () => {}, { timeout: 12000 });
-        return connectPrinter({ ble: true });
+        return connectPrinter({ ble: true, prof });
       }
     }
     const services = await B.getServices(p.deviceId);
@@ -199,12 +209,12 @@ export async function connectPrinter({ ble: forceBle = false } = {}) {
     if (!p.characteristic) {
       const found = findWritable(list);
       if (!found) throw Object.assign(new Error('Yazıcıda yazılabilir bağlantı noktası bulunamadı'), { services: list });
-      savePrinter(found);
+      P(prof).save(found);
     }
     return list;
   }
-  if (!webDevice) throw new Error('Tarayıcıda yazıcıyı her açılışta yeniden seçin');
-  const server = webDevice.gatt.connected ? webDevice.gatt : await webDevice.gatt.connect();
+  if (!w.device) throw new Error('Tarayıcıda yazıcıyı her açılışta yeniden seçin');
+  const server = w.device.gatt.connected ? w.device.gatt : await w.device.gatt.connect();
   const services = await server.getPrimaryServices();
   const list = [];
   for (const s of services) {
@@ -213,8 +223,8 @@ export async function connectPrinter({ ble: forceBle = false } = {}) {
   }
   const found = findWritable(list);
   if (!found) throw Object.assign(new Error('Yazıcıda yazılabilir bağlantı noktası bulunamadı'), { services: list });
-  webChar = list.flatMap((s) => s.characteristics).find((c) => c.uuid === found.characteristic)?.ref;
-  savePrinter(found);
+  w.char = list.flatMap((s) => s.characteristics).find((c) => c.uuid === found.characteristic)?.ref;
+  P(prof).save(found);
   return list.map((s) => ({ ...s, characteristics: s.characteristics.map(({ ref, ...c }) => c) }));
 }
 
@@ -261,8 +271,8 @@ export const BT_SPEEDS = {
 };
 
 /** Baytları yazıcıya gönderir. Android'de önce kayıtlı yol, olmazsa diğeri (klasik ↔ BLE) denenir. */
-export async function sendBytes(bytes) {
-  const p = getPrinter();
+export async function sendBytes(bytes, prof = 'label') {
+  const p = P(prof).get();
   if (isNative()) {
     const order = p.transport === 'spp' ? ['spp', 'ble'] : p.paired ? ['ble', 'spp'] : ['ble'];
     const errors = [];
@@ -272,8 +282,8 @@ export async function sendBytes(bytes) {
           const { chunk, delay } = BT_SPEEDS[p.btSpeed] || BT_SPEEDS.normal;
           await classicCall('write', { address: p.deviceId, data: toBase64(bytes), chunk, delay }, 120000);
         }
-        else await sendBle(bytes);
-        if (t !== p.transport) savePrinter({ transport: t });
+        else await sendBle(bytes, prof);
+        if (t !== p.transport) P(prof).save({ transport: t });
         return;
       } catch (e) {
         errors.push(`${t === 'spp' ? 'Klasik Bluetooth' : 'BLE'}: ${e.message || e}`);
@@ -281,14 +291,14 @@ export async function sendBytes(bytes) {
     }
     throw new Error(errors.join(' · '));
   }
-  return sendWeb(bytes);
+  return sendWeb(bytes, prof);
 }
 
-async function sendBle(bytes) {
+async function sendBle(bytes, prof = 'label') {
   {
     const B = await ble();
-    await connectPrinter({ ble: true }); // uygulama yeniden açıldıysa bağlantı kopmuş olabilir; bağlıysa hemen döner
-    const q = getPrinter();
+    await connectPrinter({ ble: true, prof }); // uygulama yeniden açıldıysa bağlantı kopmuş olabilir; bağlıysa hemen döner
+    const q = P(prof).get();
     const p0 = q;
     let mtu = 23;
     try { mtu = await B.getMtu(q.deviceId); } catch { /* varsayılan */ }
@@ -302,13 +312,14 @@ async function sendBle(bytes) {
   }
 }
 
-async function sendWeb(bytes) {
-  if (!webChar) await connectPrinter();
+async function sendWeb(bytes, prof = 'label') {
+  const w = web[prof] || web.label;
+  if (!w.char) await connectPrinter({ prof });
   const size = 180;
   for (let i = 0; i < bytes.length; i += size) {
     const chunk = bytes.subarray(i, i + size);
-    if (getPrinter().noResponse && webChar.writeValueWithoutResponse) await webChar.writeValueWithoutResponse(chunk);
-    else await webChar.writeValue(chunk);
+    if (P(prof).get().noResponse && w.char.writeValueWithoutResponse) await w.char.writeValueWithoutResponse(chunk);
+    else await w.char.writeValue(chunk);
     if ((i / size) % 8 === 7) await sleep(15);
   }
 }

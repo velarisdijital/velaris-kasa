@@ -124,6 +124,16 @@ export function drawReceipt(sale, settings, change = 0, cfg = getPrinter()) {
   return drawDoc(receiptContent(sale, settings, change), cfg);
 }
 
+/** Belgeyi verilen genişlikte (nokta) tek uzun resim olarak çizer (fiş yazıcısı, sürekli rulo). */
+export function renderDoc(build, W, { margin = 10, tail = 24 } = {}) {
+  const rows = docRows(W, build);
+  const H = rows.reduce((a, r) => a + r.h, 0) + margin * 2 + tail;
+  return paint(rows, W, H, margin);
+}
+
+export const receiptDoc = (sale, settings, change = 0) => receiptContent(sale, settings, change);
+export const zDoc = (z, settings) => zContent(z, settings);
+
 /** Herhangi bir belgeyi (fiş, Z raporu) yazıcının kâğıdına göre sayfalara çizer. */
 export function drawDoc(build, cfg = getPrinter()) {
   const margin = 10;
