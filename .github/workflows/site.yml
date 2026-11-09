@@ -28,6 +28,9 @@ jobs:
       - run: npm ci
       - run: npm run demo:build
       - run: node landing/build.mjs
+        env:
+          # Özel alan adı bağlanınca depo değişkeni VK_SITE_URL=https://velariskasa.com yapılır
+          VK_SITE_URL: ${{ vars.VK_SITE_URL || 'https://velarisdijital.github.io/velaris-kasa' }}
       - name: Siteyi birleştir
         run: |
           mkdir -p site/uygulama

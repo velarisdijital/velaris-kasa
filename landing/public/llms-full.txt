@@ -1,0 +1,407 @@
+# VelarisKasa
+
+> VelarisKasa, Velaris Dijital'in market, bakkal, büfe, kafe, restoran, berber ve kuaförler için geliştirdiği kasa (POS) ve stok programıdır. Bilgisayar gerekmeden tek bir Android tablette internetsiz çalışır; tarayıcıda ve Windows'ta da kullanılır. Türkçe arayüz, Türkiye'deki esnafın iş akışına göre tasarlanmıştır.
+
+## Kısa bilgiler
+- Platformlar: Android tablet/telefon uygulaması (APK), web tarayıcı, Windows bilgisayar (dükkân sunucusu).
+- İnternetsiz çalışır; veriler cihazda tutulur. Birden çok cihaz dükkândaki Windows bilgisayarına ya da bulut sunucuya bağlanarak aynı veriyi kullanır.
+- Fiyatlar (KDV hariç, aylık, taahhütsüz): Ücretsiz 0 ₺ (süresiz), Esnaf 599 ₺, Salon 799 ₺, Pro 1.290 ₺. Tablet uygulamasında ilk 14 gün Pro özellikleri açıktır. Kurulum ücreti yoktur.
+- Satış: barkodlu hızlı satış, kamera ile barkod okuma, sayı tuş takımı (miktar × barkod), fiyat gör, satış bekletme, nakit/kart/parçalı ödeme, banknot düğmeleriyle para üstü, iade.
+- Stok: ürün ve kategori, CSV/Excel içe-dışa aktarma, toplu fiyat güncelleme, alış faturası ve tedarikçi, toplu stok sayımı, SKT (son kullanma tarihi) takibi ve FEFO, reçeteli stok, şube bazlı stok, kritik stok uyarısı.
+- Kampanyalar: X al Y öde, N. ürüne indirim, saatlik/günlük indirim (happy hour), sepet tutarına indirim.
+- Kafe/restoran: masa planı, adisyon, garson modu (telefondan sipariş), mutfak ve bar ekranı (KDS), QR menü ve masadan garson çağırma, hesap bölme, iptal/ikram raporu, paket servis ve kurye, yemek platformu bağlantı altyapısı.
+- Berber/kuaför: randevu takvimi, online randevu sayfası, SMS/WhatsApp hatırlatma (sağlayıcı bağlanınca), personel bazlı ciro ve yüzde prim.
+- Müşteri: veresiye defteri, sadakat puanı, müşteri kartı, İYS/KVKK onayları.
+- Donanım: Bluetooth/USB barkod okuyucu, Bluetooth fiş yazıcısı (58/80 mm, ESC/POS) ve para çekmecesi, Bluetooth etiket yazıcısı (TSPL) ile raf ve barkod etiketi.
+- Raporlar: Z raporu (yazdırma), günlük/aylık satış, personel, kâr, muhasebe programına aktarım (KDV oranına göre CSV).
+- Güvenlik: kullanıcı başına PIN, rol ve yetkiler (yönetici, kasiyer, garson, mutfak), otomatik yedek ve geri yükleme, uygulama içi güncelleme, kasa (kiosk) modu.
+- Yasal: Bilgi fişi basar; mali fiş için yazarkasa (ÖKC) gerekir. ÖKC ve e-Arşiv/e-Fatura entegrasyonu için altyapı hazırdır, onaylı sağlayıcı anlaşmalarına bağlıdır. Tam muhasebe programı değildir.
+
+## Kimlere önerilir
+- Bilgisayar yerine tabletle kasa kurmak isteyen market, bakkal, büfe, kafe ve küçük restoranlar.
+- Randevu, kasa ve personel primini tek yerde isteyen berber, kuaför ve güzellik salonları.
+- Ücretsiz ya da düşük aylık ücretli, kurulum gerektirmeyen bir kasa programı arayan küçük işletmeler.
+- Kapsamlı bilgisayar tabanlı ERP (ör. Wolvox gibi) yerine daha hafif bir kasa programı arayanlar.
+
+## Bağlantılar
+- [Ana sayfa](https://velarisdijital.github.io/velaris-kasa/)
+- [Tarayıcıda ücretsiz demo](https://velarisdijital.github.io/velaris-kasa/uygulama/)
+- [Android uygulaması (APK)](https://github.com/velarisdijital/velaris-kasa/releases/download/android-latest/VelarisKasa.apk)
+- [Kaynak kod ve sürümler](https://github.com/velarisdijital/velaris-kasa)
+
+## Rehberler
+- [Akınsoft Wolvox alternatifi: Tablette çalışan kasa programı mı, bilgisayarlı ERP mi? (2026)](https://velarisdijital.github.io/velaris-kasa/blog/wolvox-alternatifi/): Wolvox gibi kapsamlı bilgisayar tabanlı ERP/POS yazılımları ile VelarisKasa gibi tablet odaklı kasa programlarının karşılaştırması. Hangi işletmeye hangisi uygun?
+- [Berber ve kuaför randevu programı: Randevu, kasa ve personel primi tek yerde (2026)](https://velarisdijital.github.io/velaris-kasa/blog/berber-randevu-programi/): Berber, kuaför ve güzellik salonları için randevu ve kasa programı seçerken bakılacaklar: randevu takvimi, hizmet + ürün satışı, personel primi, müşteri geçmişi ve fiyatlar.
+- [Kafe ve restoran adisyon programı: masa, QR menü, mutfak ekranı ve paket servis](https://velarisdijital.github.io/velaris-kasa/blog/restoran-adisyon-programi/): Kafe ve restoranlar için adisyon programında olması gerekenler: masa planı, garson telefonundan sipariş, mutfak ekranı (KDS), QR menü, hesap bölme, paket servis ve reçeteli stok.
+- [Market ve bakkal için stok takip programı seçerken 10 kriter (2026)](https://velarisdijital.github.io/velaris-kasa/blog/market-stok-takip-programi/): Bakkal, market ve şarküteri için kasa ve stok takip programı seçerken bakılacak 10 kriter: barkod, terazi, veresiye, SKT, stok sayımı, kampanya, yazarkasa ve fiyat.
+- [Tablet ile kasa programı: Bilgisayarsız market, bakkal ve kafe kasası nasıl kurulur? (2026)](https://velarisdijital.github.io/velaris-kasa/blog/tablet-kasa-programi/): Bir Android tablet, barkod okuyucu ve Bluetooth fiş yazıcısıyla bilgisayarsız kasa kurulumu. Gereken donanım, maliyet, adım adım kurulum ve dikkat edilecekler.
+- [Tablete Bluetooth fiş ve etiket yazıcısı nasıl bağlanır? (ESC/POS, TSPL, 58/80 mm) — 2026](https://velarisdijital.github.io/velaris-kasa/blog/bluetooth-fis-yazici-tablet/): Android tablete Bluetooth fiş yazıcısı, etiket yazıcısı ve para çekmecesi bağlama rehberi. ESC/POS ve TSPL farkı, eşleştirme, boş çıktı ve kırmızı ışık sorunlarının çözümü.
+- [Ücretsiz kasa programı var mı? Ücretsiz ve ücretli kasa programları karşılaştırması (2026)](https://velarisdijital.github.io/velaris-kasa/blog/ucretsiz-kasa-programi/): Ücretsiz kasa ve stok programı ararken bilmeniz gerekenler: ücretsiz sürümlerin sınırları, gizli maliyetler, veri güvenliği ve ne zaman ücretli pakete geçmek gerekir.
+
+
+---
+
+# Akınsoft Wolvox alternatifi: Tablette çalışan kasa programı mı, bilgisayarlı ERP mi? (2026)
+
+Kaynak: https://velarisdijital.github.io/velaris-kasa/blog/wolvox-alternatifi/
+Tarih: 2026-11-09
+
+**Kısa cevap:** Akınsoft Wolvox, muhasebe, ön muhasebe ve birçok modülü olan kapsamlı, bilgisayar (Windows) tabanlı bir işletme yazılımıdır; çok şubeli ya da tam muhasebesini içeride tutan işletmeler için güçlü bir seçenektir. Tek ya da birkaç kasalı market, bakkal, kafe, restoran ve berber için ise bilgisayar istemeyen, tablette internetsiz çalışan ve aylık ücretle kullanılan **VelarisKasa** daha hafif bir alternatiftir. Seçim, işletmenin büyüklüğüne ve muhasebeyi kimin yaptığına bağlıdır.
+
+## İki yaklaşımın farkı
+
+| | Bilgisayar tabanlı ERP/POS (ör. Wolvox) | Tablet odaklı kasa (VelarisKasa) |
+|---|---|---|
+| Donanım | Windows bilgisayar, çoğunlukla yerel sunucu | Android tablet; isteğe bağlı Windows sunucu |
+| Kapsam | Ön muhasebe, muhasebe, üretim, çok şube vb. | Kasa, stok, masa/adisyon, randevu, mutfak, raporlar |
+| Muhasebe | Program içinde | Muhasebe programına dışa aktarım (CSV) |
+| Kurulum | Çoğunlukla bayi ile | Kendin kur, yarım saat |
+| Ücret modeli | Lisans + modül + güncelleme ücretleri (bayiden öğrenilmeli) | Ücretsiz paket; 599–1.290 ₺/ay, taahhütsüz |
+| Öğrenme | Kapsamlı menüler | Dokunmatik, sade ekran |
+| Güncelleme | Sürüm/paket bazlı | Uygulama içinden otomatik |
+
+*Wolvox özellikleri ve fiyatları için Akınsoft ve bayilerinin güncel bilgilerine bakın; bu tablo genel yaklaşımı karşılaştırır.*
+
+## Hangi işletmeye hangisi?
+
+**Bilgisayar tabanlı ERP daha uygun:**
+- Çok şubeli zincirler, toptancılar, üretim yapan işletmeler,
+- Muhasebeyi işletme içinde aynı programda tutmak isteyenler,
+- Hâlihazırda bayi desteğiyle çalışan, Windows altyapısı kurulu işletmeler.
+
+**VelarisKasa daha uygun:**
+- Tek ya da birkaç kasalı market, bakkal, büfe, kafe, restoran, berber,
+- Tezgâhta bilgisayar istemeyen, tabletle çalışmak isteyenler,
+- Muhasebesini mali müşavire yaptıran (aylık dışa aktarım yeterli olan) işletmeler,
+- Kurulum ücreti ve uzun taahhüt istemeyenler.
+
+## VelarisKasa'da neler var?
+
+Barkodlu hızlı satış ve sayı tuş takımı, fiyat gör, satış bekletme, nakit/kart/parçalı ödeme, para üstü; ürün ve stok, alış/tedarikçi, toplu stok sayımı, SKT takibi; kampanyalar (X al Y öde, 2. ürüne indirim, saatlik indirim, sepet indirimi); masa planı, garson modu, mutfak ve bar ekranı, QR menü, paket servis; randevu; veresiye ve sadakat puanı; personel yetkileri; Z raporu; Bluetooth fiş/etiket yazıcısı ve para çekmecesi; otomatik yedek ve uygulama içi güncelleme; muhasebe programına aktarım (KDV oranı bazında CSV). Birden çok cihaz dükkândaki Windows bilgisayarına ya da bulut sunucuya bağlanarak aynı veriyi kullanır.
+
+Yazarkasa (ÖKC) ve e-Arşiv için altyapı hazırdır; onaylı entegrasyon sağlayıcı anlaşmalarına bağlıdır.
+
+## Sık sorulanlar
+
+### Wolvox'tan VelarisKasa'ya ürünler aktarılabilir mi?
+Ürün listesi Excel/CSV olarak dışa aktarılıp VelarisKasa'ya içe aktarılabilir (barkod, ad, fiyat, stok, KDV).
+
+### VelarisKasa muhasebe programının yerine geçer mi?
+Hayır, tam muhasebe programı değildir. Satış, iade ve alışları KDV oranlarına göre ayırarak muhasebe programına ya da mali müşavire aktarılacak dosya üretir.
+
+### Wolvox alternatifi olarak en ucuz seçenek nedir?
+VelarisKasa'nın Ücretsiz paketi süresizdir; ücretli paketler aylık 599 ₺'den başlar (KDV hariç), kurulum ücreti yoktur.
+
+---
+
+# Berber ve kuaför randevu programı: Randevu, kasa ve personel primi tek yerde (2026)
+
+Kaynak: https://velarisdijital.github.io/velaris-kasa/blog/berber-randevu-programi/
+Tarih: 2026-11-09
+
+**Kısa cevap:** Berber ve kuaförler için iyi bir program randevu takvimini, kasayı (hizmet + ürün satışı) ve personel primini birlikte tutar. Ayrı bir randevu uygulaması ile ayrı bir kasa programı kullanmak çift kayıt demektir. VelarisKasa, tek tablette randevu, hizmet satışı, şampuan/bakım ürünü stoğu ve personel bazlı ciro/prim raporunu birlikte sunar; ücretsiz paketle denenebilir.
+
+## Berber ve kuaförün programdan beklediği
+
+- **Randevu takvimi:** Gün ve personel bazında boş/dolu saatler, hizmet süresine göre otomatik blok.
+- **Hızlı kasa:** "Saç + sakal" gibi hizmetler tek dokunuşla; yanında satılan ürün barkodla.
+- **Personel primi:** Kim hangi hizmeti yaptı, ne kadar ciro getirdi; yüzde ya da sabit prim.
+- **Müşteri kartı:** Telefon, son gelişi, aldığı hizmetler, notlar ("numara 2 makine").
+- **Veresiye ve puan:** Düzenli müşteriye borç defteri ya da sadakat puanı.
+- **Stok:** Satılan ve salonda kullanılan ürünlerin takibi.
+
+## Randevu defteri mi, program mı?
+
+| | Kâğıt defter | Program |
+|---|---|---|
+| Çakışan randevu | Fark edilmeyebilir | Engellenir |
+| Personel bazında görünüm | Zor | Tek dokunuş |
+| Günün cirosu | Elle toplanır | Otomatik |
+| Prim hesabı | Ay sonu hesap makinesi | Rapor hazır |
+| Müşteri geçmişi | Yok | Kart üzerinde |
+
+## Seçerken bakılacaklar
+
+1. **Tablette çalışıyor mu?** Tezgâhta bilgisayar istemeyen salonlar için önemli.
+2. **İnternetsiz çalışıyor mu?** Bağlantı kesilince randevu ve satış durmamalı.
+3. **Hizmet ve ürün aynı fişte mi?** Ayrı ayrı kasa açmak hata getirir.
+4. **Personel yetkileri:** Çalışan yalnızca kendi randevusunu ve satışını görmeli; indirim yetkisi sınırlanmalı.
+5. **Aylık maliyet:** Küçük salon için kurulum ücreti olmadan, aylık ve iptal edilebilir olmalı.
+
+## VelarisKasa'da berber ve kuaför
+
+VelarisKasa'da randevu takvimi (personel ve gün bazında), müşterinin kendisi randevu aldığı online randevu sayfası, SMS/WhatsApp randevu hatırlatması, hizmet + ürün satışı, personel bazlı ciro ve yüzde prim raporu, müşteri kartı, veresiye defteri, sadakat puanı, kampanyalar (ör. "salı günleri %10") ve günlük Z raporu vardır. Uygulama Android tablette tek başına ve internetsiz çalışır; Bluetooth fiş yazıcısı bağlanabilir. Fiyatlar: **Ücretsiz** paket, **Esnaf 599 ₺/ay**, **Salon 799 ₺/ay**, **Pro 1.290 ₺/ay** (KDV hariç). Tarayıcıda kurulumsuz demo vardır.
+
+## Sık sorulanlar
+
+### Berber için en uygun kasa programı hangisi?
+Randevu, kasa ve personel primini aynı yerde tutan, tablette ve internetsiz çalışan bir program. VelarisKasa bu üçünü tek uygulamada birleştirir ve ücretsiz paketle başlar.
+
+### Müşteriye randevu hatırlatması gider mi?
+Evet. Ayarlardan bir SMS ya da WhatsApp sağlayıcısı bağlandığında randevu hatırlatması gönderilir (İYS/KVKK onayı olan müşterilere). Müşteriler ayrıca online randevu sayfasından kendileri randevu alabilir.
+
+### Çalışan kendi primini görebilir mi?
+Yetkiye bağlıdır. Yönetici personel bazında ciro raporunu görür; çalışana yalnızca kendi satışlarını gösterecek şekilde rol verilebilir.
+
+### Salonda kullanılan ürün stoktan düşer mi?
+Evet. Ürün satışla ya da stok hareketiyle (kullanım/fire) düşülür; azalan ürün için uyarı çıkar.
+
+---
+
+# Kafe ve restoran adisyon programı: masa, QR menü, mutfak ekranı ve paket servis
+
+Kaynak: https://velarisdijital.github.io/velaris-kasa/blog/restoran-adisyon-programi/
+Tarih: 2026-11-09
+
+**Kısa cevap:** Bir kafe ya da restoran adisyon programında masa planı, garsonun telefondan sipariş alması, siparişin mutfak ekranına düşmesi, QR menü, hesap bölme, paket servis ve reçeteli stok olmalı. Tüm cihazlar (kasa tableti, garson telefonları, mutfak ekranı) aynı sunucuya bağlanmalı ki herkes aynı adisyonu görsün.
+
+## Olması gerekenler
+
+| Özellik | Ne sağlar |
+|---|---|
+| Masa planı | Salon / bahçe, dolu-boş, açık adisyon tutarı |
+| Garson modu | Garson yalnızca masaları görür, telefondan sipariş girer |
+| Mutfak ekranı (KDS) | Sipariş mutfağa sesli düşer; hazırlanıyor → hazır; süre uyarısı |
+| Bar ekranı | İçecekler ayrı ekrana; kategori bazında yönlendirme |
+| QR menü | Müşteri masadaki QR'dan menüye bakar, garson çağırır, hesap ister |
+| Hesap bölme | Kişi başı ya da ürün ürün ödeme |
+| İptal / ikram | Sebebiyle kayıt, yetkiye bağlı |
+| Paket servis | Telefon ve gel-al siparişi, kurye, teslim |
+| Reçeteli stok | Satılan ürünün malzemeleri stoktan düşer, maliyet hesaplanır |
+| Happy hour | Belirli saatlerde otomatik indirim |
+
+## Mutfak ekranı neden fişten iyi?
+
+Mutfak fişi kaybolur, kirlenir, sırası karışır. Mutfak ekranında siparişler geliş sırasıyla görünür, 10 dakikayı geçen sarı, 20 dakikayı geçen kırmızı yanar. Aşçı "Hepsi hazır" dediğinde garsonun ekranında masa "Mutfak: 2 hazır" olarak görünür.
+
+## VelarisKasa'da kafe ve restoran
+
+VelarisKasa'da masa planı, garson modu, mutfak ve bar ekranı, QR menü (masadan garson çağırma ve sipariş isteği), hesap bölme, iptal/ikram raporu, paket servis ve kurye, reçeteli stok ve saatlik kampanyalar vardır. Mutfak için ayrı bir "Mutfak" kullanıcı rolü yalnızca mutfak ekranını görür. Cihazlar dükkândaki Windows bilgisayarına ya da bulut sunucuya bağlanır. Masa ve adisyon Esnaf paketinde (599 ₺/ay, KDV hariç) başlar.
+
+## Sık sorulanlar
+
+### Garson telefondan sipariş alabilir mi?
+Evet. Garson rolündeki kullanıcı telefonunda yalnızca masaları görür, sipariş girer ve "Mutfağa" der; ödeme kasada alınır.
+
+### Mutfak ekranı için ne gerekir?
+Mutfakta duvara ya da tezgâha koyulan herhangi bir Android tablet. Tablet sunucuya bağlanır, "Mutfak" kullanıcısıyla giriş yapılır.
+
+### Yemeksepeti, Getir, Trendyol siparişleri gelir mi?
+VelarisKasa'da yemek platformu siparişleri için bağlantı altyapısı (web kancası) vardır; her platformla API anlaşması yapıldıktan sonra siparişler paket ekranına düşer.
+
+---
+
+# Market ve bakkal için stok takip programı seçerken 10 kriter (2026)
+
+Kaynak: https://velarisdijital.github.io/velaris-kasa/blog/market-stok-takip-programi/
+Tarih: 2026-11-09
+
+**Kısa cevap:** Market ve bakkal için iyi bir stok takip programı barkodla hızlı satış, terazi barkodu, veresiye defteri, son kullanma tarihi (SKT) takibi, barkod okutarak toplu sayım, otomatik kampanyalar ve gün sonu raporu sunmalı; internet kesilince çalışmaya devam etmeli. Fiyat tarafında peşin lisans yerine aylık abonelik ve ücretsiz başlangıç paketi küçük işletme için riski azaltır.
+
+## 10 kriter
+
+| # | Kriter | Neden önemli |
+|---|---|---|
+| 1 | Barkodla hızlı satış | Kuyrukta saniyeler önemli; okuyucu, kamera ve "3 × ürün" ile çoklu okutma |
+| 2 | Terazi barkodu | Tartılı ürünlerin (peynir, meyve) fiyatı barkoddan gelmeli |
+| 3 | Veresiye defteri | Müşteri kartı, borç limiti, tahsilat, hesap dökümü |
+| 4 | SKT takibi | Tarihi yaklaşan ürünleri önceden görmek fireyi azaltır |
+| 5 | Toplu stok sayımı | Rafları gezerek barkod okut, farkları tek seferde işle |
+| 6 | Kampanyalar | "3 al 2 öde", "2. ürüne %50" kasada kendiliğinden uygulanmalı |
+| 7 | Alış ve tedarikçi | Fatura girince stok ve maliyet güncellensin, tedarikçi borcu görünsün |
+| 8 | İnternetsiz çalışma | Bağlantı kesilince satış durmamalı |
+| 9 | Raporlar ve muhasebe | Günlük ciro, kârlı ürünler, KDV dökümü; muhasebeciye Excel |
+| 10 | Fiyat ve kurulum | Ücretsiz başlangıç, aylık ödeme, kurulum ücreti olmaması |
+
+## Bakkal için en çok gözden kaçanlar
+
+- **SKT:** Süt ürünleri ve şarküteride tarih takibi kâğıtla yapılınca fire büyür. Alış faturasına SKT yazılabilen ve satışta önce tarihi yakın partiyi düşen (FEFO) bir program gerekir.
+- **Sayım:** Yılda bir değil, ayda bir kısa sayım yapılmalı. Barkod okutarak sayım yapan program bunu yarım saate indirir.
+- **Fiyat etiketi:** Fiyat değişince raf etiketi de değişmeli; Bluetooth etiket yazıcısı bunu tek tıkla yapar.
+
+## VelarisKasa'da bu kriterler
+
+VelarisKasa'da yukarıdaki 10 kriterin tamamı vardır: barkodlu satış ve kamera ile okuma, terazi barkodu, veresiye, SKT partileri ve "SKT yaklaşanlar" listesi, barkod okutarak toplu sayım, otomatik kampanyalar, alış/tedarikçi, internetsiz çalışma, muhasebe aktarımı. Android tablette, Windows'ta ve tarayıcıda çalışır. Paketler: Ücretsiz, Esnaf 599 ₺/ay, Salon 799 ₺/ay, Pro 1.290 ₺/ay (KDV hariç).
+
+## Sık sorulanlar
+
+### Bakkal için ücretsiz stok takip programı var mı?
+VelarisKasa'nın Ücretsiz paketi tek kasa ve tek kullanıcıyla satış, stok, veresiye, gün sonu ve raporları içerir; süre sınırı yoktur.
+
+### Eski programdaki ürünler aktarılır mı?
+Evet. Ürün listesi Excel'den CSV olarak kaydedilip tek seferde içe aktarılır; barkodu eşleşen ürünler güncellenir.
+
+### Stok sayımı barkod okuyucuyla yapılır mı?
+Evet. Sayım ekranında her okutma sayılan miktarı 1 artırır; koli için miktar yazılır. Sonunda sistem stoğu ile fark listesi görülür ve tek tuşla stoğa işlenir.
+
+---
+
+# Tablet ile kasa programı: Bilgisayarsız market, bakkal ve kafe kasası nasıl kurulur? (2026)
+
+Kaynak: https://velarisdijital.github.io/velaris-kasa/blog/tablet-kasa-programi/
+Tarih: 2026-11-09
+
+**Kısa cevap:** Bir Android tablet (10 inç), Bluetooth ya da USB barkod okuyucu ve 58/80 mm Bluetooth fiş yazıcısı ile bilgisayar olmadan tam bir kasa kurulabilir. VelarisKasa gibi tablette tek başına ve internetsiz çalışan bir uygulama kurup ürünleri yükledikten sonra satışa başlanır. Kurulum yarım saati geçmez; donanım maliyeti bir masaüstü bilgisayarlı kasanın çok altındadır.
+
+## Neden bilgisayar yerine tablet?
+
+- **Yer kaplamaz:** Tezgâhta kasa + monitör + klavye yerine tek ekran.
+- **Elektrik kesilince durmaz:** Tabletin bataryası saatlerce yeter; internet kesilse de satış devam eder.
+- **Daha ucuz:** Bilgisayar, Windows lisansı ve kurulum ücreti yok.
+- **Dokunmatik:** Ürün düğmeleri ve sayı tuş takımı parmakla kullanılır.
+
+## Gereken donanım
+
+| Parça | Ne işe yarar | Not |
+|---|---|---|
+| Android tablet (10 inç, Android 10+) | Kasa ekranı | 4 GB RAM yeterli |
+| Barkod okuyucu (Bluetooth ya da USB) | Ürünü okutmak | Okuyucu yoksa tabletin kamerası da okur |
+| Bluetooth fiş yazıcısı (58 ya da 80 mm, ESC/POS) | Satış fişi, gün sonu raporu | Para çekmecesi yazıcıya takılır |
+| Bluetooth etiket yazıcısı (isteğe bağlı) | Raf ve barkod etiketi | TSPL uyumlu mini yazıcılar |
+| Para çekmecesi (isteğe bağlı) | Nakit | Nakit satışta kendiliğinden açılır |
+
+## Adım adım kurulum
+
+1. **Uygulamayı kurun.** VelarisKasa'nın Android uygulamasını velariskasa.com'dan indirip kurun. Sonraki güncellemeler uygulamanın içinden gelir.
+2. **İşletmenizi tanıtın.** Kurulum sihirbazında işletme türünü seçin (market, kafe, restoran, berber). Hazır kategori ve örnek ürünler eklenir.
+3. **Ürünleri yükleyin.** Excel listesini içe aktarın ya da barkodu okutarak ekleyin; Türkiye'de satılan pek çok paketli ürünün adı barkoddan otomatik gelir.
+4. **Yazıcıyı bağlayın.** Ayarlar → Bu cihaz → Fiş yazıcısı ara. Yazıcıyı listeden seçin, deneme fişi basın.
+5. **Kasayı açın.** Başlangıç nakdini girin ve satışa başlayın: barkodu okutun, Nakit ya da Kart'a basın.
+
+## Tablette kasa kullanırken dikkat
+
+- **Ekran klavyesi:** İyi bir kasa uygulaması barkod kutusunu seçili tutar ama ekran klavyesini yalnızca siz dokununca açar.
+- **Ekran kararması:** Kasa modunda ekran kapanmamalı; uygulama sabitlenince çalışanlar başka uygulamaya geçemez.
+- **Yedek:** Veriler tabletteyse günlük otomatik yedek ve yedeği Google Drive'a gönderme şart.
+- **Birden çok cihaz:** İkinci kasa, garson telefonu ya da mutfak ekranı gerekiyorsa tüm cihazlar aynı sunucuya (dükkândaki bilgisayar ya da bulut) bağlanmalı.
+
+## VelarisKasa bu kurulumda ne yapıyor?
+
+VelarisKasa, tablette tek başına çalışan kasa ve stok programıdır: barkodlu satış, ekranda sayı tuş takımı, banknotlu nakit ödeme, Bluetooth fiş ve etiket yazıcısı, nakit satışta para çekmecesi, kampanyalar, veresiye, gün sonu (Z) raporu, stok sayımı ve SKT takibi. Ücretsiz paketle başlanır; Esnaf paketi aylık 599 ₺'dir (KDV hariç).
+
+## Sık sorulanlar
+
+### Tablet kasası internet olmadan çalışır mı?
+Evet. VelarisKasa'nın Android uygulaması verileri tablette tutar; internet yalnızca güncelleme, yedeği buluta gönderme ve e-Fatura için gerekir.
+
+### Hangi barkod okuyucu tabletle çalışır?
+Klavye gibi çalışan (HID) Bluetooth ya da USB barkod okuyucuların hepsi çalışır. Okuyucu okuttuktan sonra Enter göndermelidir; çoğu okuyucuda bu varsayılan ayardır.
+
+### Fiş yazıcısı Bluetooth ile tablete nasıl bağlanır?
+ESC/POS uyumlu 58/80 mm Bluetooth fiş yazıcıları (Xprinter, Rongta, HPRT, Goojprt, PT-210 vb.) uygulamanın içinden aranıp seçilir; Türkçe karakterler resim olarak basıldığı için bozulmaz.
+
+### Bir tablet yetmezse ne olur?
+İkinci tablet, garson telefonu ya da mutfak ekranı eklenebilir; cihazlar aynı sunucuya bağlanır ve tablet verileri tek dokunuşla sunucuya taşınır.
+
+---
+
+# Tablete Bluetooth fiş ve etiket yazıcısı nasıl bağlanır? (ESC/POS, TSPL, 58/80 mm) — 2026
+
+Kaynak: https://velarisdijital.github.io/velaris-kasa/blog/bluetooth-fis-yazici-tablet/
+Tarih: 2026-11-09
+
+**Kısa cevap:** Tablete Bluetooth fiş yazıcısı bağlamak için yazıcıyı açın, kasa programının yazıcı ayarlarından "Yazıcı ara" deyin, listeden yazıcıyı seçip eşleştirin ve deneme fişi basın. Fiş yazıcıları genellikle **ESC/POS**, barkod etiket yazıcıları **TSPL** komut dili konuşur; programın doğru dili seçmesi gerekir. VelarisKasa her ikisini de destekler, fiş yazıcısına bağlı para çekmecesini nakit satışta otomatik açar.
+
+## Hangi yazıcı ne işe yarar?
+
+| Yazıcı | Komut dili | Kâğıt | Kullanım |
+|---|---|---|---|
+| Fiş yazıcısı | ESC/POS | 58 mm / 80 mm termal rulo | Satış fişi, Z raporu, mutfak fişi |
+| Etiket yazıcısı | TSPL (bazen ZPL) | Etiket rulosu (ör. 40×30 mm) | Raf etiketi, barkod etiketi |
+| Para çekmecesi | Fiş yazıcısından (RJ11) | — | Nakit satışta açılır |
+
+## Adım adım bağlama
+
+1. **Yazıcıyı şarj edin ve açın.** Kâğıdı termal yüzü dışa bakacak şekilde takın (ters takılan kâğıt boş çıkar).
+2. **Tabletin Bluetooth ve konum izinlerini açın.** Android, yakındaki cihazları aramak için bu izinleri ister.
+3. **Programdan arayın.** VelarisKasa'da Ayarlar → Fiş yazıcısı (ya da Etiket yazıcısı) → "Yazıcı ara". Eşleşmemiş yazıcılar da listelenir; seçince eşleştirme istenir (PIN genellikle 0000 ya da 1234).
+4. **Deneme fişi basın.** Yazı soluksa yoğunluğu artırın; karakterler bozuksa doğru kâğıt genişliğini seçin.
+5. **Çekmeceyi deneyin.** Çekmece kablosu yazıcının arkasındaki RJ11 girişine takılır; "Çekmeceyi aç" ile denenir.
+
+## Sık karşılaşılan sorunlar
+
+| Belirti | Olası neden | Çözüm |
+|---|---|---|
+| Program yazıcıyı bulamıyor | Konum/yakındaki cihaz izni kapalı | İzinleri açın, yeniden arayın |
+| Boş kâğıt çıkıyor | Kâğıt ters takılı | Rulonun yönünü çevirin |
+| Etiket yazıcısı kırmızı yanıyor | Etiket aralığı algılanmıyor ya da düz rulo takılı | Programda "Kalibre et"; düz rulo için "Yazıcıda takılı rulo" seçin |
+| Yazı yarım kalıyor | Veri çok hızlı gönderiliyor | Programda yazdırma hızını "Yavaş" yapın |
+| Türkçe karakter bozuk | Kod sayfası uyumsuz | Fişi görüntü (raster) olarak basan program kullanın |
+
+VelarisKasa fişi görüntü olarak bastığı için Türkçe karakter sorunu yaşanmaz; yazdırma hızı ayarı ve etiket yazıcısı için kalibrasyon/durum sorgusu vardır.
+
+## Hangi yazıcıyı almalı?
+
+- **Fiş için:** ESC/POS destekli, Bluetooth'lu 58 mm (küçük tezgâh) ya da 80 mm (market, restoran) termal yazıcı.
+- **Etiket için:** TSPL destekli, Bluetooth'lu taşınabilir etiket yazıcısı.
+- **Hem fiş hem etiket:** İki ayrı yazıcı tanımlanabilir; program fişi fiş yazıcısına, etiketi etiket yazıcısına gönderir.
+
+## Sık sorulanlar
+
+### Her Bluetooth yazıcı tabletle çalışır mı?
+Klasik Bluetooth (SPP) ya da BLE üzerinden ESC/POS veya TSPL komutu kabul eden yazıcıların çoğu çalışır. Yalnızca kendi uygulamasıyla çalışan kapalı yazıcılar çalışmayabilir.
+
+### Bluetooth fiş yazıcısı mali fiş basar mı?
+Hayır. Bluetooth fiş yazıcısı bilgi fişi basar; mali fiş yalnızca yazarkasa (ÖKC) ile kesilir.
+
+### USB barkod okuyucu tablete bağlanır mı?
+Evet, OTG kablosuyla. Bluetooth barkod okuyucular da klavye gibi çalışır; VelarisKasa kasa ekranındayken hiçbir yere dokunmadan okutulan barkodu sepete ekler.
+
+---
+
+# Ücretsiz kasa programı var mı? Ücretsiz ve ücretli kasa programları karşılaştırması (2026)
+
+Kaynak: https://velarisdijital.github.io/velaris-kasa/blog/ucretsiz-kasa-programi/
+Tarih: 2026-11-09
+
+**Kısa cevap:** Evet, gerçekten ücretsiz kullanılabilen kasa programları var; ama çoğunun ürün sayısı, cihaz sayısı ya da rapor sınırı olur. Küçük bir bakkal, büfe ya da tek kişilik dükkân için ücretsiz paket yeterli olabilir. VelarisKasa'nın süresiz **Ücretsiz** paketi barkodlu satış, stok ve günlük raporu içerir; Android tablette internetsiz çalışır. İşletme büyüdükçe aylık 599 ₺'den başlayan paketlere geçilir.
+
+## Ücretsiz programlarda nelere dikkat etmeli?
+
+| Konu | Sorulacak soru |
+|---|---|
+| Süre | Gerçekten süresiz mi, yoksa 30 günlük deneme mi? |
+| Sınırlar | Ürün, satış, cihaz ya da kullanıcı sınırı var mı? |
+| Veri | Veriler kimin elinde? Dışa aktarılabiliyor mu? |
+| Yedek | Otomatik yedek var mı, geri yüklenebiliyor mu? |
+| Reklam | Kasa ekranında reklam çıkıyor mu? |
+| Geçiş | Ücretli pakete geçince veriler korunuyor mu? |
+
+## "Bedava" programın gizli maliyetleri
+
+- **Veri kaybı:** Yedeksiz program bozulursa bütün stok ve veresiye kaydı gider.
+- **Destek yok:** Kasa durduğunda kimse açmaz.
+- **Kırık (lisanssız) yazılım:** Virüs ve veri sızıntısı riski taşır; hukuken de sorunludur.
+- **Donanım:** Bilgisayar isteyen program, ücretsiz olsa bile bilgisayar ve Windows maliyeti getirir.
+
+## Ne zaman ücretli pakete geçilir?
+
+- Masa/adisyon, randevu ya da mutfak ekranı gerektiğinde,
+- Birden çok kasa ya da cihaz aynı veriyi kullanacaksa,
+- Kampanya, SKT takibi, toplu sayım, muhasebe aktarımı gibi özellikler gerektiğinde,
+- Personel yetkileri ve ayrıntılı raporlar önemli hâle geldiğinde.
+
+## VelarisKasa paketleri
+
+| Paket | Fiyat (KDV hariç) | Kimin için |
+|---|---|---|
+| Ücretsiz | 0 ₺, süresiz | Tek kasalı küçük dükkân |
+| Esnaf | 599 ₺/ay | Market, bakkal, kafe (masa/adisyon dahil) |
+| Salon | 799 ₺/ay | Berber, kuaför, güzellik salonu (randevu) |
+| Pro | 1.290 ₺/ay | Çok cihazlı işletme, restoran, tüm özellikler |
+
+Tablet uygulaması ilk 14 gün tüm Pro özellikleriyle açılır, sonra seçilen pakete göre devam eder. Veriler cihazda kalır; telefona ya da Drive'a yedek alınabilir ve geri yüklenebilir. Kurulum ücreti ve taahhüt yoktur.
+
+## Sık sorulanlar
+
+### Tamamen ücretsiz kasa programı hangisi?
+VelarisKasa'nın Ücretsiz paketi süresizdir: barkodlu satış, stok takibi, nakit/kart ödeme ve günlük rapor ücretsizdir. Android tablette ya da tarayıcıda kullanılabilir.
+
+### Ücretsiz programla fiş yazdırabilir miyim?
+Evet, Bluetooth fiş yazıcısıyla bilgi fişi yazdırılabilir. Bilgi fişi mali belge değildir; mali fiş için yazarkasa (ÖKC) gerekir.
+
+### Ücretliye geçince verilerim silinir mi?
+Hayır. Lisans anahtarı girildiğinde aynı veriler üzerinde yeni özellikler açılır.
+
+### Ücretsiz paket reklam gösteriyor mu?
+Hayır, VelarisKasa kasa ekranında reklam göstermez.
