@@ -10,6 +10,8 @@ const root = path.join(__dirname, '../../dist-app');
 const shots = process.argv[2];
 const fail = (msg) => { console.error('BAŞARISIZ:', msg); process.exitCode = 1; };
 const ok = (msg) => console.log('✓', msg);
+// Sahte "son sürüm": uygulamanın kendi derleme numarasından (CI'da VK_BUILD_NUMBER) bir fazlası
+const NEXT = Math.max(Number(process.env.VK_BUILD_NUMBER || 0), 14) + 1;
 
 /** Son gönderilen ESC/POS verisindeki GS v 0 bantlarını birleştirip PNG kaydeder (gözle kontrol için). */
 async function saveEscPos(p, file) {
@@ -75,7 +77,7 @@ async function saveTsplPages(p, prefix) {
     await ctx.addInitScript({ path: path.join(__dirname, 'fake-android-bridge.js') });
     // GitHub'daki son sürüm (uygulama içinden güncelleme): 1.0.15
     await ctx.route('https://api.github.com/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify({ name: 'VelarisKasa Android 1.0.15', body: 'Sonraki sürümler uygulama içinden gelir. native_api=2', assets: [
+      body: JSON.stringify({ name: `VelarisKasa Android 1.0.${NEXT}`, body: 'Sonraki sürümler uygulama içinden gelir. native_api=2', assets: [
         { name: 'VelarisKasa.apk', browser_download_url: 'https://github.com/velarisdijital/velaris-kasa/releases/download/android-latest/VelarisKasa.apk' },
         { name: 'VelarisKasa-web.html', browser_download_url: 'https://github.com/velarisdijital/velaris-kasa/releases/download/android-latest/VelarisKasa-web.html' }] }) }));
     const p = await ctx.newPage();
@@ -274,9 +276,9 @@ async function saveTsplPages(p, prefix) {
     const reloadedOta = p.waitForEvent('load', { timeout: 15000 });
     await restartBtn.click();
     await reloadedOta;
-    if ((await p.evaluate(() => sessionStorage.getItem('fakePersisted'))) !== '/data/fake/files/ota/15') fail('yeni pakete geçilmedi');
+    if ((await p.evaluate(() => sessionStorage.getItem('fakePersisted'))) !== `/data/fake/files/ota/${NEXT}`) fail('yeni pakete geçilmedi');
     await p.getByText(/Uygulama sürümü|Kasa|Ayarlar/).first().waitFor({ timeout: 15000 });
-    ok('Yeni sürüm (1.0.15) uygulama içinden indirildi; "Yeniden başlat" yeni pakete geçti (QR / APK kurulumu yok)');
+    ok(`Yeni sürüm (1.0.${NEXT}) uygulama içinden indirildi; "Yeniden başlat" yeni pakete geçti (QR / APK kurulumu yok)`);
 
     // ---- Yedekleme ve geri yükleme ----
     await p.getByRole('button', { name: 'Yedekleme' }).click();
