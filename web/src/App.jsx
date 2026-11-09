@@ -240,24 +240,35 @@ function LicenseBanner({ license, admin }) {
   return <div className="banner red">{text}{admin && <NavLink className="btn small" to="/ayarlar?sekme=paket">Paket</NavLink>}</div>;
 }
 
-/** Android uygulaması: GitHub'da yeni sürüm varsa üstte "Güncelle" (açılışta ve 6 saatte bir bakılır). */
+/**
+ * Android uygulaması: uygulama içi güncelleme. Yeni sürüm arka planda indirilir; "Yeniden başlat" ile (ya da bir
+ * sonraki açılışta kendiliğinden) devreye girer. Android eklentisi de değiştiyse tek dokunuşla APK kurulur.
+ */
 function UpdateBanner() {
   const [upd, setUpd] = useState(null);
   const [hidden, setHidden] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   useEffect(() => {
     if (!import.meta.env.VITE_APP) return undefined;
-    let mod = null;
-    const check = () => (mod ? Promise.resolve(mod) : import('./appUpdate.js').then((m) => (mod = m)))
-      .then((m) => m.checkForUpdate()).then(setUpd).catch(() => {});
-    const first = setTimeout(check, 4000);
-    const every = setInterval(check, 6 * 3600 * 1000);
+    const check = () => import('./ota.js').then((m) => m.checkAndPrepare()).then(setUpd).catch(() => {});
+    const first = setTimeout(check, 5000);
+    const every = setInterval(check, 3 * 3600 * 1000);
     return () => { clearTimeout(first); clearInterval(every); };
   }, []);
   if (!upd || hidden) return null;
+  const restart = async () => { setBusy(true); try { const m = await import('./ota.js'); if (!(await m.applyPending())) location.reload(); } catch (e) { setErr(e.message || String(e)); setBusy(false); } };
+  const install = async () => { setBusy(true); setErr(''); try { await (await import('./ota.js')).installApk(upd.apkUrl); } catch (e) { setErr(e.message || String(e)); } finally { setBusy(false); } };
   return (
     <div className="banner blue">
-      <span style={{ flex: 1 }}>Yeni sürüm hazır: <b>{upd.version}</b> (tabletteki: {upd.current}). Güncelle'ye dokunun; indirme bitince bildirime dokunup "Güncelle" deyin. Verileriniz silinmez.</span>
-      <button className="btn small primary" onClick={() => import('./appUpdate.js').then((m) => m.installUpdate(upd.url))}>Güncelle</button>
+      {upd.kind === 'web' ? (
+        <span style={{ flex: 1 }}>Yeni sürüm <b>{upd.version}</b> indirildi. Uygun bir anda <b>Yeniden başlat</b>'a basın (ya da uygulamayı kapatıp açın). Verileriniz silinmez.</span>
+      ) : (
+        <span style={{ flex: 1 }}>Yeni sürüm <b>{upd.version}</b> uygulama güncellemesi istiyor. <b>Güncelle</b>'ye basın; indirme bitince Android'in ekranında "Güncelle" deyin. Verileriniz silinmez.{err && <span className="danger-text"> {err}</span>}</span>
+      )}
+      {upd.kind === 'web'
+        ? <button className="btn small primary" disabled={busy} onClick={restart}>Yeniden başlat</button>
+        : <button className="btn small primary" disabled={busy} onClick={install}>{busy ? 'İndiriliyor…' : 'Güncelle'}</button>}
       <button className="btn small ghost" onClick={() => setHidden(true)}>Daha sonra</button>
     </div>
   );

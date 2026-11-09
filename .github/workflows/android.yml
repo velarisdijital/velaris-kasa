@@ -19,6 +19,9 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Derleme numarası: APK sürümü ve uygulama içi güncellemenin (OTA) web paketi sürümü
+      VK_BUILD_NUMBER: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -65,6 +68,8 @@ jobs:
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ../VelarisKasa.apk
           ls -la ../VelarisKasa.apk
+          # Uygulama içi güncelleme (OTA) için web paketi: tek dosya
+          cp ../dist-app/index.html ../VelarisKasa-web.html
       - uses: actions/upload-artifact@v4
         with:
           name: VelarisKasa-apk
@@ -73,10 +78,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NOTES="VelarisKasa Android 1.0.${{ github.run_number }} — tablet ve telefonda internetsiz çalışır. Kurulum: APK'yı indirip açın; \"bilinmeyen kaynaklardan yüklemeye\" izin verin."
+          # native_api: bu web paketinin istediği en düşük Android eklenti sürümü (uygulama içi güncelleme okur)
+          NAPI=$(grep -oE 'REQUIRED_NATIVE_API = [0-9]+' web/src/ota.js | grep -oE '[0-9]+$')
+          NOTES="VelarisKasa Android 1.0.${{ github.run_number }} — tablet ve telefonda internetsiz çalışır. Kurulum: APK'yı indirip açın; \"bilinmeyen kaynaklardan yüklemeye\" izin verin. Sonraki sürümler uygulama içinden kendiliğinden gelir. native_api=${NAPI}"
           if gh release view android-latest >/dev/null 2>&1; then
-            gh release upload android-latest VelarisKasa.apk --clobber
+            gh release upload android-latest VelarisKasa.apk VelarisKasa-web.html --clobber
             gh release edit android-latest --title "VelarisKasa Android 1.0.${{ github.run_number }}" --notes "$NOTES"
           else
-            gh release create android-latest VelarisKasa.apk --title "VelarisKasa Android 1.0.${{ github.run_number }}" --notes "$NOTES" --prerelease
+            gh release create android-latest VelarisKasa.apk VelarisKasa-web.html --title "VelarisKasa Android 1.0.${{ github.run_number }}" --notes "$NOTES" --prerelease
           fi

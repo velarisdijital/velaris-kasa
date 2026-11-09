@@ -50,7 +50,11 @@
     },
     // Kasa modu ve sürüm (android/.../DevicePlugin.java)
     VKDevice: {
-      async appInfo() { return { versionName: '1.0.14', versionCode: 14, android: '13', model: 'Test Tablet' }; },
+      async appInfo() { return { versionName: '1.0.14', versionCode: 14, android: '13', model: 'Test Tablet', nativeApi: 2 }; },
+      async otaDownload({ url, build }) { state.otaUrl = url; return { path: `/data/fake/files/ota/${build}` }; },
+      async otaConfirm() { state.otaConfirmed = (state.otaConfirmed || 0) + 1; },
+      async otaReset() {},
+      async installApk({ url }) { state.installedApk = url; },
       async keepAwake({ on }) { state.keepAwake = on; },
       async immersive({ on }) { state.immersive = on; },
       async pin() { state.pinned = true; },
@@ -75,6 +79,14 @@
       },
       async deleteFile({ path, directory }) { delete state.files[`${directory}/${path}`]; },
       async getUri({ path, directory }) { return { uri: `file:///fake/${directory}/${path}` }; },
+    },
+    // @capacitor/core WebView (uygulama içi güncelleme: indirilen web paketine geçiş)
+    WebView: {
+      // Gerçekte WebView yeni klasörden yeniden yüklenir; burada sayfa yeniden yüklenir (aynı paket → tek deneme koruması)
+      async setServerBasePath({ path }) { state.serverBasePath = path; sessionStorage.setItem('fakePersisted', path); setTimeout(() => location.reload(), 50); },
+      async persistServerBasePath() { state.persisted = state.serverBasePath; },
+      async getPersisted() { return { path: sessionStorage.getItem('fakePersisted') || '' }; },
+      async getServerBasePath() { return { path: state.serverBasePath || '' }; },
     },
     Share: {
       async share(opts) { state.shared = opts; return {}; },

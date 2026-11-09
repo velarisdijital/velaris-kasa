@@ -75,7 +75,9 @@ async function saveTsplPages(p, prefix) {
     await ctx.addInitScript({ path: path.join(__dirname, 'fake-android-bridge.js') });
     // GitHub'daki son sürüm (uygulama içinden güncelleme): 1.0.15
     await ctx.route('https://api.github.com/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify({ name: 'VelarisKasa Android 1.0.15', assets: [{ name: 'VelarisKasa.apk', browser_download_url: 'https://github.com/velarisdijital/velaris-kasa/releases/download/android-latest/VelarisKasa.apk' }] }) }));
+      body: JSON.stringify({ name: 'VelarisKasa Android 1.0.15', body: 'Sonraki sürümler uygulama içinden gelir. native_api=2', assets: [
+        { name: 'VelarisKasa.apk', browser_download_url: 'https://github.com/velarisdijital/velaris-kasa/releases/download/android-latest/VelarisKasa.apk' },
+        { name: 'VelarisKasa-web.html', browser_download_url: 'https://github.com/velarisdijital/velaris-kasa/releases/download/android-latest/VelarisKasa-web.html' }] }) }));
     const p = await ctx.newPage();
     const errors = [];
     p.on('pageerror', (e) => errors.push(e.message));
@@ -264,12 +266,17 @@ async function saveTsplPages(p, prefix) {
     await p.getByText(/Uygulama sürümü: 1\.0\.14/).waitFor({ timeout: 5000 });
     ok('Uygulama sürümü gösteriliyor (1.0.14)');
 
-    // ---- Uygulama içinden güncelleme ----
-    const upd = p.getByRole('button', { name: 'Güncelle', exact: true });
-    await upd.waitFor({ timeout: 15000 });
-    await upd.click();
-    await p.waitForFunction(() => /VelarisKasa\.apk\?v=1\.0\.15/.test(window.__fake.openedUrl || ''), null, { timeout: 5000 });
-    ok('"Yeni sürüm 1.0.15" bildirimi çıktı, Güncelle APK indirmesini açtı');
+    // ---- Uygulama içinden güncelleme (OTA): web paketi arka planda iner, "Yeniden başlat" ile geçilir ----
+    if (!(await p.evaluate(() => window.__fake.otaConfirmed > 0))) fail('açılışta güncelleme onayı (otaConfirm) gönderilmedi');
+    const restartBtn = p.getByRole('button', { name: 'Yeniden başlat' });
+    await restartBtn.waitFor({ timeout: 20000 });
+    if (!(await p.evaluate(() => /VelarisKasa-web\.html$/.test(window.__fake.otaUrl || '')))) fail('web paketi indirilmedi');
+    const reloadedOta = p.waitForEvent('load', { timeout: 15000 });
+    await restartBtn.click();
+    await reloadedOta;
+    if ((await p.evaluate(() => sessionStorage.getItem('fakePersisted'))) !== '/data/fake/files/ota/15') fail('yeni pakete geçilmedi');
+    await p.getByText(/Uygulama sürümü|Kasa|Ayarlar/).first().waitFor({ timeout: 15000 });
+    ok('Yeni sürüm (1.0.15) uygulama içinden indirildi; "Yeniden başlat" yeni pakete geçti (QR / APK kurulumu yok)');
 
     // ---- Yedekleme ve geri yükleme ----
     await p.getByRole('button', { name: 'Yedekleme' }).click();

@@ -570,6 +570,7 @@ function KioskSettings() {
   const [k, setK] = useState(null);
   const [pinned, setPinned] = useState(false);
   const [ver, setVer] = useState(null);
+  const webBuild = Number(import.meta.env.VITE_WEB_BUILD || 0);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     import('../kiosk.js').then((mod) => { setM(mod); setK(mod.getKiosk()); mod.isPinned().then(setPinned).catch(() => {}); });
@@ -579,11 +580,17 @@ function KioskSettings() {
   const toggle = (key) => async (e) => setK(await m.saveKiosk({ [key]: e.target.checked }));
   const run = async (fn) => { setBusy(true); try { await fn(); } catch (err) { toast.err(err); } finally { setBusy(false); } };
   const checkUpdate = () => run(async () => {
-    const u = await import('../appUpdate.js');
-    const upd = await u.checkForUpdate();
+    const o = await import('../ota.js');
+    toast('Güncelleme denetleniyor…');
+    const upd = await o.checkAndPrepare();
     if (!upd) { toast.ok('Uygulama güncel'); return; }
-    toast.ok(`Yeni sürüm ${upd.version} indiriliyor; bitince bildirime dokunup "Güncelle" deyin`);
-    await u.installUpdate(upd.url);
+    if (upd.kind === 'web') {
+      toast.ok(`Yeni sürüm ${upd.version} hazır; uygulama yeniden başlatılıyor…`);
+      setTimeout(() => o.applyPending().catch((e) => toast.err(e)), 1200);
+      return;
+    }
+    toast.ok(`Yeni sürüm ${upd.version} indiriliyor; bitince Android'in ekranında "Güncelle" deyin`);
+    await o.installApk(upd.apkUrl);
   });
   return (
     <div className="card card-pad stack" style={{ background: 'var(--panel-2)', boxShadow: 'none' }} onClick={(e) => e.stopPropagation()}>
@@ -597,7 +604,7 @@ function KioskSettings() {
         <span className="muted small-text" style={{ flex: 1 }}>Sabitlenince çalışanlar uygulamadan çıkamaz. Çıkmak için buradan "Sabitlemeyi kaldır"a basın ya da Geri ve Son uygulamalar tuşlarına birlikte basılı tutun. Android ayarlarında "Sabitlemeyi kaldırmadan önce PIN iste"yi açarsanız tablet şifresi sorulur.</span>
       </div>
       <div className="row wrap" style={{ gap: 8 }}>
-        <span className="muted small-text" style={{ flex: 1 }}>Uygulama sürümü: <b>{ver?.versionName || '—'}</b>{ver?.model ? ` · ${ver.model} · Android ${ver.android}` : ''}</span>
+        <span className="muted small-text" style={{ flex: 1 }}>Uygulama sürümü: <b>{ver?.versionName || '—'}</b>{webBuild > Number(ver?.versionCode || 0) ? ` · içerik 1.0.${webBuild} (uygulama içinden güncellendi)` : ''}{ver?.model ? ` · ${ver.model} · Android ${ver.android}` : ''}</span>
         <button type="button" className="btn small" disabled={busy} onClick={checkUpdate}>Güncellemeleri denetle</button>
       </div>
     </div>
