@@ -69,7 +69,13 @@ function Plan() {
   const { license, reloadSettings } = useSession();
   const [key, setKey] = useState('');
   const [scan, setScan] = useState(false);
+  const [cloud, setCloud] = useState(null); // Velaris Bulut aboneliği (yalnızca bulutta çalışırken)
+  useEffect(() => { get('/cloud/subscription').then(setCloud).catch(() => setCloud(null)); }, []);
   if (!license) return null;
+  const openPay = async () => {
+    if (globalThis.Capacitor?.isNativePlatform?.()) { const { device } = await import('../native.js'); await device('openUrl', { url: cloud.pay_url }).catch((e) => toast.err(e)); }
+    else window.open(cloud.pay_url, '_blank', 'noopener');
+  };
   const activate = async (e) => {
     e.preventDefault();
     try { const l = await post('/license', { key }); setKey(''); await reloadSettings(); toast.ok(`${l.plan_name} paketi etkinleştirildi`); } catch (err) { toast.err(err); }
@@ -83,6 +89,21 @@ function Plan() {
   const lim = (v, unit) => (v == null ? `Sınırsız ${unit}` : `${v} ${unit}`);
   return (
     <div className="stack">
+      {cloud && (
+        <div className="card card-pad stack" data-cloud-status={cloud.status}>
+          <div className="row wrap">
+            <div style={{ flex: 1 }}>
+              <div className="muted small-text">Velaris Bulut aboneliği · {cloud.url}</div>
+              <h2 style={{ fontSize: 22 }}>{cloud.plan_name} · {cloud.status_label}</h2>
+            </div>
+            <button type="button" className="btn primary" onClick={openPay}>{cloud.status === 'active' ? 'Paketi değiştir / uzat' : cloud.plan === 'free' ? 'Paket yükselt' : 'Öde'}</button>
+          </div>
+          <div className="muted small-text">
+            {cloud.paid_until ? <>Geçerlilik: <b>{d(cloud.paid_until)}</b>. </> : cloud.trial_until ? <>Deneme bitişi: <b>{d(cloud.trial_until)}</b>. </> : null}
+            Ödeme yapınca paket ve süre bu kasada kendiliğinden güncellenir; lisans anahtarı girmeniz gerekmez. Ödeme gecikirse 7 gün ek süre verilir, sonra Ücretsiz pakete geçilir (veriler silinmez).
+          </div>
+        </div>
+      )}
       <div className="card card-pad stack">
         <div className="row wrap">
           <div style={{ flex: 1 }}>
@@ -102,6 +123,7 @@ function Plan() {
         {license.error && <div className="danger-text small-text">{license.error}</div>}
         {license.status === 'trial' && <div className="small-text">Deneme sürümü: tüm özellikler <b>{d(license.trial_until)}</b> tarihine kadar açık. Sonra lisans anahtarı girilmezse Ücretsiz pakete geçilir (veriler silinmez).</div>}
         {license.trial_ended && <div className="small-text danger-text">Deneme süresi {d(license.trial_ended)} tarihinde bitti; Ücretsiz paketteyiz. Lisans anahtarı girin.</div>}
+        {!cloud && <>
         <form className="row wrap" onSubmit={activate}>
           <input className="input" style={{ flex: 1, minWidth: 220, fontFamily: 'monospace' }} placeholder="VK1.… lisans anahtarı" value={key} onChange={(e) => setKey(e.target.value)} aria-label="Lisans anahtarı" />
           {cameraSupported() && <button type="button" className="btn" onClick={() => setScan(true)}><Icon name="camera" /> QR okut</button>}
@@ -109,6 +131,7 @@ function Plan() {
           {license.status !== 'free' && license.status !== 'demo' && <button type="button" className="btn" onClick={remove}>Lisansı kaldır</button>}
         </form>
         <small className="muted">Lisans anahtarını Velaris Dijital'den alırsınız (yazı ya da QR kod). Anahtar internete bağlanmadan doğrulanır.</small>
+        </>}
         {scan && <CameraScanner onClose={() => setScan(false)} onResult={(code) => { setScan(false); if (/^VK1\./.test(String(code).trim())) setKey(String(code).trim()); else toast.err('Bu QR bir lisans anahtarı değil'); }} />}
       </div>
       <div className="card table-wrap">

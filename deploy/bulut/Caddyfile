@@ -1,0 +1,19 @@
+# Her işletmenin alt alan adına (yildizmarket.velariskasa.com) ilk istekte otomatik sertifika alınır.
+# Yalnızca Velaris Bulut'ta kayıtlı adresler için sertifika istenir (tls-check).
+{
+	on_demand_tls {
+		ask http://cloud:4850/api/cloud/tls-check
+	}
+}
+
+https:// {
+	tls {
+		on_demand
+	}
+	encode gzip
+	reverse_proxy cloud:4850
+}
+
+http:// {
+	redir https://{host}{uri} permanent
+}

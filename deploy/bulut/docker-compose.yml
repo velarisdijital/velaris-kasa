@@ -1,0 +1,45 @@
+# Velaris Bulut: bir sunucuda çok işletme (docs/VELARIS_BULUT.md)
+#   cd deploy/bulut && cp .env.example .env  (değerleri doldurun)
+#   lisans gizli anahtarını ./secrets/license-private.pem olarak koyun
+#   docker compose up -d --build
+services:
+  cloud:
+    build: ../..
+    restart: unless-stopped
+    command: ["node", "server/cloud/main.js"]
+    env_file: .env
+    environment:
+      TZ: Europe/Istanbul
+      PORT: "4850"
+      VELARIS_DATA_DIR: /data
+      VK_LICENSE_PRIVATE_KEY_FILE: /run/secrets/license_private
+    secrets:
+      - license_private
+    volumes:
+      - cloud-data:/data
+    expose:
+      - "4850"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4850/api/cloud/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - cloud
+
+secrets:
+  license_private:
+    file: ./secrets/license-private.pem
+
+volumes:
+  cloud-data:
+  caddy-data:
