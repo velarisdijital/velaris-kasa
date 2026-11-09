@@ -20,6 +20,7 @@ import notifyRoutes from './routes/notify.js';
 import productRoutes from './routes/products.js';
 import tableRoutes from './routes/tables.js';
 import kitchenRoutes from './routes/kitchen.js';
+import promotionRoutes from './routes/promotions.js';
 import deliveryRoutes from './routes/deliveries.js';
 import purchaseRoutes from './routes/purchases.js';
 import reportRoutes from './routes/reports.js';
@@ -79,6 +80,7 @@ export function createApp({ dataDir, staticDir = path.join(__dirname, '..', 'dis
   api.use(purchaseRoutes(db));
   api.use(tableRoutes(db));
   api.use(kitchenRoutes(db));
+  api.use(promotionRoutes(db));
   api.use(deliveryRoutes(db));
   api.use(platformRoutes(db));
   api.use(customerRoutes(db));

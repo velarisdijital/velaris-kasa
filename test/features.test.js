@@ -1138,3 +1138,55 @@ test('muhasebe aktarımı: KDV oranına göre matrah/KDV (fiş indirimi dağıt�
   const ct = (await (await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: cashier.id, pin: '4321' }) })).json()).token;
   assert.equal((await fetch(`${base}/api/reports/accounting`, { headers: { Authorization: `Bearer ${ct}` } })).status, 403);
 });
+
+test('kampanyalar: 3 al 2 öde, 2. ürüne %50, happy hour, sepet üzeri; sunucu hesaplar, kasiyer yetkisine takılmaz', async () => {
+  const { applyPromotions, promoActiveAt } = await import('../server/promotions.js');
+  const cat = (await call('POST', '/api/categories', { name: 'Kampanya Kat' })).body;
+  const kola = (await call('POST', '/api/products', { name: 'Kola KMP', sell_price: 3000, vat_rate: 20, track_stock: 0 })).body;
+  const cips = (await call('POST', '/api/products', { name: 'Cips KMP', sell_price: 4000, vat_rate: 20, track_stock: 0, category_id: cat.id })).body;
+  // Doğrulama
+  assert.equal((await call('POST', '/api/promotions', { name: 'Hatalı', type: 'bxgy', scope: 'product', product_id: kola.id, buy_qty: 2, pay_qty: 2 })).status, 400);
+  const p1 = (await call('POST', '/api/promotions', { name: 'Kola 3 al 2 öde', type: 'bxgy', scope: 'product', product_id: kola.id, buy_qty: 3, pay_qty: 2 })).body;
+  const p2 = (await call('POST', '/api/promotions', { name: 'Cipste 2. ürüne %50', type: 'nth', scope: 'category', category_id: cat.id, nth: 2, percent: 50 })).body;
+  assert.equal(p1.product_name, 'Kola KMP');
+
+  // Kasiyer (indirim yetkisi yok) kampanyalı satış yapabilir; tutarı sunucu hesaplar
+  const cashier = (await call('POST', '/api/users', { name: 'Kasiyer KMP', pin: '2468', role: 'cashier' })).body;
+  await call('PUT', '/api/permissions', { cashier: { discount: false } });
+  const ct = (await (await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: cashier.id, pin: '2468' }) })).json()).token;
+  const sellAs = (body) => fetch(`${base}/api/sales`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ct}` }, body: JSON.stringify(body) })
+    .then(async (r) => ({ status: r.status, body: await r.json() }));
+  // 4 kola (1 bedava) + 3 cips (1 tanesi %50) = 120 - 30 + 120 - 20 = 190 TL
+  let r = await sellAs({ register_name: 'Kasa 1', items: [{ product_id: kola.id, qty: 3 }, { product_id: kola.id, qty: 1 }, { product_id: cips.id, qty: 3 }], payments: [{ method: 'cash', amount: 19000 }] });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.total, 19000);
+  assert.equal(r.body.promo_discount, 5000);
+  assert.match(r.body.promo_names, /Kola 3 al 2 öde/);
+  assert.equal(r.body.items.filter((i) => i.name === 'Kola KMP').reduce((a, i) => a + i.promo_discount, 0), 3000);
+  // Elle indirim hâlâ yetki ister
+  r = await sellAs({ register_name: 'Kasa 1', items: [{ product_id: kola.id, qty: 1, discount: 500 }], payments: [{ method: 'cash', amount: 2500 }] });
+  assert.equal(r.status, 403);
+
+  // Sepet üzeri: 300 TL ve üzeri %10
+  await call('PUT', `/api/promotions/${p2.id}`, { active: false });
+  const p3 = (await call('POST', '/api/promotions', { name: '300 TL üzeri %10', type: 'basket', min_total: 30000, percent: 10 })).body;
+  r = await sellAs({ register_name: 'Kasa 1', items: [{ product_id: cips.id, qty: 8 }], payments: [{ method: 'cash', amount: 28800 }] });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.total, 28800); // 320 - 32
+  assert.equal(r.body.discount, 3200);
+  await call('DELETE', `/api/promotions/${p3.id}`);
+  await call('PUT', `/api/promotions/${p1.id}`, { active: false });
+  await call('PUT', '/api/permissions', { cashier: { discount: true } });
+
+  // Saat / gün aralığı (happy hour, gece yarısını aşan aralık)
+  const hh = { active: 1, type: 'percent', scope: 'all', percent: 20, time_from: '22:00', time_to: '02:00', days: '5,6' };
+  assert.equal(promoActiveAt(hh, '2026-11-13 23:30:00'), true); // Cuma
+  assert.equal(promoActiveAt(hh, '2026-11-14 01:30:00'), true); // Cumartesi
+  assert.equal(promoActiveAt(hh, '2026-11-13 21:59:00'), false);
+  assert.equal(promoActiveAt(hh, '2026-11-12 23:30:00'), false); // Perşembe
+  const res = applyPromotions([{ ...hh, id: 9, name: 'Happy hour' }], [{ product_id: 1, qty: 2, unit_price: 5000 }], { now: '2026-11-13 23:00:00' });
+  assert.equal(res.lines[0].discount, 2000);
+  // Tartılı ürüne X al Y öde uygulanmaz
+  const kg = applyPromotions([{ id: 1, name: 'x', active: 1, type: 'bxgy', scope: 'all', buy_qty: 3, pay_qty: 2 }], [{ product_id: 5, qty: 3.5, unit_price: 1000 }]);
+  assert.equal(kg.lines[0], null);
+});

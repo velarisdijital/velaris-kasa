@@ -62,7 +62,8 @@ const receiptContent = (sale, settings, change) => ({ center, left, lr, hr }) =>
   hr();
   for (const it of sale.items || []) {
     left(it.name, 20, 600, true); // ürün adı fiyat satırıyla aynı etikette kalsın
-    lr(`${qty(it.qty)} ${it.unit || ''} x ${plain(it.unit_price)}${it.discount ? ` -${plain(it.discount)}` : ''}`, plain(it.line_total), 18);
+    lr(`${qty(it.qty)} ${it.unit || ''} x ${plain(it.unit_price)}${it.discount - (it.promo_discount || 0) > 0 ? ` -${plain(it.discount - (it.promo_discount || 0))}` : ''}`, plain(it.line_total), 18);
+    if (it.promo_discount > 0) lr(`  Kampanya: ${it.promo_name || ''}`, `-${plain(it.promo_discount)}`, 16);
   }
   hr();
   if (sale.discount > 0) { lr('Ara Toplam', plain(sale.subtotal), 18); lr('İndirim', `-${plain(sale.discount)}`, 18); }
@@ -70,6 +71,7 @@ const receiptContent = (sale, settings, change) => ({ center, left, lr, hr }) =>
   for (const it of sale.items || []) vat[it.vat_rate] = (vat[it.vat_rate] || 0) + Math.round(it.line_total - it.line_total / (1 + it.vat_rate / 100));
   for (const [rate, v] of Object.entries(vat)) lr(`KDV %${rate}`, plain(v), 17);
   lr('TOPLAM', `${plain(sale.total)} ₺`, 28, 800);
+  if (sale.promo_discount > 0) lr('Kampanya kazancınız', plain(sale.promo_discount), 18, 700);
   hr();
   for (const p of (sale.payments || []).filter((p) => p.amount > 0)) lr(METHOD_LABELS[p.method] || p.method, plain(p.amount + (p.method === 'cash' ? change : 0)), 18);
   if (change > 0) lr('Para Üstü', plain(change), 18);

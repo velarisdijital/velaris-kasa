@@ -351,6 +351,57 @@ const MIGRATIONS = [
   ALTER TABLE categories ADD COLUMN station TEXT NOT NULL DEFAULT 'mutfak'; -- mutfak | bar | yok (hazır ürün, ekrana düşmez)
   UPDATE ticket_items SET kitchen_status = 'served' WHERE sent_at IS NOT NULL;
   `,
+  // 14: Kampanyalar (otomatik indirim), satırda / fişte kampanya indirimi; SKT partileri; stok sayım oturumları
+  `
+  CREATE TABLE promotions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    type        TEXT NOT NULL CHECK (type IN ('bxgy','nth','percent','basket')),
+    scope       TEXT NOT NULL DEFAULT 'all' CHECK (scope IN ('all','product','category')),
+    product_id  INTEGER REFERENCES products(id) ON DELETE CASCADE,
+    category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
+    buy_qty     INTEGER, pay_qty INTEGER, nth INTEGER,
+    percent     REAL, amount INTEGER, min_total INTEGER,
+    days        TEXT, time_from TEXT, time_to TEXT, date_from TEXT, date_to TEXT,
+    active      INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  ALTER TABLE sale_items ADD COLUMN promo_discount INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE sale_items ADD COLUMN promo_name TEXT;
+  ALTER TABLE sales ADD COLUMN promo_discount INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE sales ADD COLUMN promo_names TEXT;
+  CREATE TABLE stock_lots (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id   INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    branch_id    INTEGER NOT NULL DEFAULT 1,
+    expiry_date  TEXT,
+    qty          REAL NOT NULL,                     -- kalan miktar
+    initial_qty  REAL NOT NULL,
+    purchase_id  INTEGER,
+    note         TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX idx_stock_lots_product ON stock_lots(product_id, branch_id, expiry_date);
+  ALTER TABLE purchase_items ADD COLUMN expiry_date TEXT;
+  CREATE TABLE stock_counts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id   INTEGER NOT NULL DEFAULT 1,
+    note        TEXT,
+    status      TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','applied','cancelled')),
+    user_id     INTEGER,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    applied_at  TEXT
+  );
+  CREATE TABLE stock_count_items (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    count_id    INTEGER NOT NULL REFERENCES stock_counts(id) ON DELETE CASCADE,
+    product_id  INTEGER NOT NULL REFERENCES products(id),
+    counted     REAL NOT NULL,
+    system_qty  REAL,                               -- uygulanırken sistemdeki stok
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    UNIQUE (count_id, product_id)
+  );
+  `,
 ];
 
 export function migrate(db) {

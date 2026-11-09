@@ -9,6 +9,10 @@ import { branchForRegister, branchStock, moveProductStock, round3, stockNeeds } 
 import { bad, dateRange, h, int, notFound, num, str, vatOf } from '../util.js';
 import { addCustomerTx, addPointsTx, customerPayload } from './customers.js';
 import { openShiftFor } from './shifts.js';
+import { applyPromotions, localNow } from '../promotions.js';
+
+/** Etkin kampanyalar (satışta otomatik uygulanır) */
+export const activePromotions = (db) => db.prepare('SELECT * FROM promotions WHERE active = 1').all();
 
 const METHODS = ['cash', 'card', 'credit', 'transfer', 'points', 'online'];
 
@@ -98,11 +102,30 @@ export default function saleRoutes(db) {
         product, product_id: product?.id ?? null, name, type: product?.type || 'product', qty, unit: product?.unit || 'adet',
         unit_price, unit_cost: product?.buy_price ?? 0, discount, vat_rate: product ? product.vat_rate : num(it.vat_rate, defaultVat),
         line_total, staff_id: it.staff_id ? int(it.staff_id) : null, ticket_item_id: it.ticket_item_id ? int(it.ticket_item_id) : null,
+        promo_discount: 0, promo_name: null,
       };
     });
 
+    // Elle yapılan indirimler (yetki denetimi bunlara bakar); kampanya indirimi sunucuda hesaplanır, yetki gerektirmez
+    const lineDiscount = items.reduce((a, i) => a + i.discount, 0);
+    const manualDiscount = Math.max(0, int(b.discount));
+    const promo = b.no_promotions ? { lines: [], basket: null } : applyPromotions(activePromotions(db), items.map((i) => ({
+      product_id: i.product_id, category_id: i.product?.category_id ?? null, qty: i.qty, unit_price: i.unit_price, discount: i.discount, type: i.type,
+    })), { now: b.offline_created_at && /^\d{4}-\d\d-\d\d \d\d:\d\d/.test(b.offline_created_at) ? b.offline_created_at : localNow() });
+    items.forEach((it, idx) => {
+      const pl = promo.lines[idx];
+      if (!pl) return;
+      it.promo_discount = pl.discount;
+      it.promo_name = pl.promo_name;
+      it.discount += pl.discount;
+      it.line_total -= pl.discount;
+    });
+
     const subtotal = items.reduce((a, i) => a + i.line_total, 0);
-    const discount = Math.min(Math.max(0, int(b.discount)), subtotal);
+    const basketPromo = promo.basket ? Math.min(promo.basket.discount, subtotal) : 0;
+    const discount = Math.min(manualDiscount + basketPromo, subtotal);
+    const promoDiscount = items.reduce((a, i) => a + i.promo_discount, 0) + basketPromo;
+    const promoNames = [...new Set([...items.map((i) => i.promo_name), promo.basket?.promo_name].filter(Boolean))].join(', ') || null;
     const total = subtotal - discount;
     const shares = discountShares(items, discount);
     const vat_total = items.reduce((a, it, i) => a + vatOf(it.line_total - shares[i], it.vat_rate), 0);
@@ -137,11 +160,10 @@ export default function saleRoutes(db) {
     // Rol yetkileri: indirim (ve azami oranı), fiyat değiştirme, veresiye
     const denied = (perm) => Object.assign(new Error(`Yetkiniz yok: ${PERMISSIONS[perm]}`), { status: 403, code: 'PERMISSION' });
     const ticketDiscount = b.ticket_id ? db.prepare('SELECT discount FROM tickets WHERE id = ?').get(int(b.ticket_id))?.discount || 0 : 0;
-    const lineDiscount = items.reduce((a, i) => a + i.discount, 0);
-    if ((discount > ticketDiscount || lineDiscount > 0) && !can(db, req.user, 'discount')) throw denied('discount');
+    if ((manualDiscount > ticketDiscount || lineDiscount > 0) && !can(db, req.user, 'discount')) throw denied('discount');
     const maxPct = ['admin', ...MANAGERS].includes(req.user.role) ? 100 : Number(rolePermissions(db, req.user.role).max_discount_pct ?? 100);
-    const gross = subtotal + lineDiscount;
-    if (maxPct < 100 && gross > 0 && ((discount - ticketDiscount + lineDiscount) / gross) * 100 > maxPct + 0.001) {
+    const gross = subtotal + lineDiscount + items.reduce((a, i) => a + i.promo_discount, 0);
+    if (maxPct < 100 && gross > 0 && ((Math.min(manualDiscount, subtotal) - ticketDiscount + lineDiscount) / gross) * 100 > maxPct + 0.001) {
       throw Object.assign(new Error(`En fazla %${maxPct} indirim yapabilirsiniz`), { status: 403, code: 'PERMISSION' });
     }
     if (items.some((i) => i.product && i.product.sell_price > 0 && !i.ticket_item_id && i.unit_price !== i.product.sell_price) && !can(db, req.user, 'price_edit')) {
@@ -170,15 +192,15 @@ export default function saleRoutes(db) {
       }
       const shift = openShiftFor(db, b.register_name);
       const saleId = db.prepare(`INSERT INTO sales (receipt_no, client_uuid, shift_id, register_name, user_id, customer_id,
-          subtotal, discount, vat_total, total, cost_total, note, created_at, branch_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now','localtime')), ?)`)
+          subtotal, discount, vat_total, total, cost_total, note, created_at, branch_id, promo_discount, promo_names)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now','localtime')), ?, ?, ?)`)
         .run(nextReceiptNo(db), b.client_uuid ? String(b.client_uuid) : null, shift?.id ?? null, str(b.register_name) || 'Kasa 1',
           req.user.id, customer?.id ?? null, subtotal, discount, vat_total, total, cost_total, str(b.note),
-          /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(b.offline_created_at || '') ? b.offline_created_at : null, branchId).lastInsertRowid;
+          /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(b.offline_created_at || '') ? b.offline_created_at : null, branchId, promoDiscount, promoNames).lastInsertRowid;
 
       const insItem = db.prepare(`INSERT INTO sale_items (sale_id, product_id, name, type, qty, unit, unit_price, unit_cost, discount,
-          vat_rate, line_total, staff_id) VALUES (@sale_id, @product_id, @name, @type, @qty, @unit, @unit_price, @unit_cost, @discount,
-          @vat_rate, @line_total, @staff_id)`);
+          vat_rate, line_total, staff_id, promo_discount, promo_name) VALUES (@sale_id, @product_id, @name, @type, @qty, @unit, @unit_price, @unit_cost, @discount,
+          @vat_rate, @line_total, @staff_id, @promo_discount, @promo_name)`);
       for (const it of items) {
         const { product, ticket_item_id, ...row } = it;
         insItem.run({ ...row, sale_id: saleId });

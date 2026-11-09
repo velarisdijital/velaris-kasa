@@ -27,6 +27,7 @@ export function Receipt({ sale, settings, change = 0 }) {
             <span>  {qty(it.qty)} {it.unit} x {plain(it.unit_price)}{it.discount ? ` (-${plain(it.discount)})` : ''} %{it.vat_rate}</span>
             <span>{plain(it.line_total)}</span>
           </div>
+          {it.promo_discount > 0 && <div className="r"><span>  Kampanya: {it.promo_name}</span><span>-{plain(it.promo_discount)}</span></div>}
         </div>
       ))}
       <hr />
@@ -36,6 +37,7 @@ export function Receipt({ sale, settings, change = 0 }) {
         <div className="r" key={rate}><span>KDV %{rate}</span><span>{plain(v)}</span></div>
       ))}
       <div className="r b big"><span>TOPLAM</span><span>{plain(sale.total)} ₺</span></div>
+      {sale.promo_discount > 0 && <div className="r b"><span>Kampanya kazancınız</span><span>{plain(sale.promo_discount)}</span></div>}
       <hr />
       {(sale.payments || []).filter((p) => p.amount > 0).map((p, i) => (
         <div className="r" key={i}><span>{METHOD_LABELS[p.method]}</span><span>{plain(p.amount + (p.method === 'cash' ? change : 0))}</span></div>

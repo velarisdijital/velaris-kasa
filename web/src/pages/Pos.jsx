@@ -7,6 +7,7 @@ import { printReceipt } from '../components/Receipt.jsx';
 import { Field, Icon, Modal, useConfirm, useToast } from '../components/ui.jsx';
 import NumPad, { applyKey } from '../components/NumPad.jsx';
 import { softKeyboardDefault } from '../softKeyboard.js';
+import { applyPromotions, localNow } from '../../../server/promotions.js';
 import { METHOD_LABELS, money, nowSql, parseQty, plain, qty as fmtQty, toInput, toKurus } from '../format.js';
 
 const lineTotal = (l) => Math.round(l.qty * l.unit_price) - (l.discount || 0);
@@ -58,8 +59,19 @@ export default function Pos() {
   const pendingRef = useRef(null);
   const takeQty = () => { const q = pendingRef.current; pendingRef.current = null; setPendingQty(null); return q; };
 
-  const subtotal = cart.reduce((a, l) => a + lineTotal(l), 0);
-  const total = Math.max(0, subtotal - discount);
+  // Kampanyalar: sunucuyla aynı modül; satış kaydedilirken sunucu da aynı indirimi hesaplar
+  const [promos, setPromos] = useState(() => storage.get('vk_promos_cache', []));
+  const [clock, setClock] = useState(() => localNow());
+  useEffect(() => { const t = setInterval(() => setClock(localNow()), 60000); return () => clearInterval(t); }, []);
+  // Yemek platformu siparişlerinde platformun fiyatı geçerli; kampanya uygulanmaz
+  const noPromo = !!ticket?.source && !['pos', 'phone', 'qr'].includes(ticket.source);
+  const promo = useMemo(() => (noPromo || !promos.length ? { lines: [], basket: null }
+    : applyPromotions(promos, cart.map((l) => ({ product_id: l.product_id, category_id: l.category_id, qty: l.qty, unit_price: l.unit_price, discount: l.discount, type: l.type })), { now: clock })),
+  [promos, cart, clock, noPromo]);
+  const promoOf = (idx) => promo.lines[idx]?.discount || 0;
+  const subtotal = cart.reduce((a, l, i) => a + lineTotal(l) - promoOf(i), 0);
+  const basketPromo = Math.min(promo.basket?.discount || 0, subtotal);
+  const total = Math.max(0, subtotal - discount - basketPromo);
 
   const refresh = useCallback(async () => {
     const [p, c, u, s] = await Promise.all([
@@ -70,6 +82,7 @@ export default function Pos() {
     ]);
     setProducts(p);
     setCategories(c);
+    get('/promotions').then((list) => { const live = list.filter((x) => x.active); setPromos(live); storage.set('vk_promos_cache', live); }).catch(() => {});
     storage.set('vk_categories_cache', c);
     setStaff(u.filter((x) => x.active));
     setShift(s);
@@ -112,7 +125,7 @@ export default function Pos() {
         return c.map((l) => (l === existing ? { ...l, qty: l.qty + 1 } : l));
       }
       const line = {
-        key: uuid(), product_id: p.id, name: p.name, unit: p.unit, type: p.type, qty: q || 1, unit_price: p.sell_price,
+        key: uuid(), product_id: p.id, category_id: p.category_id ?? null, name: p.name, unit: p.unit, type: p.type, qty: q || 1, unit_price: p.sell_price,
         discount: 0, vat_rate: p.vat_rate, staff_id: p.type === 'service' && user.role === 'staff' ? user.id : null,
         stock: p.track_stock ? p.stock : null,
       };
@@ -173,6 +186,7 @@ export default function Pos() {
       ticket_id: ticket?.id ?? null,
       discount,
       items: cart.map((l) => ({ product_id: l.product_id, name: l.name, qty: l.qty, unit_price: l.unit_price, discount: l.discount, vat_rate: l.vat_rate, staff_id: l.staff_id, ticket_item_id: l.ticket_item_id })),
+      ...(noPromo ? { no_promotions: true } : {}),
       payments,
       offline_created_at: nowSql(),
     };
@@ -182,7 +196,8 @@ export default function Pos() {
       const change = sale.offline ? Math.max(0, paid - total) : sale.change || 0;
       const printable = sale.offline
         ? { ...payload, receipt_no: 'ÇEVRİMDIŞI', subtotal, total, user_name: user.name, customer_name: cust?.name,
-          items: cart.map((l) => ({ ...l, line_total: lineTotal(l) })),
+          discount: discount + basketPromo, promo_discount: promo.total_discount,
+          items: cart.map((l, i) => ({ ...l, discount: (l.discount || 0) + promoOf(i), promo_discount: promoOf(i), promo_name: promo.lines[i]?.promo_name, line_total: lineTotal(l) - promoOf(i) })),
           payments: payments.map((p) => (p.method === 'cash' ? { ...p, amount: p.amount - change } : p)) }
         : sale;
       setLastSale({ sale: printable, change });
@@ -327,7 +342,7 @@ export default function Pos() {
           </div>
         )}
         <div className="cart-items">
-          {cart.map((l) => (
+          {cart.map((l, idx) => (
             <div key={l.key} className={`cart-line ${sel === l.key ? 'sel' : ''}`} onClick={() => setSel(l.key)} onDoubleClick={() => setModal({ type: 'line', key: l.key })}>
               <div>
                 <div className="l-name">{l.name}</div>
@@ -337,7 +352,8 @@ export default function Pos() {
                   {l.staff_id ? <span> · {staff.find((s) => s.id === l.staff_id)?.name}</span> : null}
                 </div>
               </div>
-              <div className="l-total">{money(lineTotal(l))}</div>
+              <div className="l-total">{promoOf(idx) > 0 && <s className="muted small-text" style={{ marginRight: 6 }}>{money(lineTotal(l))}</s>}{money(lineTotal(l) - promoOf(idx))}</div>
+              {promoOf(idx) > 0 && <div className="promo-tag" style={{ gridColumn: '1 / -1' }}>🏷 {promo.lines[idx].promo_name} · −{plain(promoOf(idx))}</div>}
               {sel === l.key && (
                 <div className="row" style={{ gridColumn: '1 / -1' }} onClick={(e) => e.stopPropagation()}>
                   <div className="qty-ctl">
@@ -390,8 +406,10 @@ export default function Pos() {
           </div>
         )}
         <div className="cart-sum">
-          {discount > 0 && <div className="line"><span>Ara toplam</span><span>{money(subtotal)}</span></div>}
+          {(discount > 0 || basketPromo > 0) && <div className="line"><span>Ara toplam</span><span>{money(subtotal)}</span></div>}
+          {basketPromo > 0 && <div className="line"><span>🏷 {promo.basket.promo_name}</span><span className="success-text">−{money(basketPromo)}</span></div>}
           {discount > 0 && <div className="line"><span>İndirim</span><span className="success-text">−{money(discount)}</span></div>}
+          {promo.total_discount > 0 && <div className="line"><span className="success-text">Kampanya kazancı</span><span className="success-text">{money(promo.total_discount)}</span></div>}
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <button className="btn small ghost" disabled={!cart.length || !perm('discount')} title={perm('discount') ? '' : 'İndirim yetkiniz yok'} onClick={() => setModal({ type: 'discount' })}>İndirim <span className="kbd">F9</span></button>
             <button className="btn small ghost" disabled={!cart.length} onClick={() => setModal({ type: 'split' })}>Parçalı <span className="kbd">F6</span></button>

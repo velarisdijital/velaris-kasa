@@ -493,3 +493,4 @@ a.btn.primary { color: var(--bg); }
 .change-big strong { display: block; font-size: 34px; }
 .price-check { text-align: center; padding: 12px; }
 .price-check .pc-price { font-size: 48px; font-weight: 800; }
+.promo-tag { font-size: 12px; font-weight: 700; color: var(--success); background: var(--success-soft); border-radius: 8px; padding: 2px 8px; justify-self: start; }
